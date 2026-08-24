@@ -117,6 +117,25 @@ func test_occupied_wins_over_uneven_ground() -> void:
 	assert_str(_validate(_keep(), Vector2i(RAISED_X - 1, 3)).reason()) \
 		.is_equal(PlacementResult.REASON_OCCUPIED)
 
+## Une empreinte qui déborde peut rentrer une fois pivotée. C'est tout l'intérêt de
+## l'orientation, et la preuve que les règles voient des cellules DÉJÀ tournées : pas
+## une ligne du validateur ne parle de rotation.
+func test_a_rotation_can_rescue_a_footprint_that_overruns() -> void:
+	var anchor := Vector2i(SIZE.x - 1, 3)
+	assert_str(_validate(_wide(), anchor).reason()) \
+		.is_equal(PlacementResult.REASON_OUT_OF_BOUNDS)
+	assert_bool(PlacementValidator.validate(_city, _terrain, _wide(), anchor, 1).is_ok()) \
+		.is_true()
+
+## Et elle peut de la même façon fuir une marche, en se rangeant le long du dénivelé
+## au lieu de le traverser.
+func test_a_rotation_can_rescue_a_footprint_on_uneven_ground() -> void:
+	var anchor := Vector2i(RAISED_X - 1, 3)
+	assert_str(_validate(_wide(), anchor).reason()) \
+		.is_equal(PlacementResult.REASON_UNEVEN_GROUND)
+	assert_bool(PlacementValidator.validate(_city, _terrain, _wide(), anchor, 1).is_ok()) \
+		.is_true()
+
 ## Le fantôme de C2 appellera la validation à chaque image : elle ne doit rien
 ## engager, ni sur la ville ni sur le terrain.
 func test_validate_mutates_nothing() -> void:

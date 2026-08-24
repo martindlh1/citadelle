@@ -66,6 +66,55 @@ func test_cells_at_keeps_the_footprint_order() -> void:
 	var cells := _building(reversed).cells_at(Vector2i.ZERO)
 	assert_array(cells).contains_exactly([Vector2i(0, 1), Vector2i(1, 0), Vector2i.ZERO])
 
+## La grille va +x à droite et +y vers le fond : un quart de tour horaire vu de dessus
+## envoie donc la droite vers le fond.
+func test_a_quarter_turn_sends_right_to_front() -> void:
+	assert_vector(BuildingData.rotate_offset(Vector2i(1, 0), 1)).is_equal(Vector2i(0, 1))
+	assert_vector(BuildingData.rotate_offset(Vector2i(0, 1), 1)).is_equal(Vector2i(-1, 0))
+
+## L'ancre est invariante par rotation. C'est ce qui garantit qu'une empreinte pivotée
+## contient toujours son ancre, sans que missing_fields() ait à le revérifier.
+func test_the_anchor_is_invariant_under_rotation() -> void:
+	for turns in 4:
+		assert_vector(BuildingData.rotate_offset(Vector2i.ZERO, turns)).is_equal(Vector2i.ZERO)
+
+func test_four_quarter_turns_return_to_the_start() -> void:
+	var offset := Vector2i(2, -3)
+	assert_vector(BuildingData.rotate_offset(offset, 4)).is_equal(offset)
+
+## Les crans sont repliés dans [0, 3] : un appelant qui les accumule sans jamais les
+## replier — comme CameraRig — n'a pas à s'en occuper.
+func test_turns_beyond_a_full_circle_wrap() -> void:
+	var offset := Vector2i(1, 0)
+	assert_vector(BuildingData.rotate_offset(offset, 5)) \
+		.is_equal(BuildingData.rotate_offset(offset, 1))
+	assert_vector(BuildingData.rotate_offset(offset, -1)) \
+		.is_equal(BuildingData.rotate_offset(offset, 3))
+
+## Un L pivoté reste un L, ancré au même endroit, mais tourné.
+func test_cells_at_rotates_the_footprint_around_the_anchor() -> void:
+	var cells := _building(_l_shape()).cells_at(Vector2i(5, 5), 1)
+	assert_array(cells).contains_exactly([Vector2i(5, 5), Vector2i(5, 6), Vector2i(4, 5)])
+
+## Une empreinte symétrique rend les quatre orientations identiques, sans cas
+## particulier à écrire nulle part.
+func test_a_single_cell_is_the_same_in_every_orientation() -> void:
+	var single: Array[Vector2i] = [Vector2i.ZERO]
+	var building := _building(single)
+	for turns in 4:
+		assert_array(building.cells_at(Vector2i(3, 3), turns)).contains_exactly([Vector2i(3, 3)])
+
+## L'enveloppe suit la rotation : sur un L pivoté d'un quart de tour, elle recule
+## derrière l'ancre.
+func test_bounds_at_follows_the_rotation() -> void:
+	assert_that(_building(_l_shape()).bounds_at(Vector2i(5, 5), 1)) \
+		.is_equal(Rect2i(4, 5, 2, 2))
+
+func test_neighbourhood_follows_the_rotation() -> void:
+	var building := _building(_l_shape())
+	assert_that(building.neighbourhood_at(Vector2i(5, 5), 1, 1)) \
+		.is_equal(building.bounds_at(Vector2i(5, 5), 1).grow(1))
+
 func test_a_single_cell_footprint_bounds_to_one_cell() -> void:
 	var single: Array[Vector2i] = [Vector2i.ZERO]
 	assert_that(_building(single).bounds_at(Vector2i(3, 7))).is_equal(Rect2i(3, 7, 1, 1))

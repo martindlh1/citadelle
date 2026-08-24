@@ -76,6 +76,31 @@ func test_the_hole_of_an_l_shape_stays_free() -> void:
 	assert_bool(_city.place(_terrain, _hut(), Vector2i(2, 2)).is_ok()).is_true()
 	assert_int(_city.count()).is_equal(2)
 
+## La ville range les cellules PIVOTÉES, et le bâtiment se souvient de son orientation.
+## Les deux index, eux, ne voient que des cellules et ignorent qu'une rotation existe.
+func test_a_rotated_building_occupies_its_rotated_cells() -> void:
+	_city.place(_terrain, _ell(), Vector2i(2, 2), 1)
+	var building := _city.building_at(Vector2i(2, 2))
+	assert_int(building.turns()).is_equal(1)
+	assert_array(building.cells()) \
+		.contains_exactly([Vector2i(2, 2), Vector2i(2, 3), Vector2i(1, 2)])
+	assert_bool(_city.is_occupied(Vector2i(1, 2))).is_true()
+	# Et la cellule que l'empreinte NON pivotée aurait prise reste libre.
+	assert_bool(_city.is_occupied(Vector2i(3, 2))).is_false()
+
+## Un retrait libère l'empreinte pivotée, pas celle d'origine.
+func test_removing_a_rotated_building_frees_its_rotated_cells() -> void:
+	_city.place(_terrain, _ell(), Vector2i(2, 2), 1)
+	_city.remove(Vector2i(2, 2))
+	assert_int(_city.count()).is_equal(0)
+	for cell in [Vector2i(2, 2), Vector2i(2, 3), Vector2i(1, 2)]:
+		assert_bool(_city.is_occupied(cell)).is_false()
+
+## Les crans sont repliés dans un tour : la ville ne garde pas un compteur qui monte.
+func test_turns_are_folded_into_a_single_circle() -> void:
+	_city.place(_terrain, _ell(), Vector2i(2, 2), 5)
+	assert_int(_city.building_at(Vector2i(2, 2)).turns()).is_equal(1)
+
 func test_a_placed_building_keeps_its_anchor_and_footprint() -> void:
 	_city.place(_terrain, _ell(), Vector2i(1, 1))
 	var building := _city.building_at(Vector2i(1, 1))
