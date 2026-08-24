@@ -11,6 +11,7 @@ extends Node
 const DATA_ROOT := "res://data"
 const CATEGORY_BALANCE := &"balance"
 const CATEGORY_TERRAIN := &"terrain"
+const CATEGORY_BUILDINGS := &"buildings"
 const ID_BALANCE := &"balance"
 
 ## Catégorie -> (identifiant -> Resource).
@@ -21,6 +22,7 @@ func _ready() -> void:
 	_scan(DATA_ROOT)
 	_assert_balance_is_complete()
 	_assert_terrain_is_complete()
+	_assert_buildings_are_complete()
 	EventBus.database_ready.emit.call_deferred()
 
 ## Racine de l'équilibrage. Jamais null une fois le boot passé.
@@ -34,6 +36,14 @@ func get_terrain(id: StringName) -> TerrainData:
 ## Identifiants de terrain connus, triés.
 func list_terrain_ids() -> Array[StringName]:
 	return list_ids(CATEGORY_TERRAIN)
+
+## Bâtiment indexé, ou null si l'identifiant est inconnu.
+func get_building(id: StringName) -> BuildingData:
+	return get_resource(CATEGORY_BUILDINGS, id) as BuildingData
+
+## Identifiants de bâtiment connus, triés.
+func list_building_ids() -> Array[StringName]:
+	return list_ids(CATEGORY_BUILDINGS)
 
 ## Resource indexée, ou null si la paire (catégorie, identifiant) est inconnue.
 func get_resource(category: StringName, id: StringName) -> Resource:
@@ -77,6 +87,24 @@ func _assert_terrain_is_complete() -> void:
 		var missing := terrain.missing_fields()
 		assert(missing.is_empty(),
 			"champs non renseignés dans data/terrain/%s.tres : %s" % [id, ", ".join(missing)])
+
+## Et sur les bâtiments : une empreinte vide, sans son ancre ou nommant deux fois la
+## même cellule se charge sans erreur et ne casse qu'au moment de poser. La rattraper
+## au boot vaut mieux que de la découvrir sous le curseur.
+##
+## Troisième copie de la même boucle, comme BalanceData recopie l'agrégation de ses
+## blocs : il n'existe pas de classe parente commune aux Resource de src/schema/, et
+## passer par une Resource nue pour appeler missing_fields() rendrait l'appel non
+## typé. Le jour où il y aura six catégories, une base commune vaudra le coup.
+func _assert_buildings_are_complete() -> void:
+	for id in list_building_ids():
+		var building := get_building(id)
+		assert(building != null, "data/buildings/%s.tres n'est pas un BuildingData" % id)
+		if building == null:
+			continue
+		var missing := building.missing_fields()
+		assert(missing.is_empty(),
+			"champs non renseignés dans data/buildings/%s.tres : %s" % [id, ", ".join(missing)])
 
 ## Trie des StringName par leur texte.
 ##

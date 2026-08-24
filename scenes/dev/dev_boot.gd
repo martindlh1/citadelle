@@ -13,11 +13,12 @@ extends Node
 const REPORT_MARGIN := 16.0
 
 ## Harnais à lancer. Vide = aucun, on affiche le rapport de boot.
-const HARNESS := &"terrain"
+const HARNESS := &"city"
 
 ## Identifiant de harnais -> script à instancier.
 const HARNESS_SCRIPTS: Dictionary[StringName, String] = {
 	&"terrain": "res://scenes/dev/terrain_harness.gd",
+	&"city": "res://scenes/dev/city_harness.gd",
 }
 
 func _ready() -> void:
