@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="TerrainGenBalance" format=3]
+
+[ext_resource type="Script" path="res://src/schema/terrain_gen_balance.gd" id="1_terrain_gen_balance"]
+[ext_resource type="Resource" path="res://data/terrain/plain.tres" id="2_plain"]
+[ext_resource type="Resource" path="res://data/terrain/forest.tres" id="3_forest"]
+[ext_resource type="Resource" path="res://data/terrain/stone.tres" id="4_stone"]
+[ext_resource type="Resource" path="res://data/terrain/water.tres" id="5_water"]
+[ext_resource type="Resource" path="res://data/terrain/rock.tres" id="6_rock"]
+
+[resource]
+script = ExtResource("1_terrain_gen_balance")
+map_size = Vector2i(32, 32)
+min_height = 0
+max_height = 6
+water_level = 1
+noise_frequency = 0.08
+noise_octaves = 3
+forest_density = 0.22
+stone_density = 0.06
+rock_density = 0.04
+forest_max_height = 4
+plain = ExtResource("2_plain")
+forest = ExtResource("3_forest")
+stone = ExtResource("4_stone")
+water = ExtResource("5_water")
+rock = ExtResource("6_rock")
