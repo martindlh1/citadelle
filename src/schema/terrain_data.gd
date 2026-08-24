@@ -44,6 +44,14 @@ const UNSET_COLOR := Color(0.0, 0.0, 0.0, 1.0)
 ## de GDScript. Le jour où un vrai matériau arrive, il se pose au même endroit.
 @export var color: Color
 
+## Ce que la cellule porte sur sa colonne, ou null si elle ne porte rien.
+##
+## Nullable à dessein, et c'est la seule exception au principe de sentinelle de ce
+## fichier : la plaine et l'eau n'ont rien à porter, et « rien » y est évident plutôt
+## que suspect. Une décoration à moitié remplie, elle, reste rattrapée — voir
+## missing_fields().
+@export var decor: TerrainDecor
+
 ## Peut-on bâtir sur ce terrain ? Un terrain non renseigné ne l'est pas.
 func is_buildable() -> bool:
 	return build == Build.ALLOWED
@@ -53,6 +61,10 @@ func has_tag(tag: StringName) -> bool:
 	return tags.has(tag)
 
 ## Champs non renseignés. Vide = terrain exploitable.
+##
+## L'absence de décoration ne se signale pas ; une décoration présente mais incomplète,
+## si — préfixée « decor. », comme BalanceData préfixe ses blocs. C'est ce qui garde le
+## filet du boot tendu sans transformer la plaine en terrain fautif.
 func missing_fields() -> PackedStringArray:
 	var missing := PackedStringArray()
 	if id.is_empty():
@@ -61,4 +73,7 @@ func missing_fields() -> PackedStringArray:
 		missing.append("build")
 	if color == UNSET_COLOR:
 		missing.append("color")
+	if decor != null:
+		for field in decor.missing_fields():
+			missing.append("decor.%s" % field)
 	return missing
