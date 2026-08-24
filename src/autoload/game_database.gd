@@ -10,6 +10,7 @@ extends Node
 
 const DATA_ROOT := "res://data"
 const CATEGORY_BALANCE := &"balance"
+const CATEGORY_TERRAIN := &"terrain"
 const ID_BALANCE := &"balance"
 
 ## Catégorie -> (identifiant -> Resource).
@@ -19,11 +20,20 @@ func _ready() -> void:
 	_index.clear()
 	_scan(DATA_ROOT)
 	_assert_balance_is_complete()
+	_assert_terrain_is_complete()
 	EventBus.database_ready.emit.call_deferred()
 
 ## Racine de l'équilibrage. Jamais null une fois le boot passé.
 func get_balance() -> BalanceData:
 	return get_resource(CATEGORY_BALANCE, ID_BALANCE) as BalanceData
+
+## Terrain indexé, ou null si l'identifiant est inconnu.
+func get_terrain(id: StringName) -> TerrainData:
+	return get_resource(CATEGORY_TERRAIN, id) as TerrainData
+
+## Identifiants de terrain connus, triés.
+func list_terrain_ids() -> Array[StringName]:
+	return list_ids(CATEGORY_TERRAIN)
 
 ## Resource indexée, ou null si la paire (catégorie, identifiant) est inconnue.
 func get_resource(category: StringName, id: StringName) -> Resource:
@@ -35,15 +45,13 @@ func list_ids(category: StringName) -> Array[StringName]:
 	var bucket: Dictionary = _index.get(category, {})
 	var ids: Array[StringName] = []
 	ids.assign(bucket.keys())
-	ids.sort()
-	return ids
+	return _sorted(ids)
 
 ## Catégories indexées, triées.
 func list_categories() -> Array[StringName]:
 	var categories: Array[StringName] = []
 	categories.assign(_index.keys())
-	categories.sort()
-	return categories
+	return _sorted(categories)
 
 ## Un champ d'équilibrage non renseigné vaut 0 — les Resource de src/schema/ ne portent
 ## aucun défaut, pour que le chiffre reste dans data/. Le rattraper au boot évite qu'il
@@ -57,6 +65,28 @@ func _assert_balance_is_complete() -> void:
 	var missing := balance.missing_fields()
 	assert(missing.is_empty(),
 		"champs d'équilibrage non renseignés dans data/balance/ : %s" % ", ".join(missing))
+
+## Même contrôle sur les terrains : un TerrainData sans constructibilité renseignée
+## se lirait comme non constructible, et la carte deviendrait muette au placement.
+func _assert_terrain_is_complete() -> void:
+	for id in list_terrain_ids():
+		var terrain := get_terrain(id)
+		assert(terrain != null, "data/terrain/%s.tres n'est pas un TerrainData" % id)
+		if terrain == null:
+			continue
+		var missing := terrain.missing_fields()
+		assert(missing.is_empty(),
+			"champs non renseignés dans data/terrain/%s.tres : %s" % [id, ", ".join(missing)])
+
+## Trie des StringName par leur texte.
+##
+## Array.sort() ne convient pas ici : comparer deux StringName compare leurs
+## pointeurs internes et non leur contenu. L'ordre obtenu est arbitraire — stable
+## le temps d'une session, différent à la suivante.
+func _sorted(names: Array[StringName]) -> Array[StringName]:
+	names.sort_custom(func(first: StringName, second: StringName) -> bool:
+		return String(first) < String(second))
+	return names
 
 func _scan(root: String) -> void:
 	for directory in DirAccess.get_directories_at(root):

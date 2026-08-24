@@ -187,13 +187,15 @@ done
 addons/gdUnit4/runtest.sh -a tests --headless --ignoreHeadlessMode
 ```
 
-Cinq pièges constatés en 4.7.2, à ne pas réapprendre :
+Sept pièges constatés en 4.7.2, à ne pas réapprendre :
 
 - `--headless --quit` **échoue tant qu'aucune scène principale n'est définie**. C'est un vrai défaut de configuration, pas un faux positif à contourner.
 - `--headless --editor --quit` ne signale les erreurs qu'au **premier** scan. Cache `.godot/` chaud, il repasse à 0 sur un projet cassé : inutilisable comme contrôle.
 - `--check-only` échoue avec « Identifier not found » sur tout script référençant un autoload, même quand tout va bien. D'où la commande 1, et d'où la restriction de la commande 2 au domaine.
 - `runtest.sh` refuse de démarrer sans `GODOT_BIN`, et refuse le mode headless sans `--ignoreHeadlessMode`.
 - L'éditeur écrit ses références en `uid://`, résolues via `.godot/uid_cache.bin`. Tant que ce cache est en retard sur l'éditeur — typiquement juste après avoir créé une scène, éditeur encore ouvert —, la commande 1 échoue sur `Unrecognized UID: "uid://…"`. Ce n'est pas un projet cassé : une passe `godot --headless --editor --quit --path .` reconstruit le cache et la commande repasse. Ne pas confondre avec les erreurs réelles, et ne pas se servir de cette passe comme d'un contrôle (voir ci-dessus).
+- Le même retard frappe **le cache des classes globales**, et plus souvent : `.godot/global_script_class_cache.cfg` n'est écrit que par le scan de l'éditeur. Un `class_name` créé hors éditeur n'existe donc pour personne tant que ce scan n'a pas eu lieu, et la commande 1 échoue sur `Could not find type "X" in the current scope` alors que le fichier est parfaitement correct. Même remède : une passe `godot --headless --editor --quit --path .`. À faire après **chaque** ajout de `class_name`, donc à chaque nouveau fichier de `src/domain/` ou de `src/schema/`.
+- **La commande 1 rend `0` même quand elle imprime des erreurs de script.** Son code de sortie ne dit rien de la santé du projet — un contrôle qui ne teste que `$?` laisse passer un projet dont un script ne compile pas. Il faut lire la sortie, toujours.
 
 Si la sortie contient une erreur ou un warning de script, la tâche n'est pas finie. Ne jamais annoncer un travail terminé sur la seule base que le code « devrait » compiler.
 
@@ -273,6 +275,7 @@ Tous les nombres réglables vivent dans `data/balance/*.tres`. Modifier un équi
 - Ordre dans un script : `class_name` → `extends` → docstring → signals → enums → constants → `@export` → variables → `_ready` → publiques → privées
 - Aucun nombre magique dans `domain/` : constante nommée ou champ de `Resource`
 - Préconditions par `assert()`. Les erreurs récupérables retournent un DTO `{ ok: bool, reason: StringName }`, pas un `push_error`
+- Ne jamais trier un `Array[StringName]` avec `sort()` : comparer deux `StringName` compare leurs pointeurs internes, pas leur texte. L'ordre obtenu est arbitraire, stable le temps d'une session et différent à la suivante — un piège direct pour le déterminisme. Trier par `sort_custom` sur `String(...)`.
 
 ---
 

@@ -13,10 +13,12 @@ extends Node
 const REPORT_MARGIN := 16.0
 
 ## Harnais à lancer. Vide = aucun, on affiche le rapport de boot.
-const HARNESS := &""
+const HARNESS := &"terrain"
 
 ## Identifiant de harnais -> script à instancier.
-const HARNESS_SCRIPTS: Dictionary[StringName, String] = {}
+const HARNESS_SCRIPTS: Dictionary[StringName, String] = {
+	&"terrain": "res://scenes/dev/terrain_harness.gd",
+}
 
 func _ready() -> void:
 	EventBus.database_ready.connect(_on_database_ready)
