@@ -4,6 +4,198 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-24 — `T2` : rendu en blocs étagés et caméra isométrique
+
+**État : terminé.** Quatre commits, une couche chacun, sur `feat/t2-terrain-render`.
+Les trois commandes de vérification passent : boot sans erreur ni warning, tout
+`src/domain/` parse, 66 tests verts contre 45 à l'ouverture. Le rendu a été vérifié
+en image, pas seulement au parsing — voir plus bas.
+
+### Ce qui a été livré
+
+- `src/adapters/` — le dossier naît ici, avec `terrain/`.
+- `src/adapters/terrain/terrain_renderer.gd` — une passe `MultiMeshInstance3D`, une
+  colonne par cellule, couleur par instance.
+- `src/adapters/terrain/camera_rig.gd` — rig isométrique, rotation par quarts de tour
+  tweenée, zoom orthographique, pan clavier et souris.
+- `src/domain/terrain/terrain_metrics.gd` — le passage grille ↔ monde.
+- `src/schema/camera_balance.gd` + `data/balance/camera_balance.tres`, chaîné dans
+  `BalanceData`.
+- `TerrainData` gagne une `color`, les cinq `.tres` de `data/terrain/` la renseignent.
+- `tests/domain/terrain/terrain_metrics_test.gd` — 15 cas ; 6 de plus répartis dans
+  les deux fume-tests de schema.
+- `scenes/dev/terrain_harness.gd` — réécrit : le rendu remplace la carte ASCII, les
+  décomptes restent en surimpression.
+
+### Décisions
+
+**Aucun DTO n'entre dans `contracts/`, et l'étape est sautée.** `T2` est interne au
+Terrain plus sa couche adapter ; aucun second système ne consomme quoi que ce soit de
+nouveau. Inventer un contrat pour respecter la forme de la procédure aurait figé une
+frontière que personne ne franchit encore.
+
+**`TerrainMetrics` va dans `domain/terrain/`, pas dans `contracts/`.** Le renderer la
+consomme aujourd'hui, le `CellPicker` la consommera à `T3` : deux fois le même
+système. Elle est du domaine et non de l'adapter parce que `CellPicker` est du domaine
+et travaille déjà en coordonnées de monde — `pick(grid, origin: Vector3, dir: Vector3)`
+est une signature figée de `CLAUDE.md`. Si Construction en a besoin directement à
+`C2`, ce sera le moment de la promouvoir.
+
+**Trois conventions y sont fixées**, et tout le reste du jeu en dépendra :
+
+- l'origine du monde est au **coin** de la carte, pas au centre. `cell_at()` reste un
+  `floor` sans décalage, ce dont le DDA de `T3` a besoin ; recentrer devient un travail
+  de caméra ;
+- grille `+x` → monde `+X`, grille `+y` → monde `+Z` ;
+- une cellule de hauteur `h` a sa **face supérieure** à `h * step_height`. Ni le socle
+  sous la colonne ni l'épaisseur que le renderer lui donne ne déplacent ce plan.
+
+**`floori`, pas `int()`.** Une troncature ramènerait `-0.3` sur `0` et collerait les
+cellules `-1` et `0` l'une sur l'autre. Trois cas de test tiennent ce point, dont
+l'appartenance d'un point posé sur une arête exacte à la cellule supérieure.
+
+**La couleur vit sur `TerrainData`, pas dans le renderer.** C'est ce qui interdit au
+renderer de commuter sur un identifiant de terrain : ajouter un terrain reste une
+édition de `data/`. Le jour où un vrai matériau arrive, il se pose au même endroit.
+
+**Sentinelle de couleur : le noir opaque vaut « non renseigné ».** Même piège qu'à
+`I0` et `T1` — un `Color` sans défaut vaut `Color(0,0,0,1)`, donc exactement ce que
+Godot omet du `.tres`, donc indiscernable d'un champ oublié. On tranche pour
+« oublié » ; un terrain qui voudrait du noir écrit `Color(0.02, 0.02, 0.02)`. Arbitré
+avec l'humain avant écriture. Un test épingle le pari lui-même : que la sentinelle
+soit bien la valeur qu'un `Color` neuf porte. Si une version du moteur changeait ce
+défaut, la détection deviendrait muette sans rien casser d'autre — ce test-là le dirait.
+
+**Les colonnes s'enracinent un cran sous la plus basse de la carte**, et non à `y = 0`.
+L'épaisseur reste positive sur un terrain parfaitement plat comme sur un relief
+négatif, et la carte gagne un socle plein plutôt que des colonnes flottantes.
+
+**Pas de jeu entre les cellules.** Les colonnes se touchent exactement : une surface
+continue lit mieux qu'un damier fissuré. La lisibilité de la grille est le travail de
+la surbrillance de `T3`, pas d'un liseré permanent.
+
+**Le rig lit son propre input, derrière `input_enabled`.** Une caméra dans laquelle il
+faut câbler l'input à chaque scène est une friction permanente ; une scène de jeu qui
+veut ses propres liaisons coupe le drapeau et garde l'API. Aucune action d'input n'est
+utilisée — que des touches brutes et la molette — pour que rien n'ait à être ajouté à
+`project.godot`, qui n'est pas mon fichier.
+
+**Le lacet cible s'accumule sans jamais être replié dans `[0, 360)`.** Quatre quarts
+de tour enchaînés doivent faire un tour complet ; une valeur repliée ferait rebrousser
+chemin au quatrième.
+
+**`pan_speed` est en hauteurs d'écran par seconde**, pas en unités de monde. La vitesse
+ressentie devient indépendante du zoom, ce qui est la seule définition utilisable — un
+pan réglé au bon rythme de près file à travers la carte de loin.
+
+**Le piqué de −35,264° reste une constante, pas un réglage.** `CameraBalance` porte le
+zoom, le pan, la durée de rotation et la marge de cadrage. Le piqué non : c'est
+l'isométrique vrai, une décision figée, et le mettre en data inviterait à le changer.
+
+### Le bug que seule l'image a montré — le lacet de base était à zéro
+
+`CLAUDE.md` dit « `rotation_degrees.x = -35.264` (isométrique vrai),
+`rotation_degrees.y` par pas de 90° ». J'ai lu ça comme un lacet partant de 0, et le
+projet a compilé, les tests sont passés, le boot était propre. La capture a montré
+autre chose : une vue alignée sur les axes, une grille en damier rectangulaire, et un
+relief réduit à des traits noirs.
+
+**Le piqué seul ne fait pas l'isométrique.** Il y faut aussi 45° de lacet, qui sont ce
+qui projette une grille carrée en losanges. La conséquence est directe sur un relief en
+blocs : à lacet nul, les faces `±X` d'une colonne sont exactement de profil, donc
+d'aire nulle à l'écran — chaque colonne ne montre qu'**un seul** de ses quatre flancs,
+et une marche se lit comme une ligne. À 45°, deux flancs sont visibles, à deux
+éclairements différents, et le volume apparaît. C'est toute la différence entre les
+deux captures.
+
+Le lacet démarre donc à `ISO_YAW_DEGREES = 45.0` et les quarts de tour en dérivent.
+Le cadrage a suivi : à 45°, c'est la **diagonale** de la carte qui barre l'écran, et
+elle reste la même aux quatre orientations.
+
+Ce qu'il faut en retenir dépasse le bug : **un jalon de rendu ne se vérifie pas au
+parsing.** Les trois commandes de `CLAUDE.md` étaient toutes vertes sur une caméra qui
+ne faisait pas son travail.
+
+### Une addition non prévue au plan — la capture en ligne de commande
+
+Le harnais accepte `-- --shot chemin.png [--shot-turns n]` : il rend, enregistre et
+quitte. C'était la seule façon de regarder le rendu sans dépendre de l'humain à chaque
+itération, et c'est ce qui a trouvé le bug ci-dessus. `--shot-turns` exerce la rotation,
+qui autrement n'était vérifiable qu'en appuyant sur une touche.
+
+Douze lignes dans un harnais de dev, qui est exactement l'endroit où ce genre
+d'échafaudage a sa place. Documenté dans le README. Ça sert aussi la suite : comparer
+deux valeurs d'équilibrage visuel revient désormais à éditer un `.tres` et relancer.
+
+### Observation d'équilibrage — le relief reste plat, et c'est un chiffre, pas un bug
+
+`T1` avait laissé ceci ouvert, explicitement pour « une fois `T2` en place et le relief
+réellement visible ». C'est le cas, alors voici la mesure plutôt qu'une décision :
+
+- la génération produit des hauteurs `1..5`, soit **4 crans** de dénivelé, alors que
+  `max_height = 6` — le comportement normal d'un bruit fractal, dont les extrêmes ne
+  sont statistiquement pas atteints ;
+- à `step_height = 0.25`, ça fait **1,0 unité de relief sur une carte de 32 unités**.
+  Une amplitude de 1:32 : la carte lit comme un plateau froissé, pas comme des
+  collines ;
+- deux tiers des cellules tiennent sur deux altitudes seulement (`h = 2` et `h = 3`).
+
+Deux leviers, tous deux dans `data/balance/`, aucun dans du GDScript :
+
+| Levier | Fichier | Effet |
+|---|---|---|
+| `step_height` 0,25 → 0,4 ou 0,5 | `terrain_balance.tres` | amplifie ce que la génération produit déjà, sans toucher à sa distribution |
+| `noise_frequency` 0,08 → plus bas, `noise_octaves` 3 → 2 | `terrain_gen_balance.tres` | échange le froissement haute fréquence contre des reliefs plus larges |
+
+Je ne tranche pas : c'est un choix d'aspect, et il est adossé à la question `OUVERT` de
+`DESIGN.md` 3.1 sur le rôle du relief dans le gameplay — un relief décoratif et un
+relief qui contraint la construction ne demandent pas la même amplitude. La comparaison
+coûte deux relances :
+
+```
+"$GODOT_BIN" --path . --resolution 1280x720 -- --shot avant.png
+# éditer data/balance/terrain_balance.tres
+"$GODOT_BIN" --path . --resolution 1280x720 -- --shot apres.png
+```
+
+### Ce qui reste
+
+Rien pour `T2`. `DESIGN.md` n'a pas bougé : aucune question `OUVERT` n'a été tranchée,
+et c'est délibéré. `T2` **montre** le relief, il ne le fait pas **jouer** — les quatre
+pistes de 3.1 restent entières.
+
+Deux choses volontairement laissées de côté, et pourquoi :
+
+- **pas de teinte du relief par altitude.** L'éclairage directionnel suffit à faire
+  lire les marches, et ajouter une teinte aurait inventé des chiffres d'équilibrage que
+  personne n'a demandés. À rouvrir si la lecture pose problème une fois le relief
+  amplifié.
+- **pas de liseré de grille.** C'est le rôle de la surbrillance de survol, à `T3`.
+
+### Prochain jalon
+
+`T3` — `CellPicker` en DDA sur la grille de hauteurs, surbrillance de la cellule
+survolée, décorations de terrain. `TerrainMetrics` lui a posé ses fondations, et
+`CameraRig.get_camera()` lui fournira `origin` et `dir` via `project_ray_origin` et
+`project_ray_normal`. C'est le premier jalon où les conventions de coin d'origine et de
+face supérieure vont vraiment être mises à l'épreuve.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni réglage de projet n'a changé, aucune action
+d'input n'a été ajoutée. `HARNESS` vaut toujours `&"terrain"` : `F5` affiche la carte,
+Espace passe au seed suivant, Q et E tournent, la molette zoome, les flèches ou WASD et
+le clic milieu déplacent, R recadre.
+
+Deux points de suite :
+
+- `data/balance/camera_balance.tres` a été créé sans `uid`. L'éditeur lui en attribuera
+  un à la première ouverture : **diff à committer, pas à jeter**, comme à `I0` et `T1`.
+- si l'amplitude du relief te va telle quelle, il n'y a rien à faire ; sinon, c'est
+  l'édition d'un ou deux chiffres décrite plus haut, et ça n'a pas à attendre `T3`.
+
+---
+
 ## 2026-08-24 — `T1` : grille de hauteurs et génération seedée
 
 **État : terminé.** Cinq commits, une couche chacun, sur `feat/t1-height-grid`. Les
