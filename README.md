@@ -81,3 +81,12 @@ convertir fait apparaître des décalages qui n'existent pas.
 
 C'est aussi ce qui rend une passe d'équilibrage visuelle tenable — comparer deux
 valeurs de `step_height` revient à éditer un `.tres` et relancer deux fois.
+
+**Deux captures ne se comparent que si leur ligne `cadrage` est identique.** Elle
+donne le `camera.size` et la taille du viewport, et c'est le viewport qui décide de
+tout : il garde la largeur de base du projet mais sa **hauteur suit le rapport de la
+fenêtre**, donc `--resolution 1024x600` ne cadre pas comme `1280x720`. Le premier
+lancement après un démarrage à froid n'obtient d'ailleurs pas toujours la fenêtre
+qu'il a demandée. Une capture qui paraît « plus zoomée » qu'une autre est presque
+toujours ça, et non le rendu qui a changé — au moindre doute, `cmp` sur les deux
+`.png` tranche là où l'oeil se trompe.
