@@ -86,8 +86,23 @@ avoir un vrai `domain/`, donc le premier à exercer la commande de vérification
 `dev_boot.tscn` créé, défini comme scène principale, les trois autoloads enregistrés
 dans l'ordre `EventBus` → `GameDatabase` → `RunManager`. Identité git configurée.
 
+### Chaîne d'outils — fait
+
+`GODOT_BIN` défini au niveau utilisateur. Le binaire a quitté le Bureau pour
+`C:\Tools\Godot\4.7.2\`, un dossier par version, de sorte qu'une montée de version soit
+un changement de `GODOT_BIN` et rien d'autre. Les trois commandes de vérification ont
+été rejouées depuis ce nouvel emplacement : même build `ed1daf0bf`, boot exit 0,
+3 tests verts.
+
+Le README reste volontairement générique sur ce chemin : il est propre à la machine, il
+n'a rien à faire dans le dépôt.
+
+### Git
+
+`feat/i0-skeleton` fusionnée en fast-forward dans `master`, poussée, et `master` remis
+en branche par défaut sur GitHub — la branche de feature s'y était installée par défaut
+au premier push. Remote nommé `citadelle`, pas `origin`.
+
 ### À faire avant la prochaine session
 
-Définir `GODOT_BIN` dans l'environnement, sur `Godot_v4.7.2-stable_win64_console.exe`
-(voir README). Sans lui, `runtest.sh` refuse de démarrer et le chemin du binaire doit
-être passé à la main à chaque commande.
+Rien. `T1` peut démarrer.
