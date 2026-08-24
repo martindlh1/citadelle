@@ -84,9 +84,19 @@ Stocks de ressources plafonnés, résolution de la production par slot occupé, 
 
 Le plafond de stockage est délibéré : il punit la thésaurisation et force la dépense.
 
-**Hypothèse de départ** — trois ressources : bois (construction), pierre (avancé et défense), nourriture (upkeep). Plafond 100, +100 par entrepôt. Upkeep 1 nourriture par ouvrier et par soir.
+**C'est une réserve commune, et non un plafond par ressource.** *(Tranché à `E1`.)* Les cent unités sont partagées entre le bois, la pierre et la nourriture : remplir sa réserve de bois, c'est renoncer à stocker de la pierre. C'est la plus mordante des deux lectures, et celle qui donne à l'entrepôt une valeur d'arbitrage au lieu d'un simple relèvement de trois compteurs indépendants. Le plafond ne force plus seulement à dépenser, il force à choisir *quoi* garder.
+
+Conséquence directe, et c'est le prix de ce choix : une récolte qui déborde doit décider **lesquelles** de ses ressources entrent. La répartition est **proportionnelle à ce que le soir a produit**, et jamais fonction de l'ordre des bâtiments — deux villes identiques bâties dans un ordre différent doivent perdre exactement la même chose.
+
+**L'ensemble des ressources vit dans `data/`**, un fichier par ressource, et non dans une énumération du code. C'est ce qui rend la question ouverte ci-dessous réglable sans toucher à du GDScript, et ce qui permet de refuser au démarrage un coût qui nommerait une ressource inexistante.
+
+**Hypothèse de départ** — trois ressources : bois (construction), pierre (avancé et défense), nourriture (upkeep). Réserve commune 100, +100 par entrepôt. Upkeep 1 nourriture par ouvrier et par soir, **oisifs compris** — c'est ce qui rend un ouvrier non affecté coûteux, et le pool tendu.
+
+**La famine se constate, elle ne se punit pas encore.** *(Tranché à `E1`.)* La résolution vide ce qui reste de nourriture et rapporte combien d'ouvriers n'ont pas mangé. Ce qu'il leur arrive ensuite appartient aux Effectifs, qui possèdent les unités.
 
 **`OUVERT`** — nombre de ressources, existence d'une ressource de conversion type outils ou or.
+
+**`OUVERT`** — la conséquence de la famine. Perte d'efficacité le lendemain, blessure, départ, mort ? Le rapport de production porte déjà le compte des non-nourris : les quatre restent ouvertes sans que le contrat bouge.
 
 ### 3.4 Effectifs — main-d'œuvre et combattants
 
@@ -96,6 +106,8 @@ Un effectif n'est pas un compteur. Chaque unité est un individu nommé, avec :
 
 - des **pistes de compétence** par famille — Récolte, Artisanat, Combat — qui gagnent de l'XP à l'usage et donnent un multiplicateur d'efficacité
 - éventuellement des **traits**, acquis ou de naissance, qui donnent des bonus conditionnels plutôt que des chiffres bruts
+
+Les familles ne sont pas décoratives. *(Tranché à `E1`.)* La `LaborForce` expose un multiplicateur **par famille**, et chaque bâtiment déclare dans `data/` celle qu'il emploie : un même ouvrier rend donc différemment à la cabane de bûcheron et à l'atelier. C'est ce qui donne son sens à la spécialisation, et ce qui permettra à l'XP de savoir quelle piste créditer.
 
 Ce qui en découle : spécialiser rend excellent à un poste et médiocre ailleurs, et une unité expérimentée perdue est une vraie perte. C'est ce qui donne au roguelite sa charge émotionnelle.
 
