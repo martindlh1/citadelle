@@ -75,6 +75,11 @@ static func _walk(grid: HeightGrid, metrics: TerrainMetrics,
 		# deux bouts, et il n'y a rien de plus à chercher.
 		if minf(y_enter, y_exit) <= top:
 			return PickResult.hit_at(cell, height, _impact(origin, ray, u, y_enter, top))
+		if step_x == 0 and step_z == 0:
+			# Rayon vertical : il n'y a qu'une colonne sur son chemin, et elle vient
+			# d'être testée. Sans cette sortie la marche piétinerait jusqu'à épuiser son
+			# budget, les deux prochaines arêtes étant à l'infini comme la sortie.
+			return PickResult.miss()
 		if next_x < next_z:
 			u = next_x
 			cell.x += step_x
