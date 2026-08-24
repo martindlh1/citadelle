@@ -116,6 +116,40 @@ Ce qu'il faut en retenir dépasse le bug : **un jalon de rendu ne se vérifie pa
 parsing.** Les trois commandes de `CLAUDE.md` étaient toutes vertes sur une caméra qui
 ne faisait pas son travail.
 
+### Un second bug de rendu, signalé par l'humain — les cascades d'ombre
+
+Symptôme : une ligne horizontale **fixe à l'écran**, ombres floues au-dessus, nettes en
+dessous, le terrain traversant la frontière quand on déplace la vue.
+
+C'est le découpage en cascades de l'ombre directionnelle. Godot met une
+`DirectionalLight3D` en `SHADOW_PARALLEL_4_SPLITS` par défaut, avec
+`directional_shadow_blend_splits` à `false` : quatre cartes d'ombre de résolutions
+différentes selon la profondeur, raccordées sans fondu. Sous une **caméra
+orthogonale**, la profondeur croît linéairement du bas vers le haut de l'écran — ces
+frontières de profondeur deviennent donc des lignes horizontales à position fixe à
+l'écran. Sous une caméra en perspective elles suivraient le relief et passeraient
+inaperçues ; c'est le choix de l'orthogonale, figé par `CLAUDE.md`, qui les rend
+visibles.
+
+Corrigé en une ligne : `SHADOW_ORTHOGONAL`, une seule carte. Les cascades servent à
+couvrir un horizon lointain, et la scène ici est bornée par construction — elle tient
+dans une carte sans rien perdre.
+
+`directional_shadow_max_distance` est passé de 400 à `ORBIT_DISTANCE + 60`, soit 180.
+Il était réglé au doigt mouillé pour « dépasser le recul du rig » ; l'étaler deux fois
+et demi plus loin que ce que la caméra voit ne faisait que diluer les texels de la
+carte d'ombre. La constante est maintenant dérivée de `CameraRig.ORBIT_DISTANCE` plutôt
+que recopiée, pour que le couplage soit visible plutôt que silencieux.
+
+**Consigné dans `CLAUDE.md`, section Caméra**, et pas seulement ici : le soleil du
+harnais sera jeté quand la scène de jeu montera son propre éclairage, et la contrainte
+doit lui survivre.
+
+Deuxième bug de rendu de ce jalon que les trois commandes de vérification laissent
+passer, après le lacet. Elles disent que le code compile et que le domaine est juste ;
+elles ne disent rien de ce qui s'affiche. Pour un jalon de rendu, la capture n'est pas
+un confort.
+
 ### Une addition non prévue au plan — la capture en ligne de commande
 
 Le harnais accepte `-- --shot chemin.png [--shot-turns n]` : il rend, enregistre et

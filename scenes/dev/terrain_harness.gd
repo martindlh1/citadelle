@@ -56,9 +56,11 @@ const AMBIENT_ENERGY := 0.55
 const SUN_ROTATION_DEGREES := Vector3(-52.0, -125.0, 0.0)
 const SUN_ENERGY := 1.15
 
-## Portée des ombres directionnelles, mesurée depuis la caméra. Elle doit dépasser le
-## recul du rig, sinon la carte tombe hors de portée et plus aucune ombre ne se pose.
-const SUN_SHADOW_DISTANCE := 400.0
+## Marge de portée des ombres au-delà du recul du rig. Elle doit couvrir la moitié
+## arrière de ce que la caméra voit au zoom le plus large ; en dessous, le fond de la
+## carte perd son ombre, au-dessus chaque texel de la carte d'ombre couvre plus de
+## monde pour rien et tout se floute.
+const SUN_SHADOW_MARGIN := 60.0
 
 var _metrics: TerrainMetrics
 var _renderer: TerrainRenderer
@@ -215,7 +217,18 @@ func _make_sun() -> DirectionalLight3D:
 	sun.rotation_degrees = SUN_ROTATION_DEGREES
 	sun.light_energy = SUN_ENERGY
 	sun.shadow_enabled = true
-	sun.directional_shadow_max_distance = SUN_SHADOW_DISTANCE
+	# Une seule carte d'ombre, pas de cascades.
+	#
+	# Le défaut de Godot en découpe quatre selon la profondeur, chacune à une
+	# résolution différente et sans fondu entre elles. Sous une caméra orthogonale la
+	# profondeur croît linéairement du bas vers le haut de l'écran : ces frontières
+	# deviennent des lignes horizontales FIXES à l'écran, nettes d'un côté et floues de
+	# l'autre, que le terrain traverse quand on déplace la vue. Les cascades servent à
+	# couvrir un horizon lointain ; ici la scène est bornée et tient dans une carte.
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
+	# Serrer la portée sur ce que la caméra voit réellement : la même carte d'ombre
+	# étalée sur 400 unités au lieu de 180 divise par deux et demi sa densité de texels.
+	sun.directional_shadow_max_distance = CameraRig.ORBIT_DISTANCE + SUN_SHADOW_MARGIN
 	return sun
 
 func _make_label() -> Label:
