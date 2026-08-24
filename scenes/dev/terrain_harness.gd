@@ -23,22 +23,6 @@ extends Node
 ## Seed de départ. Espace donne FIRST_SEED + 1, puis + 2, etc.
 const FIRST_SEED := 1234
 
-## Argument de ligne de commande qui déclenche une capture puis quitte.
-const SHOT_FLAG := "--shot"
-
-## Argument optionnel : nombre de quarts de tour à appliquer avant de capturer.
-## C'est ce qui rend la rotation de la caméra vérifiable depuis un terminal.
-const SHOT_TURNS_FLAG := "--shot-turns"
-
-## Argument optionnel « x,y » : cellule à désigner avant de capturer. Sans lui, la
-## capture vise le centre de la carte — jamais rien, parce qu'une capture qui ne
-## montre pas la surbrillance ne prouve rien à son sujet.
-const SHOT_HOVER_FLAG := "--shot-hover"
-
-## Images laissées passer avant une capture. La première ne porte encore ni le tampon
-## d'instances téléversé ni la lumière, et rendrait un cadre vide.
-const SHOT_WARMUP_FRAMES := 3
-
 ## Marge du rapport, en pixels.
 const REPORT_MARGIN := 16.0
 
@@ -187,7 +171,7 @@ func _sorted_names(keys: Array) -> Array[StringName]:
 ## vérifier T2 depuis un terminal. Les arguments passés après -- sont ceux du jeu et
 ## non du moteur, d'où get_cmdline_user_args().
 func _capture_if_asked() -> void:
-	var path := _shot_path()
+	var path := DevShot.path()
 	if path.is_empty():
 		return
 	# La souris est à (0, 0) dans une session pilotée en ligne de commande, donc le
@@ -195,13 +179,13 @@ func _capture_if_asked() -> void:
 	# une cellule à la main : sans ça, aucune capture ne montrerait la surbrillance, et
 	# c'est justement ce qu'on cherche à regarder.
 	_world.cursor().input_enabled = false
-	_world.cursor().hover_cell(_shot_hover_cell(_shot_argument(SHOT_HOVER_FLAG)))
-	var turns := _shot_argument(SHOT_TURNS_FLAG).to_int()
+	_world.cursor().hover_cell(DevShot.hover_cell(_grid.size() / 2))
+	var turns := DevShot.argument(DevShot.SHOT_TURNS_FLAG).to_int()
 	if turns != 0:
 		_world.rig().rotate_steps(turns)
 		var seconds: float = GameDatabase.get_balance().camera.rotation_seconds
 		await get_tree().create_timer(seconds).timeout
-	for _frame in SHOT_WARMUP_FRAMES:
+	for _frame in DevShot.WARMUP_FRAMES:
 		await get_tree().process_frame
 	_probe_camera_ray()
 	var error := get_viewport().get_texture().get_image().save_png(path)
@@ -236,29 +220,6 @@ func _probe_camera_ray() -> void:
 	var agreed := probed.is_hit() and probed.cell() == expected.cell()
 	print("[terrain_harness] sonde caméra : écran %s -> %s, attendu %s : %s"
 		% [screen.round(), landed, expected.cell(), "OK" if agreed else "DÉSACCORD"])
-
-func _shot_path() -> String:
-	return _shot_argument(SHOT_FLAG)
-
-## Cellule à désigner sur une capture, lue en « x,y ». Le centre de la carte à défaut,
-## et aussi sur un argument mal formé : une capture doit montrer quelque chose plutôt
-## que d'échouer sur une virgule.
-func _shot_hover_cell(argument: String) -> Vector2i:
-	var middle := _grid.size() / 2
-	if argument.is_empty():
-		return middle
-	var parts := argument.split(",")
-	if parts.size() != 2:
-		return middle
-	return Vector2i(parts[0].to_int(), parts[1].to_int())
-
-## Valeur qui suit ce drapeau sur la ligne de commande, ou "" s'il est absent.
-func _shot_argument(flag: String) -> String:
-	var args := OS.get_cmdline_user_args()
-	var index := args.find(flag)
-	if index < 0 or index + 1 >= args.size():
-		return ""
-	return args[index + 1]
 
 func _make_label() -> Label:
 	var label := Label.new()

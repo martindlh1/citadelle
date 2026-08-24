@@ -60,6 +60,12 @@ static func create(grid: HeightGrid, metrics: TerrainMetrics, balance: BalanceDa
 	world._rig.frame(metrics.world_center(grid.size()), metrics.world_extent(grid.size()))
 	world._cursor = CellCursor.create(grid, metrics, world._rig.get_camera())
 	world.add_child(world._cursor)
+	# Indispensable, et pas une précaution : TerrainRenderer.create() se peuple tout
+	# seul, TerrainDecorRenderer.create_all() non — elle construit une passe par
+	# terrain, vide, que seul rebuild() remplit. Sans cette ligne le plateau sort sans
+	# un arbre ni un rocher, et le harnais Terrain ne s'en apercevait pas parce qu'il
+	# enchaînait sur son propre show_grid().
+	world.show_grid(grid)
 	return world
 
 ## La caméra et son rig : rotation, zoom, cadrage.
