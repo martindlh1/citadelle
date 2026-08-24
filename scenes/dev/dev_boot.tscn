@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bp0icclcyo48b"]
+
+[ext_resource type="Script" uid="uid://c4qkw5ox5eqi7" path="res://scenes/dev/dev_boot.gd" id="1_o5sem"]
+
+[node name="DevBoot" type="Node" unique_id=1917947675]
+script = ExtResource("1_o5sem")
