@@ -56,15 +56,19 @@ Grille de cellules `Vector2i`, chacune portant une hauteur entière et un `Terra
 
 La caméra tourne par pas de 90°, ce qui est l'intérêt du vrai 3D par rapport à des vues pré-rendues. L'occlusion d'un bâtiment par une colline est un problème de ce système et de lui seul.
 
-**`OUVERT`** — le relief joue-t-il sur le gameplay, et comment ? Quatre pistes non exclusives : contrainte de construction (il faut du plat, ou payer un terrassement), avantage défensif en hauteur, accès aux ressources selon l'altitude, ou purement décoratif. Le contrat expose déjà hauteur et planéité, donc les quatre restent ouvertes sans refonte.
+**Le relief contraint la construction.** *(Tranché à `C1`.)* Un bâtiment exige toutes ses cellules à la même hauteur — la règle est universelle et ne se règle pas par bâtiment. Le relief n'est donc pas décoratif : c'est lui qui décide où le village peut s'étendre, et c'est ce qui donne à un plateau sa valeur.
+
+**`OUVERT`** — le relief joue-t-il *autrement* sur le gameplay ? Trois pistes non exclusives restent entières : avantage défensif en hauteur, accès aux ressources selon l'altitude, et **terrassement** — payer pour aplanir un dénivelé plutôt que de subir la contrainte ci-dessus. Le contrat expose déjà hauteur et planéité, donc les trois restent ouvertes sans refonte.
 
 ### 3.2 Construction
 
 > **Contrat** — reçoit `CityState` + `BuildingData` + cellule d'ancrage, rend un `PlacementResult` et mute l'état. Interroge le Terrain en lecture seule.
 
-Validation du placement : cellules libres, terrain constructible, empreinte entière dans la carte, ressources suffisantes, prérequis d'adjacence satisfaits, contrainte de relief le cas échéant.
+Validation du placement : empreinte entière dans la carte, cellules libres, terrain constructible, toutes les cellules à la même hauteur *(cf. 3.1)*.
 
-Une empreinte plus grande que 1×1 s'ancre sur une cellule ; les autres cellules stockent une référence vers l'ancre.
+**Le coût n'en fait pas partie.** « Ai-je les 15 bois ? » ne regarde pas la carte, et le contrat ci-dessus ne reçoit aucune bourse. C'est la couche qui orchestre la journée qui pose les deux questions à la suite — placement valide *et* payable. Voir 3.3.
+
+Une empreinte est une **liste de cellules relatives à une ancre**, pas nécessairement un rectangle : les formes en L, en T ou en croix sont exprimables, et un rectangle n'est qu'un cas particulier. L'ancre appartient toujours à l'empreinte. Les autres cellules couvertes stockent une référence vers elle.
 
 **Adjacence** — c'est la couche d'optimisation du jeu. Chaque bâtiment porte des règles de la forme *« +X de rendement par voisin taggé Y dans un rayon Z »*. Le système doit exposer un calcul de prévisualisation appelable pendant le placement fantôme : sans retour visuel en temps réel du delta, le système d'adjacence est invisible, donc inexistant.
 
