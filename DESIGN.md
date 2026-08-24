@@ -70,6 +70,10 @@ Validation du placement : empreinte entière dans la carte, cellules libres, ter
 
 Une empreinte est une **liste de cellules relatives à une ancre**, pas nécessairement un rectangle : les formes en L, en T ou en croix sont exprimables, et un rectangle n'est qu'un cas particulier. L'ancre appartient toujours à l'empreinte. Les autres cellules couvertes stockent une référence vers elle.
 
+**Un bâtiment se pose dans l'une de quatre orientations**, par quarts de tour, comme la caméra. L'orientation appartient au *placement* et non au bâtiment : une même `BuildingData` se pose dans les quatre sens, et rien dans `data/` ne la décrit. Une empreinte symétrique — le 1×1, le carré — rend simplement les quatre identiques, sans cas particulier à écrire.
+
+La rotation se fait **autour de la cellule d'ancrage**, qui est donc invariante : la forme pivote sous le curseur au lieu de sauter à côté, et l'ancre ne peut pas sortir de sa propre empreinte. C'est ce qui rend l'orientation gratuite pour tout le reste du système — les deux index de la ville, la validation et le rendu ne voient qu'une liste de cellules, sans savoir d'où elle vient.
+
 **Adjacence** — c'est la couche d'optimisation du jeu. Chaque bâtiment porte des règles de la forme *« +X de rendement par voisin taggé Y dans un rayon Z »*. Le système doit exposer un calcul de prévisualisation appelable pendant le placement fantôme : sans retour visuel en temps réel du delta, le système d'adjacence est invisible, donc inexistant.
 
 ### 3.3 Économie
