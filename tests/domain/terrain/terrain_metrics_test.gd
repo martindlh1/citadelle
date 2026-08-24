@@ -38,6 +38,21 @@ func test_surface_y_is_the_height_in_steps() -> void:
 	assert_float(_metrics.surface_y(0)).is_equal_approx(0.0, EPSILON)
 	assert_float(_metrics.surface_y(4)).is_equal_approx(4.0 * STEP, EPSILON)
 
+## Le dessous de la carte : un cran sous sa colonne la plus basse. Le rendu y enracine
+## ses colonnes, le picker y ferme les siennes, et c'est ce partage qui fait que ce
+## qu'on désigne est ce qu'on voit.
+func test_base_y_sits_one_step_under_the_lowest_column() -> void:
+	assert_float(_metrics.base_y(3)).is_equal_approx(2.0 * STEP, EPSILON)
+	assert_float(_metrics.base_y(0)).is_equal_approx(-STEP, EPSILON)
+
+## Il reste strictement sous la surface à toute altitude, y compris négative : c'est ce
+## qui garantit une épaisseur non nulle sur un terrain parfaitement plat.
+func test_base_y_is_always_below_the_surface() -> void:
+	for height in [-4, 0, 7]:
+		assert_float(_metrics.base_y(height)) \
+			.override_failure_message("socle au-dessus de la surface à h = %d" % height) \
+			.is_less(_metrics.surface_y(height))
+
 ## Une carte peut descendre sous le niveau 0 : min_height accepte des négatifs.
 func test_surface_y_goes_below_zero() -> void:
 	assert_float(_metrics.surface_y(-3)).is_equal_approx(-3.0 * STEP, EPSILON)

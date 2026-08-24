@@ -25,6 +25,11 @@ const SHOT_FLAG := "--shot"
 ## C'est ce qui rend la rotation de la caméra vérifiable depuis un terminal.
 const SHOT_TURNS_FLAG := "--shot-turns"
 
+## Argument optionnel « x,y » : cellule à désigner avant de capturer. Sans lui, la
+## capture vise le centre de la carte — jamais rien, parce qu'une capture qui ne
+## montre pas la surbrillance ne prouve rien à son sujet.
+const SHOT_HOVER_FLAG := "--shot-hover"
+
 ## Images laissées passer avant une capture. La première ne porte encore ni le tampon
 ## d'instances téléversé ni la lumière, et rendrait un cadre vide.
 const SHOT_WARMUP_FRAMES := 3
@@ -62,10 +67,19 @@ const SUN_ENERGY := 1.15
 ## monde pour rien et tout se floute.
 const SUN_SHADOW_MARGIN := 60.0
 
+## Rappel des touches, en pied du rapport. Constante parce que le rapport se
+## reconstruit à chaque image depuis que le survol y figure.
+const CONTROLS := """Espace : seed suivant.   Q/E : tourner.   Molette : zoom.
+Flèches ou WASD, clic milieu : déplacer.   R : recadrer."""
+
 var _metrics: TerrainMetrics
 var _renderer: TerrainRenderer
+var _decor: Array[TerrainDecorRenderer] = []
 var _rig: CameraRig
+var _cursor: CellCursor
 var _label: Label
+var _grid: HeightGrid
+var _report_body: String
 var _seed := FIRST_SEED
 
 func _ready() -> void:
@@ -76,21 +90,51 @@ func _ready() -> void:
 	var grid := _generate(FIRST_SEED)
 	_renderer = TerrainRenderer.create(grid, _metrics)
 	add_child(_renderer)
+	_decor = TerrainDecorRenderer.create_all(_palette(), _metrics)
+	for decor_pass in _decor:
+		add_child(decor_pass)
 	_rig = CameraRig.create(balance.camera)
 	add_child(_rig)
 	_rig.frame(_metrics.world_center(grid.size()), _metrics.world_extent(grid.size()))
+	_cursor = CellCursor.create(grid, _metrics, _rig.get_camera())
+	add_child(_cursor)
 	_label = _make_label()
 	add_child(_label)
-	_publish(grid)
+	_show(grid)
 	_capture_if_asked()
+
+## Le survol change sans que rien ne soit joué — la souris bouge, la caméra tourne —
+## donc le rapport se réécrit à chaque image. Seule sa dernière ligne change ; le corps
+## est calculé une fois par carte, un balayage des mille cellules n'ayant rien à faire
+## dans une boucle d'affichage.
+func _process(_delta: float) -> void:
+	_label.text = "%s\n\n%s\n\n%s" % [_report_body, _hover_line(), CONTROLS]
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed(&"ui_accept"):
 		return
-	var grid := _generate(_seed + 1)
-	_renderer.rebuild(grid)
-	_publish(grid)
+	_show(_generate(_seed + 1))
 	get_viewport().set_input_as_handled()
+
+## Montre cette grille : le sol, ses décorations, et le survol qui la désigne.
+func _show(grid: HeightGrid) -> void:
+	_grid = grid
+	_renderer.rebuild(grid)
+	for decor_pass in _decor:
+		decor_pass.rebuild(grid)
+	_cursor.set_grid(grid)
+	_publish(grid)
+
+## Tous les terrains connus, décorés ou non.
+##
+## Les passes de décoration se construisent sur la palette et non sur la grille : un
+## seed qui ne sortirait aucun rocher ne doit pas supprimer la passe des rochers, que
+## le seed suivant remplirait.
+func _palette() -> Array[TerrainData]:
+	var terrains: Array[TerrainData] = []
+	for id in GameDatabase.list_terrain_ids():
+		terrains.append(GameDatabase.get_terrain(id))
+	return terrains
 
 func _generate(new_seed: int) -> HeightGrid:
 	_seed = new_seed
@@ -98,9 +142,8 @@ func _generate(new_seed: int) -> HeightGrid:
 	return TerrainGen.generate(_seed, params.map_size, params)
 
 func _publish(grid: HeightGrid) -> void:
-	var report := _report(grid)
-	_label.text = report
-	print(report)
+	_report_body = _report(grid)
+	print(_report_body)
 
 func _report(grid: HeightGrid) -> String:
 	var params := GameDatabase.get_balance().terrain_gen
@@ -112,10 +155,22 @@ func _report(grid: HeightGrid) -> String:
 	lines.append(_terrain_tally(grid))
 	lines.append("")
 	lines.append(_height_tally(grid))
-	lines.append("")
-	lines.append("Espace : seed suivant.   Q/E : tourner.   Molette : zoom.")
-	lines.append("Flèches ou WASD, clic milieu : déplacer.   R : recadrer.")
 	return "\n".join(lines)
+
+## Ce que le curseur désigne, en une ligne.
+##
+## Le point d'impact y figure en toutes lettres : c'est le seul endroit où l'on voit
+## si le picker raconte la même histoire que ce qui est à l'écran. Un décalage d'une
+## cellule entre la marque et ces coordonnées se lit tout de suite.
+func _hover_line() -> String:
+	var result := _cursor.hovered()
+	if not result.is_hit():
+		return "Survol : —"
+	var cell := result.cell()
+	var impact := result.position()
+	return "Survol : (%d, %d)   h = %d   %s   monde (%.2f, %.2f, %.2f)" % [
+		cell.x, cell.y, result.height(), _grid.terrain_at(cell).id,
+		impact.x, impact.y, impact.z]
 
 ## Combien de cellules par terrain, et quelle part de la carte.
 func _terrain_tally(grid: HeightGrid) -> String:
@@ -177,6 +232,12 @@ func _capture_if_asked() -> void:
 	var path := _shot_path()
 	if path.is_empty():
 		return
+	# La souris est à (0, 0) dans une session pilotée en ligne de commande, donc le
+	# survol réel tomberait hors de la carte. On coupe l'input du curseur et on désigne
+	# une cellule à la main : sans ça, aucune capture ne montrerait la surbrillance, et
+	# c'est justement ce qu'on cherche à regarder.
+	_cursor.input_enabled = false
+	_cursor.hover_cell(_shot_hover_cell(_shot_argument(SHOT_HOVER_FLAG)))
 	var turns := _shot_argument(SHOT_TURNS_FLAG).to_int()
 	if turns != 0:
 		_rig.rotate_steps(turns)
@@ -184,12 +245,49 @@ func _capture_if_asked() -> void:
 		await get_tree().create_timer(seconds).timeout
 	for _frame in SHOT_WARMUP_FRAMES:
 		await get_tree().process_frame
+	_probe_camera_ray()
 	var error := get_viewport().get_texture().get_image().save_png(path)
 	print("[terrain_harness] capture vers %s : %s" % [path, error_string(error)])
 	get_tree().quit(OK if error == OK else FAILED)
 
+## Contrôle du raccord caméra <-> picker, celui que rien d'autre ne couvre.
+##
+## Les tests unitaires tirent des rayons fabriqués à la main, et les trois commandes de
+## vérification ne regardent pas l'écran. Entre les deux il reste une jointure : est-ce
+## que project_ray_origin et project_ray_normal d'une caméra ORTHOGONALE donnent au
+## picker ce qu'il attend ? C'est là que T2 s'est fait prendre deux fois.
+##
+## On projette donc le point d'impact désigné VERS l'écran, puis on retire un rayon
+## depuis cette position d'écran exactement comme le ferait la souris. Les deux doivent
+## tomber sur la même cellule.
+func _probe_camera_ray() -> void:
+	var expected := _cursor.hovered()
+	if not expected.is_hit():
+		print("[terrain_harness] sonde caméra : rien de survolé, contrôle sauté")
+		return
+	var camera := _rig.get_camera()
+	var screen := camera.unproject_position(expected.position())
+	var probed := CellPicker.pick(_grid, _metrics,
+		camera.project_ray_origin(screen), camera.project_ray_normal(screen))
+	var landed := str(probed.cell()) if probed.is_hit() else "rien"
+	var agreed := probed.is_hit() and probed.cell() == expected.cell()
+	print("[terrain_harness] sonde caméra : écran %s -> %s, attendu %s : %s"
+		% [screen.round(), landed, expected.cell(), "OK" if agreed else "DÉSACCORD"])
+
 func _shot_path() -> String:
 	return _shot_argument(SHOT_FLAG)
+
+## Cellule à désigner sur une capture, lue en « x,y ». Le centre de la carte à défaut,
+## et aussi sur un argument mal formé : une capture doit montrer quelque chose plutôt
+## que d'échouer sur une virgule.
+func _shot_hover_cell(argument: String) -> Vector2i:
+	var middle := _grid.size() / 2
+	if argument.is_empty():
+		return middle
+	var parts := argument.split(",")
+	if parts.size() != 2:
+		return middle
+	return Vector2i(parts[0].to_int(), parts[1].to_int())
 
 ## Valeur qui suit ce drapeau sur la ligne de commande, ou "" s'il est absent.
 func _shot_argument(flag: String) -> String:

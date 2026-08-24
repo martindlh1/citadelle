@@ -4,6 +4,208 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-24 — `T3` : picking DDA, surbrillance et décorations
+
+**État : terminé.** Quatre commits, une couche chacun, sur `feat/t3-cell-picking`. Les
+trois commandes de vérification passent : boot sans erreur ni warning, tout
+`src/domain/` parse, 94 tests verts contre 66 à l'ouverture. Le rendu a été vérifié en
+image, et cette fois aussi c'est l'image qui a trouvé le bug.
+
+### Ce qui a été livré
+
+- `src/domain/terrain/cell_picker.gd` — la marche DDA, fonction pure.
+- `src/domain/terrain/pick_result.gd` — ce qu'elle rend.
+- `tests/domain/terrain/cell_picker_test.gd` — 20 cas.
+- `src/schema/terrain_decor.gd` + le champ `decor` sur `TerrainData`, et les trois
+  `.tres` de `data/terrain/` qui le renseignent.
+- `tests/schema/terrain_decor_test.gd` — 8 cas.
+- `src/adapters/terrain/` — `terrain_decor_renderer.gd`, `cell_highlight.gd`,
+  `cell_cursor.gd`.
+- `scenes/dev/terrain_harness.gd` — les trois branchés, le survol au rapport,
+  `--shot-hover` et la sonde caméra.
+- `CLAUDE.md` et `README.md` mis à jour.
+
+### La signature figée qui ne l'était pas
+
+`CLAUDE.md` donnait `pick(grid, origin, dir)` et le journal de `T2` la qualifiait de
+« signature figée ». Elle est inapplicable telle quelle : le DDA a besoin de
+`tile_size` et de `step_height` pour savoir où sont les cellules dans le monde, et
+c'est `T2` lui-même qui a sorti ces deux chiffres de `HeightGrid` pour les mettre dans
+`TerrainMetrics`. La contradiction était dans le document, pas dans le code.
+
+Arbitré avec l'humain avant écriture : la métrique devient un quatrième paramètre. La
+fonction reste pure et statique, sans état caché, et reçoit son réglage en argument
+comme `TerrainGen.generate()` reçoit le sien. `CLAUDE.md` est corrigé dans le même
+commit que le reste, avec la mention de ce qu'elle valait avant — une signature figée
+qui bouge doit dire qu'elle a bougé.
+
+### Décisions
+
+**Aucun DTO n'entre dans `contracts/`, et l'étape est sautée**, comme à `T2`. Seul
+l'adapter du Terrain consomme `PickResult`, et la table de `CLAUDE.md` ne le liste pas.
+Il se promeut à `C2` si le fantôme de placement en a besoin. Inventer un contrat pour
+respecter la forme de la procédure figerait une frontière que personne ne franchit.
+
+**Une colonne est solide vers le bas et sans fond.** Le socle que le renderer dessine
+sous la carte n'est qu'une épaisseur d'affichage : lui donner un fond dans le picker
+ouvrirait des tirs qui passent sous la carte pour ressortir de l'autre côté. Corollaire
+assumé et testé : un tir parti de sous le terrain est déjà dans la roche et la touche
+sur place. Consigné dans `CLAUDE.md`, parce que c'est le genre de modèle qu'on
+réinvente autrement six mois plus tard.
+
+**Le rayon est clippé sur l'emprise de la carte avant de marcher.** Une caméra
+orthogonale place l'origine de son rayon à cent unités de la carte ; sans le clip, la
+marche dépenserait son budget dans le vide. Le clip a aussi rattrapé un vrai bug : quand
+la carte est traversée par la *droite* du rayon mais entièrement **derrière** son
+origine, l'intervalle d'entrée est négatif, et le point ramené dans la grille par le
+clamp rendait une cellule inventée. Un cas de test le tient.
+
+**Le point d'impact d'une face supérieure est recalé exactement sur le sommet.**
+Mathématiquement il y est déjà ; le laisser sortir du calcul flottant y remettrait
+quelques ulp de bruit, dans la valeur même sur laquelle un bâtiment se posera. Le test
+assert l'égalité stricte, pas l'égalité approchée.
+
+**La décoration se décrit dans `data/`, dimensions en fractions de tuile.** Même
+raisonnement qu'à `T2` pour la couleur : le renderer ne commute jamais sur un
+identifiant de terrain. Et les fractions plutôt que les unités de monde, parce que
+régler `tile_size` doit redimensionner la carte entière — décorations comprises — et non
+laisser les arbres à leur ancienne taille au milieu de cellules qui ont changé.
+
+**`decor` est nullable, seule exception au principe de sentinelle.** La plaine et l'eau
+n'ont rien à porter, et « rien » y est évident plutôt que suspect. Le filet reste tendu
+là où il sert : une décoration *présente* mais à moitié remplie remonte préfixée
+`decor.`, comme `BalanceData` préfixe ses blocs, et le boot la refuse.
+
+**La sentinelle de couleur est recopiée dans `TerrainDecor` au lieu d'être importée.**
+`TerrainData` nomme déjà `TerrainDecor` dans un `@export` ; lui répondre par une
+constante fermerait le cycle de types. Un cas de test épingle l'égalité des deux copies,
+pour que la duplication ne dérive pas.
+
+**La palette est passée en argument au renderer, pas lue sur `GameDatabase`.** Les
+passes se construisent alors sur ce que le jeu *connaît* et non sur ce qu'une grille
+contient : un seed sans rocher ne doit pas supprimer la passe des rochers, que le seed
+suivant remplirait. L'adapter reçoit ses données comme le domaine reçoit les siennes.
+
+**La dispersion vient d'un hash de la cellule.** Ni `randf()`, qui est interdit, ni
+`RunState.rng` : une même carte doit se disperser pareil à chaque affichage, et faire
+descendre un flux de tirage jusqu'à une passe de rendu coûterait une dépendance pour un
+résultat identique.
+
+**La surbrillance ne code aucune validité.** Une marque verte ou rouge selon qu'on peut
+y bâtir préempterait Construction, à qui la question appartient. Une seule couleur :
+« c'est cette cellule-là ». Le picker désigne, il ne juge pas — un test vérifie qu'on
+survole l'eau aussi bien que la plaine.
+
+**Le curseur pique à chaque image, pas au mouvement de souris.** La caméra bouge aussi :
+pendant un quart de tour tweené, le rayon change sans que le curseur n'ait remué.
+
+### Le bug que seule l'image a montré — le prisme noir
+
+Troisième jalon d'affilée, troisième bug de rendu que les trois commandes de
+vérification laissent passer.
+
+J'avais donné trois formes au vocabulaire des décorations : cône pour les arbres, sphère
+pour les rochers, **prisme** pour les gisements. La capture a montré des rectangles noirs
+posés sur les cellules de gisement. Une passe de diagnostic — recolorer la forme en
+magenta pour savoir quels pixels lui appartiennent vraiment, plutôt que de deviner entre
+la décoration et son ombre — a confirmé que c'était bien le prisme, et pas une ombre.
+
+**Le `PrismMesh` porte une grande face verticale plate.** Et le soleil de la scène
+n'éclaire que les surfaces tournées vers le haut : toute face verticale ne reçoit que
+l'ambiante. Dès que la face plate se présente à la caméra, elle se lit comme un trou. Il
+n'y a pas d'orientation qui sauve, puisque la caméra pivote par quarts de tour au-dessus
+d'un soleil fixe.
+
+Ce qui a été fait, et ce qui ne l'a pas été :
+
+- **le prisme est retiré du vocabulaire**, pas documenté avec une mise en garde. Une
+  valeur d'enum inutilisée qui produit des trous noirs est un piège pour qui la choisira
+  ensuite. Il reste deux formes, sans face plate, qui gardent un dégradé sous tous les
+  angles ;
+- **le soleil n'a pas bougé.** Que seules les faces du dessus soient éclairées est
+  l'aspect établi à `T2` — tops clairs, arêtes sombres — et c'est un choix, pas un
+  défaut. Le renverser unilatéralement pour sauver une décoration aurait changé toute la
+  lecture de la carte ;
+- le gisement est donc devenu une **sphère aplatie**, qui offre un dessus éclairé et se
+  distingue du rocher par sa proportion.
+
+La contrainte est consignée dans `CLAUDE.md`, avec sa suite : **les bâtiments seront des
+boîtes**, donc ils la rencontreront aussi. Le jour où leurs flancs poseront problème, ce
+sera le soleil qu'il faudra bouger, pas la forme.
+
+### Une addition non prévue au plan — la sonde caméra
+
+Entre les tests unitaires, qui tirent des rayons fabriqués à la main, et les trois
+commandes de vérification, qui ne regardent pas l'écran, il restait une jointure non
+couverte : est-ce que `project_ray_origin` et `project_ray_normal` d'une caméra
+**orthogonale** donnent au picker ce qu'il attend ?
+
+Chaque capture imprime donc une sonde. Elle reprojette le point d'impact désigné *vers*
+l'écran, retire un rayon depuis cette position exactement comme le ferait la souris, et
+dit si les deux tombent sur la même cellule. Vérifié au centre, dans un coin, et après
+un quart de tour : d'accord dans les trois cas.
+
+C'est le pendant de `--shot` à `T2` — quelques lignes dans un harnais, qui est
+exactement l'endroit où ce genre d'échafaudage a sa place, et qui rendent vérifiable
+depuis un terminal ce qui ne l'était pas.
+
+`--shot-hover x,y` complète le dispositif : souris à `(0, 0)`, une capture ne montrerait
+jamais la surbrillance, donc ne prouverait rien à son sujet. À défaut d'argument, la
+capture désigne le centre de la carte.
+
+### Un test qui s'est cassé sur sa propre erreur
+
+Le cas « changer `tile_size` change la cellule désignée » visait un point à `z = 5` sur
+une grille de 4 × 3. À `tile_size` 1, l'emprise ne fait plus que 4 × 3 unités : le tir
+manquait la carte, ce qui est correct. C'est l'`assert` de `PickResult.cell()` qui a
+levé, en disant exactement ce qu'il fallait. Le picker n'avait rien ; c'est l'attente
+qui était fausse. Le cas vise maintenant un point qui tombe dans l'emprise des deux
+métriques, et le commentaire dit pourquoi.
+
+### Ce qui reste
+
+Rien pour `T3`. `DESIGN.md` n'a pas bougé, et c'est délibéré : `T3` ne tranche aucune
+question `OUVERT`. Désigner une cellule ne dit rien du rôle du relief dans le gameplay,
+et les quatre pistes de 3.1 restent entières.
+
+Deux choses volontairement laissées de côté :
+
+- **plus d'une décoration par cellule.** Un `MultiMesh` à compte variable par cellule
+  pour un gain purement esthétique, pas à ce stade.
+- **l'amplitude du relief**, toujours ouverte depuis `T2` avec ses deux leviers chiffrés.
+  Les décorations ne changent rien à l'arbitrage : c'est le même choix d'aspect, adossé
+  à la même question `OUVERT`.
+
+### Prochain jalon
+
+`C1` — `CityState`, `PlacementValidator`, empreintes, tests, sans rendu. C'est l'ordre
+de démarrage suggéré par `DESIGN.md` 8 : `T1→T3`, puis `C1→C2`.
+
+`T4`, l'occlusion, reste conditionné à un playtest qui montrerait que c'en est vraiment
+un problème — `DESIGN.md` le dit explicitement, et rien de ce jalon ne l'a rendu plus
+urgent.
+
+`C1` sera aussi le moment de rouvrir la question de `TerrainMetrics` et de `PickResult` :
+si Construction en a besoin directement, c'est là qu'ils montent dans `contracts/`.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni réglage de projet n'a changé, aucune action
+d'input n'a été ajoutée — le curseur lit la position brute de la souris. `HARNESS` vaut
+toujours `&"terrain"` : `F5` affiche la carte, la souris survole, Espace passe au seed
+suivant, Q et E tournent, la molette zoome, R recadre.
+
+Deux points de suite :
+
+- `data/balance/camera_balance.tres` n'a toujours pas de `uid`, et les trois `.tres` de
+  terrain décorés viennent d'être réécrits sans `uid` non plus. L'éditeur leur en
+  attribuera à la première ouverture : **diff à committer, pas à jeter**, comme à `I0`,
+  `T1` et `T2`.
+- une capture écrite dans l'arborescence du projet se fait importer par le scan suivant,
+  qui lui colle un `.png.import`. Écrire les captures hors de `res://` — noté au README.
+
+---
+
 ## 2026-08-24 — `T2` : rendu en blocs étagés et caméra isométrique
 
 **État : terminé.** Quatre commits, une couche chacun, sur `feat/t2-terrain-render`.

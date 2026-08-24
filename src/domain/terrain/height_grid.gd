@@ -40,6 +40,18 @@ func height_at(cell: Vector2i) -> int:
 	assert(in_bounds(cell), "cellule hors grille : %s dans %s" % [cell, _size])
 	return _heights[_index(cell)]
 
+## Hauteur de la colonne la plus basse. C'est elle qui fixe le dessous de la carte,
+## via TerrainMetrics.base_y() — le rendu comme le picking s'y adossent.
+##
+## Balaye la grille à chaque appel. Sur les tailles de carte du jeu c'est négligeable ;
+## le jour où ça ne le serait plus, c'est ici qu'un cache s'installerait, avec son
+## invalidation dans set_cell() et set_height().
+func lowest_height() -> int:
+	var lowest := _heights[0]
+	for height in _heights:
+		lowest = mini(lowest, height)
+	return lowest
+
 ## Terrain de la cellule, jamais null. Précondition : in_bounds(cell).
 func terrain_at(cell: Vector2i) -> TerrainData:
 	assert(in_bounds(cell), "cellule hors grille : %s dans %s" % [cell, _size])

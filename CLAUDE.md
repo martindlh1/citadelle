@@ -225,6 +225,12 @@ Le bus transporte des DTO immuables. Jamais une référence mutable sur un état
 
 **`MultiMeshInstance3D`**, une instance par cellule, `BoxMesh` unitaire mis à l'échelle en Y. Une passe pour le sol, une par type de décoration (forêt, rocher, gisement). Un seul draw call par matériau, couleur par instance via `set_instance_color`.
 
+Ce que la décoration dessine se décrit dans `data/`, sur le `TerrainData` de la cellule, exactement comme sa couleur : le renderer ne commute jamais sur un identifiant de terrain. **Les dimensions y sont en fractions de tuile**, jamais en unités de monde — régler `tile_size` doit redimensionner la carte entière, décorations comprises.
+
+**Aucune primitive à grande face verticale plate.** Le soleil de la scène n'éclaire que les surfaces tournées vers le haut ; toute face verticale ne reçoit que l'ambiante. Une face plate qui se présente à la caméra se lit alors comme un rectangle noir, et sous une caméra qui pivote par quarts de tour au-dessus d'un soleil fixe, aucune orientation n'y échappe. Les formes utilisables gardent un dégradé sous tous les angles — cône, sphère. Constaté à `T3` en essayant un `PrismMesh`, retiré le jour même. La même contrainte attend les bâtiments, qui seront des boîtes : c'est le soleil qu'il faudra bouger, pas la forme.
+
+La dispersion d'une décoration — dérive, échelle, orientation — vient d'un **hash de la cellule**, jamais de `randf()` ni de `RunState.rng`. Une même carte doit se disperser pareil à chaque affichage, sans qu'une passe de rendu ait à transporter un flux de tirage.
+
 Pas de `GridMap` : il ne gère pas la hauteur variable par cellule sans empiler des cubes unitaires.
 
 ### Sélection de cellule
@@ -232,10 +238,15 @@ Pas de `GridMap` : il ne gère pas la hauteur variable par cellule sans empiler 
 **Pas de collider, pas de physique.** Raycast analytique en DDA sur la grille de hauteurs, implémenté dans `domain/terrain/cell_picker.gd` comme fonction pure :
 
 ```gdscript
-static func pick(grid: HeightGrid, origin: Vector3, dir: Vector3) -> PickResult
+static func pick(grid: HeightGrid, metrics: TerrainMetrics,
+        origin: Vector3, dir: Vector3) -> PickResult
 ```
 
 L'adapter caméra fournit `origin` et `dir` via `project_ray_origin` / `project_ray_normal`. Exact, testable, zéro `PhysicsServer`.
+
+La métrique est un argument et non un membre : le passage monde ↔ grille en dépend, et `T2` a sorti `tile_size` et `step_height` de `HeightGrid` pour les mettre dans `TerrainMetrics`. La fonction reçoit son réglage comme `TerrainGen.generate()` reçoit le sien. *(Cette signature portait trois paramètres jusqu'à `T3`, où elle s'est révélée inapplicable telle quelle.)*
+
+Une colonne est **solide vers le bas et sans fond**. Le socle que le renderer dessine sous la carte n'est qu'une épaisseur d'affichage ; lui donner un fond ouvrirait des tirs qui passent sous la carte pour ressortir de l'autre côté. Un tir parti de sous le terrain le touche donc sur place.
 
 ### Caméra
 
