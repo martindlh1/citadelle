@@ -5,9 +5,9 @@
 
 [sub_resource type="Resource" id="Resource_stone_decor"]
 script = ExtResource("2_terrain_decor")
-shape = 3
-color = Color(0.45, 0.41, 0.34, 1)
-width = 0.55
+shape = 2
+color = Color(0.6, 0.57, 0.5, 1)
+width = 0.65
 height = 0.3
 variation = 0.25
 

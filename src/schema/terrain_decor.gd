@@ -20,15 +20,21 @@ extends Resource
 ## Primitive dessinée, en attendant de vrais assets. UNSET vaut 0 pour rester
 ## détectable, comme TerrainData.Build.
 ##
-## Le vocabulaire est volontairement court : trois formes couvrent les trois terrains
-## décorés du tableau de DESIGN.md 3.1. En ajouter une est une édition de GDScript, et
-## c'est assumé — le jour où de vraies meshes arrivent, c'est ce champ qui devient une
-## référence de Mesh et le vocabulaire disparaît.
+## Le vocabulaire est volontairement court : deux formes suffisent aux trois terrains
+## décorés du tableau de DESIGN.md 3.1, la proportion et la couleur faisant le reste.
+## En ajouter une est une édition de GDScript, et c'est assumé — le jour où de vraies
+## meshes arrivent, c'est ce champ qui devient une référence de Mesh et le vocabulaire
+## disparaît.
+##
+## Une forme y a été essayée puis retirée : le prisme. Il porte une grande face
+## verticale plate, et dès qu'elle regarde la caméra en tournant le dos au soleil, elle
+## se lit comme un trou noir. Sous une caméra qui pivote par quarts de tour au-dessus
+## d'un soleil fixe, aucune orientation n'y échappe. Les deux formes restantes n'ont
+## pas de face plate : elles gardent un dégradé quel que soit l'angle.
 enum Shape {
 	UNSET = 0,
 	CONE = 1,
 	BOULDER = 2,
-	PRISM = 3,
 }
 
 ## Couleur qu'on lit comme « non renseignée ».
