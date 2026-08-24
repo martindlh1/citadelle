@@ -7,3 +7,4 @@ script = ExtResource("1_terrain_data")
 id = &"forest"
 build = 1
 tags = Array[StringName]([&"forest"])
+color = Color(0.21, 0.4, 0.23, 1)
