@@ -4,6 +4,184 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-24 — `C1` : la ville, les empreintes et les règles de placement
+
+**État : terminé.** Six commits, une couche chacun, sur `feat/c1-placement`. Les trois
+commandes de vérification passent : boot sans erreur ni warning, tout `src/domain/`
+parse, 145 tests verts contre 100 à l'ouverture.
+
+### Ce qui a été livré
+
+- `src/domain/contracts/placement_result.gd` — la réponse à « puis-je poser ici ? ».
+- `src/schema/building_data.gd` — identité, empreinte, et la géométrie qui en découle.
+- `src/domain/city/` — `city_state.gd`, `placement_validator.gd`, `placed_building.gd`.
+- `tests/domain/city/` — 16 cas de placement, 15 cas de rangement.
+- `tests/schema/building_data_test.gd` — 14 cas.
+- `data/buildings/` — trois `.tres`.
+- `GameDatabase` — `get_building()`, `list_building_ids()`, contrôle de complétude.
+- `scenes/dev/city_harness.gd`, et `HARNESS` basculé sur `&"city"`.
+- `DESIGN.md` 3.1 et 3.2.
+
+### Quatre points arbitrés avant d'écrire
+
+Le plan en posait quatre à l'humain. Les quatre réponses ont changé le jalon, et deux
+l'ont simplifié.
+
+**Le coût sort du placement.** `DESIGN.md` 3.2 se contredisait : sa ligne de contrat
+prend `CityState + BuildingData + ancre`, sans bourse, mais sa liste de validation
+disait « ressources suffisantes ». Même nature que la signature de `pick()` à `T3` — la
+contradiction était dans le document, pas dans le code. Tranché pour la ligne de
+contrat : « ai-je les 15 bois ? » ne regarde pas la carte, et c'est la couche qui
+orchestre la journée qui enchaînera les deux questions. `REASON_INSUFFICIENT_RESOURCES`
+rejoindra `PlacementResult` ce jour-là sans que le validateur ne bouge. 3.2 le dit
+maintenant explicitement.
+
+**Aucun prérequis dur d'adjacence.** « Requiert un gisement voisin » était dans la liste
+de validation ; il en sort. L'adjacence reste entièrement la couche de rendement de
+`C3`, et le placement ne regarde jamais le voisinage.
+
+**Mais la zone de recherche est écrite quand même**, à la demande de l'humain :
+`BuildingData.neighbourhood_at(anchor, radius)`. Elle n'a **aucun appelant** avant `C3`,
+et c'est consigné dans son propre docstring — écrire d'avance est exactement ce que ce
+projet évite, et une exception qui ne se dit pas devient une habitude. Ce qui la rend
+acceptable : c'est de la géométrie pure, elle se teste sans terrain ni ville, et le
+rayon y est un argument et non un champ de data — rien dans `data/buildings/` ne le
+porte.
+
+**Toutes les cellules à la même hauteur, pour tous les bâtiments.** Je proposais que
+chaque `.tres` déclare s'il exige du plat. La version de l'humain est plus simple : la
+règle est universelle, l'enum disparaît, le validateur tient en une passe de plus.
+
+### La planéité tranche un `OUVERT`, et `DESIGN.md` est passé en premier
+
+3.1 demandait « le relief joue-t-il sur le gameplay, et comment ? » et listait quatre
+pistes. Exiger du plat prend la piste *contrainte de construction* et élimine *purement
+décoratif* : le relief décide désormais d'où le village peut s'étendre, et c'est ce qui
+donne à un plateau sa valeur. Les deux autres — avantage défensif en hauteur, accès aux
+ressources selon l'altitude — restent entières, et le **terrassement** les rejoint :
+c'est précisément cette règle qui le rendrait intéressant.
+
+`DESIGN.md` est modifié dans le **premier** commit, et non dans celui du journal comme
+la procédure de session le voudrait. `CLAUDE.md` interdit d'écrire une feature avant que
+le design la porte, et les empreintes de forme libre n'y figuraient pas : la mise à jour
+devait donc précéder le code, pas le conclure.
+
+### Décisions
+
+**Une empreinte est une liste de décalages, pas un rectangle.** `Array[Vector2i]` depuis
+l'ancre : un L, un T ou une croix s'écrivent, et un rectangle n'est qu'un cas
+particulier — ce qui évite d'avoir deux façons de dire la même chose et deux chemins à
+valider. Ce que j'avais annoncé comme coûteux ne l'était pas : `TerrainQuery` expose
+déjà `in_bounds()`, `is_buildable()` et `height_at()` par cellule, donc une validation
+cellule par cellule se fait avec le contrat **tel quel**, sans y ajouter une seule
+méthode. Les helpers `Rect2i` de `T1` restent, simplement inutilisés par le placement.
+
+**`bounds_at()` ne valide jamais rien.** L'enveloppe d'un L couvre une cellule que le
+bâtiment n'occupe pas. Deux cas de test l'épinglent des deux côtés : de l'eau dans ce
+trou n'empêche pas la pose, et le trou reste posable ensuite. C'est ce couple qui prouve
+que tout travaille sur l'empreinte et non sur son enveloppe — autrement dit que les
+formes libres sont réelles et pas décoratives.
+
+**`PlacementResult` entre dans `contracts/` tout de suite**, contrairement à
+`PickResult` à `T3`. Non par changement de doctrine : la table de `CLAUDE.md` l'y liste
+déjà, quand elle ne listait pas `PickResult`. Sa raison est un `StringName` et non un
+`enum`, comme la convention le prescrit pour ce DTO précisément — un adapter la mappe
+sur un libellé sans rien importer du domaine.
+
+**`CityState.place()` est la seule porte mutante, et elle valide avant de muter.** Rien
+ne peut donc entrer dans la ville sans être passé par `PlacementValidator` : invariant
+tenu par la structure, pas consigne à respecter. `validate()` reste pure et appelable
+seule, ce dont le fantôme de `C2` a besoin — il l'appellera à chaque image sous le
+curseur, et la pose lui rend exactement le résultat qu'il affichait.
+
+**Quatre passes sur l'empreinte, pas une boucle.** En une seule, une empreinte dont une
+cellule est occupée et une autre sous l'eau rendrait la raison de celle qui vient en
+premier dans le `.tres` : la raison affichée dépendrait de l'ordre d'écriture de la
+data. En quatre passes, elle ne dépend que de l'ordre des règles. Deux cas de test font
+échouer deux règles à la fois pour le tenir.
+
+L'ordre des règles n'est pas libre non plus : les bornes d'abord, parce que
+`height_at()` exige une cellule dans la grille et lèverait sur une empreinte qui
+déborde. C'est une précondition du contrat Terrain, pas une préférence d'ergonomie.
+
+**`missing_fields()` contrôle l'empreinte au-delà de sa présence.** Une empreinte qui ne
+contient pas son ancre, ou qui nomme deux fois la même cellule, se charge sans erreur et
+ne casse qu'à la pose. Les deux remontent préfixées `footprint.`, comme `TerrainData`
+préfixe `decor.`, et le boot les refuse. En revanche une empreinte **en deux morceaux
+disjoints** est acceptée : elle se pose sans rien casser, et la refuser serait une règle
+de contenu déguisée en règle de schéma.
+
+**Le cycle `CityState` ↔ `PlacementValidator` passe.** L'un prend l'autre en paramètre,
+l'autre l'appelle dans un corps de fonction. Ce n'est pas le cycle qui avait mordu à
+`T3` entre `TerrainData` et `TerrainDecor` : celui-là portait sur une **constante**,
+résolue à la compilation. Types et corps de fonction se résolvent plus tard, et la
+commande 2 le confirme.
+
+**`data/buildings/` n'est pas la passe de contenu.** `DESIGN.md` 4 liste dix bâtiments
+et ne donne **aucune** colonne d'empreinte : les trois `.tres` posés ici ont des tailles
+inventées, que `I3` reprendra. Ils existent pour que `GameDatabase` ait une catégorie à
+indexer et à contrôler, et pour que le harnais tourne sur de vrais fichiers. Les trois
+sont rectangulaires, fidèles à un design qui ne nomme aucun bâtiment en L : inventer une
+forme aurait été trancher du contenu à la place de l'humain, et les tests couvrent les
+formes libres sans rien figer dans `data/`.
+
+### Le harnais cherche ses refus au lieu de les fabriquer
+
+C'est la seule chose non prévue au plan. Plutôt que de coder en dur une cellule d'eau et
+une marche, le harnais balaye la carte à la recherche d'une ancre qui produit
+**exactement** la raison visée, et le dit quand il n'en trouve pas.
+
+Sur le seed 1234, les quatre y sont. C'est ce que les suites de tests ne peuvent pas
+montrer : elles travaillent sur des grilles de six cases faites à la main, où chaque
+règle est déclenchée par construction. Ici, une règle qui cesserait de se déclencher sur
+du terrain réellement généré remonterait toute seule — et une carte trop lisse pour la
+déclencher se signalerait, au lieu de passer pour un succès.
+
+C'est le pendant texte de la sonde caméra de `T3` : quelques lignes dans un harnais, à
+l'endroit exact où ce genre d'échafaudage a sa place.
+
+### Ce qui reste
+
+Rien pour `C1`. Deux choses volontairement laissées de côté :
+
+- **les PV, le coût, les slots, le rendement.** Ils viendront avec `E1`, `C3` et `F1`,
+  comme `BalanceData` gagne un bloc quand un système atterrit. Un champ ajouté plus tard
+  oblige à rouvrir les `.tres` ; un champ ajouté d'avance oblige à deviner sa forme, ce
+  qui coûte plus cher.
+- **`CitySnapshot`.** La table de `CLAUDE.md` le donne à l'Économie et au Combat, dont
+  aucun n'existe. Même raisonnement qu'à `T2` et `T3` : on n'invente pas une frontière
+  que personne ne franchit. Il arrive à `E1`.
+
+`TerrainMetrics` et `PickResult` sont restés dans `domain/terrain/`. Le journal de `T3`
+posait la question pour `C1` ; la réponse est non — sans rendu, Construction ne touche
+ni au monde ni aux rayons. Elle se repose à `C2`, qui est justement le jalon où le
+fantôme aura besoin des deux.
+
+### Prochain jalon
+
+`C2` — fantôme de placement, pose et destruction dans la scène de dev. Tout ce dont il a
+besoin est en place : `validate()` est pure et appelable à chaque image, un
+`PlacementResult` rend déjà les cellules et la hauteur auxquelles dessiner, et
+`CityState.remove()` attend son clic droit.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'input
+ajoutée.
+
+Deux points de suite :
+
+- `F5` lance maintenant le **harnais Construction**, un rapport texte sur fond noir :
+  `HARNESS` vaut `&"city"` dans `scenes/dev/dev_boot.gd`. Le remettre à `&"terrain"`
+  rend la carte en relief, la souris, Q et E, la molette.
+- les trois `.tres` de `data/buildings/` naissent **sans `uid`**. Une passe headless de
+  l'éditeur ne leur en attribue pas — vérifié cette fois-ci —, seule l'ouverture réelle
+  le fait : **diff à committer, pas à jeter**, comme à `I0`, `T1`, `T2` et `T3`. Leurs
+  empreintes sont provisoires, et les corriger dans l'inspecteur est sans risque : le
+  boot refuse toute empreinte devenue vide, sans ancre, ou redondante.
+
+---
+
 ## 2026-08-24 — `T3` : picking DDA, surbrillance et décorations
 
 **État : terminé.** Quatre commits, une couche chacun, sur `feat/t3-cell-picking`. Les

@@ -49,6 +49,9 @@ Un harnais qui affiche quelque chose ne se vérifie ni au parsing ni aux tests :
 faut le regarder. Le harnais Terrain accepte donc une capture en ligne de commande,
 qui rend une image puis quitte.
 
+Elle suppose `HARNESS` sur `&"terrain"` : les arguments ci-dessous sont ceux de ce
+harnais-là, et un autre harnais actif les ignorera.
+
 ```bash
 "$GODOT_BIN" --path . --resolution 1280x720 -- --shot /tmp/rendu.png --shot-turns 1 --shot-hover 16,16
 ```
