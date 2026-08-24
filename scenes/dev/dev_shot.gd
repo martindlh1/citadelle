@@ -23,6 +23,12 @@ const SHOT_TURNS_FLAG := "--shot-turns"
 ## Cellule à désigner avant de capturer, en « x,y ».
 const SHOT_HOVER_FLAG := "--shot-hover"
 
+## Quarts de tour appliqués à ce qu'on s'apprête à POSER, à ne pas confondre avec
+## --shot-turns qui fait pivoter la caméra. Lu par les harnais qui posent quelque
+## chose ; les autres l'ignorent, comme ils ignorent déjà les drapeaux qui ne les
+## concernent pas.
+const SHOT_ROTATE_FLAG := "--shot-rotate"
+
 ## Images laissées passer avant de capturer. La première ne porte encore ni le tampon
 ## d'instances téléversé ni la lumière, et rendrait un cadre vide.
 const WARMUP_FRAMES := 3

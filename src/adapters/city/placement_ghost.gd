@@ -38,19 +38,24 @@ static func create(metrics: TerrainMetrics) -> PlacementGhost:
 	ghost.visible = false
 	return ghost
 
-## Montre ce bâtiment posé sur cette ancre, au sol de hauteur `ground`, teinté par
-## `result`.
+## Montre ce bâtiment posé sur cette ancre, dans cette orientation, au sol de hauteur
+## `ground`, teinté par `result`.
 ##
 ## `ground` est passé à part et n'est pas lu sur le résultat : un refus n'a pas de
 ## hauteur — PlacementResult.height() lève sur un placement refusé, et c'est justement
 ## sur un refus qu'on a le plus besoin de voir le fantôme. La hauteur vient donc de la
 ## cellule survolée, qui est toujours connue.
-func show_at(data: BuildingData, anchor: Vector2i, ground: int,
+##
+## L'orientation est passée à part pour la même raison de fond : le fantôme redessine
+## exactement ce que la validation vient d'examiner, et les deux doivent lire la même
+## ancre et les mêmes crans, sans quoi la couleur cesserait de porter sur la forme
+## affichée.
+func show_at(data: BuildingData, anchor: Vector2i, turns: int, ground: int,
 		result: PlacementResult) -> void:
 	assert(data != null, "fantôme sans données de bâtiment")
 	assert(result != null, "fantôme sans résultat")
 	assert(_metrics != null, "fantôme non initialisé — passer par create()")
-	var cells := data.cells_at(anchor)
+	var cells := data.cells_at(anchor, turns)
 	if cells.is_empty():
 		clear()
 		return

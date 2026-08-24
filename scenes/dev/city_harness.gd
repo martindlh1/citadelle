@@ -38,7 +38,7 @@ const REPORT_FONT_SIZE := 13
 const REPORT_OUTLINE_SIZE := 4
 
 ## Rappel des touches, en pied du rapport.
-const CONTROLS := "Clic gauche : poser.   Clic droit : détruire.   1-9 : bâtiment.\nQ/E : tourner.   Molette : zoom.   WASD ou clic milieu : déplacer.   R : recadrer."
+const CONTROLS := "Clic gauche : poser.   Clic droit : détruire.   1-9 : bâtiment.   Tab : pivoter.\nQ/E : tourner la caméra.   Molette : zoom.   WASD ou clic milieu : déplacer.   R : recadrer."
 
 var _metrics: TerrainMetrics
 var _world: DevWorld
@@ -50,6 +50,7 @@ var _ghost: PlacementGhost
 var _label: Label
 var _catalogue: Array[BuildingData] = []
 var _selected := 0
+var _turns := 0
 var _preview: PlacementResult
 var _last_action := "—"
 
@@ -99,10 +100,21 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 			return
 	get_viewport().set_input_as_handled()
 
-## 1 à 9 choisissent le bâtiment courant. Sélection directe plutôt qu'un cycle : sur
-## trois entrées, tourner en rond pour revenir à la première est une gêne pure.
+## Tab pivote ce qu'on s'apprête à poser, 1 à 9 choisissent le bâtiment.
+##
+## Sélection directe plutôt qu'un cycle : sur quatre entrées, tourner en rond pour
+## revenir à la première est une gêne pure. La rotation, elle, est bien un cycle — il
+## n'y a que quatre orientations et elles se suivent naturellement.
+##
+## Tab et non R : R recadre la caméra depuis T2. Un vrai jeu du genre mettrait la
+## rotation sur R et déplacerait le recadrage, mais c'est une décision d'UI qui
+## appartient à D2, pas au sélecteur de debug d'un harnais.
 func _handle_key(event: InputEventKey) -> void:
 	if not event.pressed or event.echo:
+		return
+	if event.keycode == KEY_TAB:
+		_turns = posmod(_turns + 1, BuildingData.QUARTER_TURNS)
+		get_viewport().set_input_as_handled()
 		return
 	var index := event.keycode - KEY_1
 	if index < 0 or index >= _catalogue.size():
@@ -120,12 +132,14 @@ func _place_here() -> void:
 	if not hovered.is_hit() or data == null:
 		_last_action = "Pose : rien sous le curseur."
 		return
-	var result := _city.place(_terrain, data, hovered.cell())
+	var result := _city.place(_terrain, data, hovered.cell(), _turns)
 	if not result.is_ok():
-		_last_action = "Refusé : %s en %s — %s" % [data.id, hovered.cell(), result.reason()]
+		_last_action = "Refusé : %s en %s, %s — %s" % [
+			data.id, hovered.cell(), _orientation(_turns), result.reason()]
 		return
 	_renderer.rebuild(_city)
-	_last_action = "Posé : %s en %s, hauteur %d" % [data.id, hovered.cell(), result.height()]
+	_last_action = "Posé : %s en %s, %s, hauteur %d" % [
+		data.id, hovered.cell(), _orientation(_turns), result.height()]
 
 ## Détruit le bâtiment sous le curseur.
 ##
@@ -158,25 +172,31 @@ func _refresh_preview() -> void:
 		_preview = null
 		_ghost.clear()
 		return
-	_preview = PlacementValidator.validate(_city, _terrain, data, hovered.cell())
+	_preview = PlacementValidator.validate(_city, _terrain, data, hovered.cell(), _turns)
 	# La hauteur vient du survol et non du résultat : un refus n'en a pas, et c'est
 	# justement sur un refus qu'il faut voir le fantôme.
-	_ghost.show_at(data, hovered.cell(), hovered.height(), _preview)
+	_ghost.show_at(data, hovered.cell(), _turns, hovered.height(), _preview)
 
 ## Pose chaque bâtiment connu sur la première ancre qui l'accepte, balayée en x puis en
 ## y — le même ordre que TerrainQuery emploie sur une zone.
+##
+## Chacun est posé dans une orientation différente, son rang dans le catalogue faisant
+## office de crans. C'est arbitraire et assumé : sans ça, aucune capture ne montrerait
+## un bâtiment POSÉ pivoté, et le rendu d'une empreinte tournée ne serait vérifié nulle
+## part — le fantôme seul ne prouve rien sur BuildingRenderer.
 func _seed_city() -> void:
-	for data in _catalogue:
-		var anchor := _first_accepted_anchor(data)
+	for index in _catalogue.size():
+		var data := _catalogue[index]
+		var anchor := _first_accepted_anchor(data, index)
 		if anchor != NO_CELL:
-			_city.place(_terrain, data, anchor)
+			_city.place(_terrain, data, anchor, index)
 
-func _first_accepted_anchor(data: BuildingData) -> Vector2i:
+func _first_accepted_anchor(data: BuildingData, turns: int) -> Vector2i:
 	var size := _terrain.size()
 	for y in size.y:
 		for x in size.x:
 			var anchor := Vector2i(x, y)
-			if PlacementValidator.validate(_city, _terrain, data, anchor).is_ok():
+			if PlacementValidator.validate(_city, _terrain, data, anchor, turns).is_ok():
 				return anchor
 	return NO_CELL
 
@@ -212,8 +232,9 @@ func _catalogue_lines() -> String:
 	for index in _catalogue.size():
 		var data := _catalogue[index]
 		var mark := ">" if index == _selected else " "
-		lines.append("  %s %d  %-16s %d cellule(s), h %.2f"
-			% [mark, index + 1, data.id, data.footprint.size(), data.height])
+		var turns := _orientation(_turns) if index == _selected else ""
+		lines.append("  %s %d  %-16s %d cellule(s), h %.2f  %s"
+			% [mark, index + 1, data.id, data.footprint.size(), data.height, turns])
 	return "\n".join(lines)
 
 ## Ce que le curseur désigne, et le verdict du domaine sur une pose à cet endroit.
@@ -224,8 +245,14 @@ func _hover_line() -> String:
 		return "Survol : —"
 	var cell := hovered.cell()
 	var verdict := "accepté" if _preview.is_ok() else String(_preview.reason())
-	return "Survol : (%d, %d)   h = %d   %s   -> %s" % [
-		cell.x, cell.y, hovered.height(), _grid.terrain_at(cell).id, verdict]
+	return "Survol : (%d, %d)   h = %d   %s   %s   -> %s" % [
+		cell.x, cell.y, hovered.height(), _grid.terrain_at(cell).id,
+		_orientation(_turns), verdict]
+
+## L'orientation en clair. Les crans seuls ne disent rien à la lecture d'une capture,
+## et c'est précisément là qu'on cherche à vérifier qu'une forme a bien pivoté.
+func _orientation(turns: int) -> String:
+	return "%d/4" % posmod(turns, BuildingData.QUARTER_TURNS)
 
 ## Capture d'écran pilotée par la ligne de commande, puis sortie :
 ##
@@ -242,6 +269,10 @@ func _capture_if_asked() -> void:
 	# survol tomberait hors carte et la capture ne montrerait aucun fantôme.
 	_world.cursor().input_enabled = false
 	_world.cursor().hover_cell(DevShot.hover_cell(_grid.size() / 2))
+	# Ce que Tab ferait à la main. Sans ce drapeau, aucune capture ne montrerait un
+	# bâtiment pivoté, donc rien ne le vérifierait — c'est le même raisonnement que
+	# --shot-hover pour la surbrillance.
+	_turns = DevShot.argument(DevShot.SHOT_ROTATE_FLAG).to_int()
 	var turns := DevShot.argument(DevShot.SHOT_TURNS_FLAG).to_int()
 	if turns != 0:
 		_world.rig().rotate_steps(turns)
