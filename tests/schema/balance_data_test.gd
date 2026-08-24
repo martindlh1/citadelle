@@ -44,6 +44,17 @@ func test_the_generation_palette_is_fully_wired() -> void:
 	assert_object(generation.water).is_not_null()
 	assert_object(generation.rock).is_not_null()
 
+func test_balance_carries_an_economy_block() -> void:
+	var balance := load(BALANCE_PATH) as BalanceData
+	assert_object(balance.economy).is_not_null()
+	assert_object(balance.economy).is_instanceof(EconomyBalance)
+
+## L'upkeep doit nommer une ressource qui existe. Le contrôle croisé complet est celui
+## de GameDatabase au boot ; ici on tient au moins qu'il ne soit pas vide.
+func test_the_upkeep_names_a_resource() -> void:
+	var economy := (load(BALANCE_PATH) as BalanceData).economy
+	assert_str(String(economy.upkeep_resource)).is_not_empty()
+
 func test_balance_carries_a_camera_block() -> void:
 	var balance := load(BALANCE_PATH) as BalanceData
 	assert_object(balance.camera).is_not_null()

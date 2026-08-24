@@ -168,6 +168,58 @@ func test_buildings_come_back_in_placement_order() -> void:
 		ids.append(building.data().id)
 	assert_array(ids).contains_exactly([&"first", &"second", &"third"])
 
+## L'instantané est la seule sortie de la ville vers l'Économie et le Combat. Il rend
+## les mêmes bâtiments, dans le même ordre, pour la même raison que buildings().
+func test_a_snapshot_mirrors_the_city_in_placement_order() -> void:
+	_city.place(_terrain, _building(&"first", _single()), Vector2i(3, 3))
+	_city.place(_terrain, _building(&"second", _single()), Vector2i(0, 0))
+	var ids: Array[StringName] = []
+	for building in _city.to_snapshot().buildings():
+		ids.append(building.data().id)
+	assert_array(ids).contains_exactly([&"first", &"second"])
+
+func test_an_empty_city_gives_an_empty_snapshot() -> void:
+	assert_int(_city.to_snapshot().count()).is_equal(0)
+
+## L'ancre est la clé par laquelle une affectation désigne un bâtiment : sans cet
+## index, le résolveur balaierait la ville une fois par ouvrier.
+func test_a_snapshot_finds_a_building_by_its_anchor() -> void:
+	_city.place(_terrain, _hut(), Vector2i(2, 2))
+	var snapshot := _city.to_snapshot()
+	assert_bool(snapshot.has_anchor(Vector2i(2, 2))).is_true()
+	assert_str(snapshot.at_anchor(Vector2i(2, 2)).data().id).is_equal(&"hut")
+
+## Null plutôt qu'une erreur : une affectation peut désigner une ancre dont le
+## bâtiment vient d'être détruit, et le résolveur sait traiter « rien ici ».
+func test_an_unknown_anchor_gives_null_rather_than_an_error() -> void:
+	assert_object(_city.to_snapshot().at_anchor(Vector2i(9, 9))).is_null()
+
+## La hauteur voyage avec l'instantané plutôt que d'être relue sur le terrain : c'est
+## le bénéfice direct de la règle qui exige une empreinte plate.
+func test_a_snapshot_carries_the_ground_height() -> void:
+	_city.place(_terrain, _hut(), Vector2i(RAISED_X, 1))
+	assert_int(_city.to_snapshot().at_anchor(Vector2i(RAISED_X, 1)).height()) \
+		.is_equal(RAISED_HEIGHT)
+
+## L'orientation traverse aussi, et les cellules en sortent déjà pivotées : rien en
+## aval n'a à savoir qu'une rotation est en jeu.
+func test_a_snapshot_carries_the_orientation_and_its_rotated_cells() -> void:
+	var anchor := Vector2i(1, 1)
+	_city.place(_terrain, _ell(), anchor, 1)
+	var building := _city.to_snapshot().at_anchor(anchor)
+	assert_int(building.turns()).is_equal(1)
+	assert_array(building.cells()).contains_exactly(_ell().cells_at(anchor, 1))
+
+## Une vue figée l'est vraiment. Sans quoi l'Économie lirait une ville qui bouge sous
+## elle pendant qu'elle résout.
+func test_a_snapshot_does_not_follow_later_changes() -> void:
+	_city.place(_terrain, _hut(), Vector2i(2, 2))
+	var snapshot := _city.to_snapshot()
+	_city.remove(Vector2i(2, 2))
+	_city.place(_terrain, _hut(), Vector2i(0, 5))
+	assert_int(snapshot.count()).is_equal(1)
+	assert_bool(snapshot.has_anchor(Vector2i(2, 2))).is_true()
+
 func _single() -> Array[Vector2i]:
 	var offsets: Array[Vector2i] = [Vector2i.ZERO]
 	return offsets

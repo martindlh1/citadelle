@@ -164,6 +164,62 @@ func test_the_buildings_of_data_are_exploitable() -> void:
 		.override_failure_message("data/buildings/ ne contient aucun bâtiment") \
 		.is_not_empty()
 
+## Le point de doctrine du bloc économie. Zéro slot, un coût vide et une réserve nulle
+## sont trois valeurs légitimes du tableau de DESIGN.md 4 — la palissade n'a pas de
+## poste, la cabane de bûcheron est gratuite. Aucune ne peut donc être réclamée, et un
+## bâtiment qui n'en renseigne aucune est complet.
+func test_a_building_without_any_economy_block_is_complete() -> void:
+	assert_array(_building(_l_shape()).missing_fields()).is_empty()
+
+## Ce qui remplace le filet habituel : la cohérence entre ces champs. Des slots sans
+## rendement ne produiraient rien, et ça ne casserait qu'au premier soir.
+func test_slots_without_a_yield_are_reported() -> void:
+	var building := _building(_l_shape())
+	building.slots = 2
+	assert_array(building.missing_fields()).contains(["yield_per_slot"])
+
+## Sans famille, un poste ne sait ni quel multiplicateur appliquer ni quelle piste
+## créditer en XP.
+func test_slots_without_a_family_are_reported() -> void:
+	var building := _producer()
+	building.skill_family = &""
+	assert_array(building.missing_fields()).contains(["skill_family"])
+
+## L'inverse se rattrape aussi : un rendement que nul poste ne verse jamais.
+func test_a_yield_without_slots_is_reported() -> void:
+	var building := _producer()
+	building.slots = 0
+	assert_array(building.missing_fields()).contains(["slots"])
+
+func test_a_coherent_economy_block_reports_nothing() -> void:
+	assert_array(_producer().missing_fields()).is_empty()
+
+## Une ligne de coût à zéro ne veut rien dire : on l'omet. L'écrire est une faute de
+## contenu, pas une gratuité.
+func test_a_null_cost_line_is_reported() -> void:
+	var building := _building(_l_shape())
+	var cost: Dictionary[StringName, int] = {}
+	cost[&"wood"] = 0
+	building.cost = cost
+	assert_array(building.missing_fields()).contains(["cost.wood"])
+
+func test_a_negative_yield_line_is_reported() -> void:
+	var building := _producer()
+	var per_slot: Dictionary[StringName, int] = {}
+	per_slot[&"wood"] = -2
+	building.yield_per_slot = per_slot
+	assert_array(building.missing_fields()).contains(["yield_per_slot.wood"])
+
+## Un producteur cohérent : deux postes, un rendement, une famille.
+func _producer() -> BuildingData:
+	var building := _building(_l_shape())
+	building.slots = 2
+	var per_slot: Dictionary[StringName, int] = {}
+	per_slot[&"wood"] = 2
+	building.yield_per_slot = per_slot
+	building.skill_family = &"harvest"
+	return building
+
 ## Un L : l'ancre, la cellule à sa droite, la cellule en dessous. Rendu neuf à chaque
 ## appel plutôt que gardé en constante — un tableau partagé entre cas finirait par
 ## être muté par l'un d'eux.
