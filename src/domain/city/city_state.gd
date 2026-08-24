@@ -65,6 +65,20 @@ func anchor_at(cell: Vector2i) -> Vector2i:
 func has_anchor(anchor: Vector2i) -> bool:
 	return _buildings.has(anchor)
 
+## Vue figée de la ville, pour les systèmes qui la consomment sans la connaître.
+##
+## Le miroir de HeightGrid.to_query() : l'Économie et le Combat lisent un CitySnapshot
+## et n'ont jamais accès à cet objet-ci, ni à PlacedBuilding qui est un interne de
+## Construction. C'est la seule sortie du système vers ses consommateurs.
+##
+## L'ordre est celui de la pose, comme buildings().
+func to_snapshot() -> CitySnapshot:
+	var projected: Array[BuildingSnapshot] = []
+	for building in buildings():
+		projected.append(BuildingSnapshot.create(
+			building.data(), building.anchor(), building.height(), building.turns()))
+	return CitySnapshot.create(projected)
+
 ## Pose ce bâtiment sur cette ancre, dans cette orientation, si le placement est valide.
 ## Ne mute rien sinon.
 ##
