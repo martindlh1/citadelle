@@ -57,11 +57,20 @@ commande marche partout.
 "$GODOT_BIN" --path . --resolution 1280x720 -- --shot /tmp/rendu.png --shot-turns 1 --shot-hover 16,16
 ```
 
-Les arguments après `--` sont ceux du jeu et non du moteur. Les deux derniers sont
-optionnels : `--shot-turns` est le nombre de quarts de tour appliqués à la caméra avant
-la capture, `--shot-hover` la cellule à mettre en surbrillance, en `x,y`. À défaut, la
-capture désigne le centre de la carte — une capture qui ne montre pas la surbrillance
-ne prouve rien à son sujet, et souris à `(0, 0)` le survol réel tomberait hors carte.
+Les arguments après `--` sont ceux du jeu et non du moteur. Seul `--shot` est
+obligatoire ; les autres sont optionnels :
+
+| Drapeau | Effet |
+|---|---|
+| `--shot chemin.png` | rend une image puis quitte |
+| `--shot-hover x,y` | cellule à désigner. À défaut, le centre de la carte |
+| `--shot-turns n` | quarts de tour appliqués à la **caméra** |
+| `--shot-rotate n` | quarts de tour appliqués au **bâtiment** à poser *(harnais Construction)* |
+
+`--shot-hover` a une valeur par défaut plutôt que rien, parce qu'une capture qui ne
+montre pas la surbrillance ne prouve rien à son sujet, et que souris à `(0, 0)` le
+survol réel tomberait hors carte. `--shot-rotate` existe pour la même raison : sans
+lui, aucune capture ne montrerait jamais un bâtiment pivoté.
 
 **Écrire l'image hors du projet.** Une capture déposée dans l'arborescence est
 importée par le prochain scan de l'éditeur, qui lui colle un `.png.import` à ranger

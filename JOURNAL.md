@@ -6,9 +6,12 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ## 2026-08-24 — `C2` : fantôme de placement, pose et destruction
 
-**État : terminé.** Cinq commits sur `feat/c2-placement-ghost`, tirée de
+**État : terminé.** Dix commits sur `feat/c2-placement-ghost`, tirée de
 `feat/c1-placement` : `master` n'a rien reçu, c'était la consigne. Boot sans erreur ni
-warning, tout `src/domain/` parse, 147 tests verts contre 145 à l'ouverture.
+warning, tout `src/domain/` parse, 160 tests verts contre 145 à l'ouverture.
+
+Le jalon a été élargi en cours de route à la **rotation des bâtiments**, qui n'était
+pas au plan et que `DESIGN.md` ne prévoyait pas. Elle est traitée en fin d'entrée.
 
 Mais ces trois commandes ne prouvent presque rien ici, et c'est le fait marquant du
 jalon : `src/adapters/` n'est pas testé, le domaine n'a pas bougé d'une ligne, et
@@ -24,6 +27,8 @@ confort, c'est le contrôle principal — elle a d'ailleurs trouvé le seul vrai
 - `BuildingData` gagne `color` et `height`, et les `.tres` avec.
 - `data/buildings/palisade.tres` — une empreinte en L.
 - `scenes/dev/city_harness.gd` réécrit : la scène remplace le rapport texte.
+- la **rotation** : `BuildingData.rotate_offset()`, l'orientation portée par
+  `PlacedBuilding`, traversant `validate()`, `place()` et le fantôme.
 - `CLAUDE.md`, `README.md`.
 
 ### Le domaine n'a pas bougé, et c'est le résultat
@@ -139,6 +144,47 @@ fonctionnalité du projet et non d'un harnais ; deux harnais qui les redéfinira
 chacun de leur côté finiraient par diverger sans que personne ne s'en aperçoive avant
 de taper la commande de l'un sur l'autre.
 
+### La rotation, ajoutée en cours de jalon
+
+Demandée après coup, et entrée par la porte normale : `DESIGN.md` 3.2 n'en disait rien,
+donc le design est passé en premier — c'est la même règle qui avait fait précéder les
+empreintes de forme libre à `C1`.
+
+**L'orientation appartient au placement, pas au bâtiment.** Rien dans `data/` ne la
+décrit : une même `BuildingData` se pose dans les quatre sens. Quatre crans, comme la
+caméra, et le même vocabulaire.
+
+**La rotation se fait autour de la cellule d'ancrage.** C'est la décision qui porte tout
+le reste. L'ancre est le décalage `(0, 0)`, et elle est invariante par rotation : une
+empreinte pivotée contient donc toujours son ancre, `missing_fields()` n'a rien à
+revérifier, et la forme pivote sous le curseur au lieu de sauter à côté. L'alternative
+— normaliser les décalages pour les garder positifs — aurait déplacé le bâtiment à
+chaque quart de tour.
+
+Le résultat mérite d'être noté : **pas une ligne du validateur ne parle de rotation.**
+Il reçoit une liste de cellules et ne sait pas d'où elle vient. Les deux index de la
+ville non plus. `BuildingRenderer` non plus — il lit `PlacedBuilding.cells()`, qui
+applique l'orientation en amont. Toute la fonctionnalité tient dans `rotate_offset()`
+et dans un paramètre passé de main en main.
+
+Les deux cas de test qui portent le plus posent la **même empreinte à la même ancre** et
+obtiennent un verdict différent une fois tournée : l'une échappe au bord de la carte,
+l'autre se range le long d'une marche au lieu de la traverser. Ce sont eux qui prouvent
+que les règles travaillent sur des cellules déjà pivotées.
+
+Côté harnais, `Tab` pivote — pas `R`, qui recadre la caméra depuis `T2`. Un vrai jeu du
+genre mettrait la rotation sur `R` et déplacerait le recadrage ; c'est une décision d'UI
+qui appartient à `D2`, pas au sélecteur de debug d'un harnais.
+
+`--shot-rotate` a été ajouté pour la même raison que `--shot-hover` existait : sans lui,
+aucune capture ne montrerait jamais un bâtiment pivoté, donc rien ne le vérifierait. Et
+la ville d'ouverture pose désormais chaque bâtiment dans une orientation différente —
+arbitraire et assumé, parce que le fantôme seul ne prouve rien sur `BuildingRenderer`.
+
+La capture a d'ailleurs montré tout de suite un comportement juste et pas évident : le
+Cœur accepté au centre de la carte devient `uneven_ground` une fois pivoté d'un quart de
+tour. Normal — il couvre alors quatre autres cellules, de l'autre côté de son ancre.
+
 ### Ce qui reste
 
 Rien pour `C2`. Trois choses volontairement laissées de côté :
@@ -162,9 +208,9 @@ d'afficher un delta à côté de son verdict.
 ajoutée — les clics sont lus en `InputEventMouseButton` brut.
 
 - `F5` lance le **harnais Construction** : la carte, quatre bâtiments déjà posés en
-  haut à droite, le fantôme sous le curseur. Clic gauche pose, clic droit détruit,
-  1 à 9 choisissent. Q/E, molette, WASD et R restent à la caméra. `HARNESS` revient à
-  `&"terrain"` en un mot.
+  haut à droite — chacun dans une orientation différente —, le fantôme sous le curseur.
+  Clic gauche pose, clic droit détruit, 1 à 9 choisissent, **Tab pivote**. Q/E, molette,
+  WASD et R restent à la caméra. `HARNESS` revient à `&"terrain"` en un mot.
 - les quatre `.tres` de `data/buildings/` sont toujours **sans `uid`** — une passe
   headless de l'éditeur ne leur en attribue pas, seule l'ouverture réelle le fait :
   **diff à committer, pas à jeter**. Leurs empreintes, couleurs et hauteurs sont
