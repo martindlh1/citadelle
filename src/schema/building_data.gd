@@ -21,6 +21,9 @@ extends Resource
 ## couplage sans contrepartie. Un cas de test épingle l'égalité des copies.
 const UNSET_COLOR := Color(0.0, 0.0, 0.0, 1.0)
 
+## Orientations possibles d'un placement. Quatre, comme les crans de la caméra.
+const QUARTER_TURNS := 4
+
 ## Identifiant stable, repris par les sorties de debug et par les cartes.
 ## Par convention il reprend le nom du fichier .tres.
 @export var id: StringName
@@ -56,14 +59,32 @@ const UNSET_COLOR := Color(0.0, 0.0, 0.0, 1.0)
 ## milieu de cellules qui ont changé.
 @export_range(0.0, 4.0, 0.05) var height: float
 
-## Cellules absolues qu'une pose sur cette ancre couvrirait.
+## Ce décalage, pivoté de `turns` quarts de tour dans le sens horaire.
+##
+## La grille va +x vers la droite et +y vers le fond, ce que le monde reprend en +X et
+## +Z : vue de dessus, un quart de tour horaire envoie donc (x, y) sur (-y, x).
+##
+## L'ancre est le décalage (0, 0), et elle est **invariante** par cette
+## transformation. C'est ce qui fait tenir tout le reste : une empreinte pivotée
+## contient toujours son ancre, donc missing_fields() n'a rien à revérifier et la forme
+## pivote sous le curseur au lieu de sauter à côté.
+##
+## `turns` est ramené dans [0, 3] : un appelant qui compte les crans sans jamais les
+## replier — comme le fait CameraRig — n'a pas à s'en soucier.
+static func rotate_offset(offset: Vector2i, turns: int) -> Vector2i:
+	var rotated := offset
+	for _turn in posmod(turns, QUARTER_TURNS):
+		rotated = Vector2i(-rotated.y, rotated.x)
+	return rotated
+
+## Cellules absolues qu'une pose sur cette ancre couvrirait, dans cette orientation.
 ##
 ## L'ordre est celui de l'empreinte, donc identique d'un appel et d'un run à l'autre.
 ## Tout ce qui itère sur les cellules d'un bâtiment en dépend pour rester déterministe.
-func cells_at(anchor: Vector2i) -> Array[Vector2i]:
+func cells_at(anchor: Vector2i, turns: int = 0) -> Array[Vector2i]:
 	var cells: Array[Vector2i] = []
 	for offset in footprint:
-		cells.append(anchor + offset)
+		cells.append(anchor + rotate_offset(offset, turns))
 	return cells
 
 ## Rectangle englobant de l'empreinte posée sur cette ancre.
@@ -72,13 +93,15 @@ func cells_at(anchor: Vector2i) -> Array[Vector2i]:
 ## enveloppe, pas l'empreinte. Ne pas s'en servir pour tester la constructibilité.
 ##
 ## Précondition : empreinte non vide.
-func bounds_at(anchor: Vector2i) -> Rect2i:
+func bounds_at(anchor: Vector2i, turns: int = 0) -> Rect2i:
 	assert(not footprint.is_empty(), "empreinte vide sur %s" % id)
-	var low := footprint[0]
-	var high := footprint[0]
+	var first := rotate_offset(footprint[0], turns)
+	var low := first
+	var high := first
 	for offset in footprint:
-		low = Vector2i(mini(low.x, offset.x), mini(low.y, offset.y))
-		high = Vector2i(maxi(high.x, offset.x), maxi(high.y, offset.y))
+		var rotated := rotate_offset(offset, turns)
+		low = Vector2i(mini(low.x, rotated.x), mini(low.y, rotated.y))
+		high = Vector2i(maxi(high.x, rotated.x), maxi(high.y, rotated.y))
 	return Rect2i(anchor + low, high - low + Vector2i.ONE)
 
 ## Zone de recherche autour du bâtiment posé sur cette ancre : son rectangle
@@ -97,9 +120,9 @@ func bounds_at(anchor: Vector2i) -> Rect2i:
 ## La zone déborde volontiers de la carte. C'est à l'appelant de tester ses cellules
 ## contre TerrainQuery, dont les requêtes de constructibilité et de tag répondent
 ## hors grille.
-func neighbourhood_at(anchor: Vector2i, radius: int) -> Rect2i:
+func neighbourhood_at(anchor: Vector2i, radius: int, turns: int = 0) -> Rect2i:
 	assert(radius >= 0, "rayon de voisinage négatif : %d" % radius)
-	return bounds_at(anchor).grow(radius)
+	return bounds_at(anchor, turns).grow(radius)
 
 ## Champs non renseignés ou incohérents. Vide = bâtiment exploitable.
 ## Vérifié au boot par GameDatabase, comme les terrains et l'équilibrage.
