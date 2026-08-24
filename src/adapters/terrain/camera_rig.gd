@@ -31,6 +31,9 @@ const ISO_YAW_DEGREES := 45.0
 ## d'un autre.
 const YAW_STEP_DEGREES := 90.0
 
+## Nombre de crans qui font le tour complet.
+const QUARTER_TURNS := 4
+
 ## Fraction d'une distance horizontale qui se retrouve à la verticale de l'écran au
 ## piqué isométrique, soit sin(35.264°). Cadrer sur cette fraction plutôt que sur
 ## l'emprise entière évite de démarrer inutilement loin.
@@ -91,7 +94,22 @@ func refit() -> void:
 	if _framed_extent == Vector2.ZERO:
 		return
 	frame(_framed_center, _framed_extent)
-	rotate_steps(-_yaw_steps)
+	rotate_steps(_steps_back_to_base())
+
+## Crans à parcourir pour retrouver l'orientation de départ, par le chemin le plus court.
+##
+## Surtout pas -_yaw_steps : le compteur accumule sans jamais se replier, pour que
+## quatre quarts de tour enchaînés fassent bien un tour complet. Après quatre rotations
+## on est déjà revenu à l'orientation initiale, et défaire l'historique ferait tourner
+## la caméra d'un tour entier pour arriver là où elle est.
+##
+## Seul le reste modulo un tour compte donc, et trois crans en arrière valent un cran
+## en avant.
+func _steps_back_to_base() -> int:
+	var turn := posmod(_yaw_steps, QUARTER_TURNS)
+	if turn > QUARTER_TURNS / 2:
+		return QUARTER_TURNS - turn
+	return -turn
 
 ## Fait pivoter le rig de ce nombre de quarts de tour, en interpolant.
 ##
