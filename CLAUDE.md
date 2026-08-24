@@ -101,7 +101,8 @@ res://
 │   │   ├── terrain/  city/  deck/  workforce/  combat/  hud/
 │   └── autoload/               # EventBus, GameDatabase, RunManager
 ├── scenes/
-│   ├── dev/                    # dev_boot.tscn (seule .tscn) + un harnais .gd par système
+│   ├── dev/                    # dev_boot.tscn (seule .tscn), un harnais .gd par système,
+│   │                           # et le décor qu'ils partagent (dev_world.gd, dev_shot.gd)
 │   ├── game/
 │   └── ui/
 └── tests/                      # miroir de src/domain/
@@ -227,7 +228,9 @@ Le bus transporte des DTO immuables. Jamais une référence mutable sur un état
 
 Ce que la décoration dessine se décrit dans `data/`, sur le `TerrainData` de la cellule, exactement comme sa couleur : le renderer ne commute jamais sur un identifiant de terrain. **Les dimensions y sont en fractions de tuile**, jamais en unités de monde — régler `tile_size` doit redimensionner la carte entière, décorations comprises.
 
-**Aucune primitive à grande face verticale plate.** Le soleil de la scène n'éclaire que les surfaces tournées vers le haut ; toute face verticale ne reçoit que l'ambiante. Une face plate qui se présente à la caméra se lit alors comme un rectangle noir, et sous une caméra qui pivote par quarts de tour au-dessus d'un soleil fixe, aucune orientation n'y échappe. Les formes utilisables gardent un dégradé sous tous les angles — cône, sphère. Constaté à `T3` en essayant un `PrismMesh`, retiré le jour même. La même contrainte attend les bâtiments, qui seront des boîtes : c'est le soleil qu'il faudra bouger, pas la forme.
+**Aucune primitive à grande face verticale plate.** Le soleil de la scène n'éclaire que les surfaces tournées vers le haut ; toute face verticale ne reçoit que l'ambiante. Une face plate qui se présente à la caméra se lit alors comme un rectangle noir, et sous une caméra qui pivote par quarts de tour au-dessus d'un soleil fixe, aucune orientation n'y échappe. Les formes utilisables gardent un dégradé sous tous les angles — cône, sphère. Constaté à `T3` en essayant un `PrismMesh`, retiré le jour même.
+
+*Ce paragraphe annonçait que les bâtiments, étant des boîtes, rencontreraient le même problème et qu'il faudrait déplacer le soleil.* **`C2` l'a vérifié en image : ce n'est pas arrivé.** Une boîte posée sur le relief garde ses quatre flancs lisibles, parce qu'elle présente à la lumière les mêmes orientations que les colonnes du terrain, qui se lisent bien depuis `T2`. Le piège du prisme venait de sa face oblique, pas du fait d'avoir des flancs verticaux. Ne pas « corriger » un problème qui ne se pose pas : si un jour une forme de bâtiment vire au noir, la constater d'abord en capture.
 
 La dispersion d'une décoration — dérive, échelle, orientation — vient d'un **hash de la cellule**, jamais de `randf()` ni de `RunState.rng`. Une même carte doit se disperser pareil à chaque affichage, sans qu'une passe de rendu ait à transporter un flux de tirage.
 

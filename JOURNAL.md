@@ -4,6 +4,176 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-24 — `C2` : fantôme de placement, pose et destruction
+
+**État : terminé.** Cinq commits sur `feat/c2-placement-ghost`, tirée de
+`feat/c1-placement` : `master` n'a rien reçu, c'était la consigne. Boot sans erreur ni
+warning, tout `src/domain/` parse, 147 tests verts contre 145 à l'ouverture.
+
+Mais ces trois commandes ne prouvent presque rien ici, et c'est le fait marquant du
+jalon : `src/adapters/` n'est pas testé, le domaine n'a pas bougé d'une ligne, et
+**tout ce que `C2` apporte est à l'écran**. La capture n'est pas un supplément de
+confort, c'est le contrôle principal — elle a d'ailleurs trouvé le seul vrai bug.
+
+### Ce qui a été livré
+
+- `scenes/dev/dev_world.gd` — le plateau commun aux harnais : ciel, soleil, caméra,
+  relief, décorations, survol.
+- `scenes/dev/dev_shot.gd` — le vocabulaire de capture, partagé.
+- `src/adapters/city/building_renderer.gd` et `placement_ghost.gd`.
+- `BuildingData` gagne `color` et `height`, et les `.tres` avec.
+- `data/buildings/palisade.tres` — une empreinte en L.
+- `scenes/dev/city_harness.gd` réécrit : la scène remplace le rapport texte.
+- `CLAUDE.md`, `README.md`.
+
+### Le domaine n'a pas bougé, et c'est le résultat
+
+Pas une ligne de `src/domain/` n'a changé. `validate()` était déjà pure et appelable à
+chaque image, `place()` et `remove()` attendaient leurs clics, `PlacementResult`
+portait déjà les cellules et la hauteur auxquelles dessiner. `C1` avait fait son
+travail, et `C2` n'a été que de la traduction : un clic vers le domaine, une réponse
+vers l'écran.
+
+`TerrainMetrics` et `PickResult` ne sont **pas** montés dans `contracts/`. La question
+traînait depuis `T3` et le journal de `C1` la reposait pour ici : la réponse est non.
+Ce sont les *adapters* de Construction qui en ont besoin, et la règle de dépendance
+contraint le domaine, pas eux. Aucun système du domaine ne franchit cette frontière.
+
+### Le plateau partagé, et ce que sa vérification a appris
+
+Le harnais Construction avait besoin exactement de la scène que le harnais Terrain
+montait déjà — on ne pose pas un bâtiment sur un terrain qu'on ne voit pas. D'où
+`DevWorld`, plutôt que soixante lignes recopiées dont le soleil réglé à `T2` et tout
+son raisonnement.
+
+Pour prouver que l'extraction ne changeait rien, capture avant et capture après. La
+première comparaison a été **mal lue** : l'image « après » semblait franchement plus
+zoomée. Elle ne l'était pas.
+
+Le viewport garde la largeur de base du projet mais sa **hauteur suit le rapport de la
+fenêtre**, et le tout premier lancement n'avait pas obtenu la fenêtre qu'il demandait.
+Deux enseignements, consignés au README :
+
+- la capture imprime désormais une ligne `cadrage` — `camera.size` et taille du
+  viewport. Deux captures ne se comparent que si cette ligne est identique ;
+- **`cmp` sur les deux `.png` tranche là où l'oeil se trompe.** Vérification faite
+  ainsi, l'extraction rend des images *strictement identiques*, octet pour octet.
+
+C'est un outil que je n'avais pas et qui a resservi trois fois dans la journée.
+
+### Le bug que seule l'image a montré — la carte chauve
+
+Quatrième jalon d'affilée, quatrième bug de rendu invisible aux trois commandes.
+
+La première capture du harnais Construction montrait une carte **sans un seul arbre ni
+rocher**. Le relief était là, les bâtiments aussi, mais la végétation avait disparu.
+
+`TerrainRenderer.create()` se peuple lui-même ; `TerrainDecorRenderer.create_all()`
+**non** — elle construit une passe par terrain, vides, que seul `rebuild()` remplit.
+`DevWorld.create()` promettait dans son propre docstring un plateau « déjà peuplé » et
+mentait sur ce point. Le harnais Terrain masquait la faute depuis toujours en
+enchaînant sur son propre `show_grid()` juste après.
+
+Corrigé à la source : `create()` termine par `show_grid(grid)`, donc un seul chemin
+peuple le plateau et la promesse redevient vraie. Le harnais Terrain rebâtit une
+seconde fois, ce qui ne coûte rien et ne change rien — vérifié en capture, byte à byte.
+
+### Le soleil : un problème annoncé qui n'existe pas
+
+`CLAUDE.md` prévenait depuis `T3` que les bâtiments, étant des boîtes, se heurteraient
+au piège du prisme noir, et tranchait d'avance qu'il faudrait déplacer le soleil.
+
+**Ça n'est pas arrivé.** Les boîtes posées sur le relief gardent leurs quatre flancs
+parfaitement lisibles. C'était prévisible après coup : elles présentent à la lumière
+exactement les orientations des colonnes du terrain, qui se lisent bien depuis `T2`.
+Le piège du prisme venait de sa face *oblique*, pas du fait d'avoir des flancs
+verticaux.
+
+Le soleil n'a donc pas bougé, et `CLAUDE.md` est corrigé : une prédiction fausse laissée
+dans un document permanent se paie plus tard, quand quelqu'un « répare » un problème
+inexistant et casse la lecture de toute la carte au passage.
+
+### La palissade, entrée pour une raison précise
+
+Rien de ce qui tournait ne dessinait une empreinte **non rectangulaire** — or c'est la
+seule chose pour laquelle `C1` existait. Les tests couvraient le domaine, mais le
+renderer n'avait jamais tracé un L.
+
+`palisade.tres` comble ça : un angle de trois cellules, que la capture montre bien
+comme un L et non comme un rectangle. Le chemin data → domaine → rendu est vérifié de
+bout en bout. `DESIGN.md` 4 liste une palissade et n'en donne pas la forme ; en faire un
+angle reste une empreinte provisoire, comme les trois autres.
+
+### Décisions
+
+**Une boîte par cellule occupée, pas une par bâtiment.** Sur un L, un volume unique
+couvrirait le trou de l'enveloppe et mentirait sur la forme. Le rendu suit l'empreinte
+pour la même raison que la validation : `bounds_at()` est une enveloppe, pas un
+bâtiment.
+
+**Le fantôme ne décide rien.** `CellHighlight` annonçait à `T3` qu'elle ne coderait
+aucune validité et que la question appartiendrait à `C2` : elle y est, et la réponse
+vient toujours du domaine. Le fantôme reçoit un `PlacementResult` déjà calculé et le
+colore.
+
+**La validation a lieu une fois par image, et les deux consommateurs lisent le même
+résultat.** Le fantôme et la ligne de rapport ne revalident pas chacun de leur côté :
+une couleur qui contredirait sa propre légende serait un bug impossible à voir.
+
+**La hauteur du fantôme vient du survol, pas du résultat.** Un refus n'a pas de hauteur
+— `PlacementResult.height()` lève sur un placement refusé — et c'est précisément sur un
+refus qu'il faut voir le fantôme. Il se pose donc à la hauteur de la cellule survolée,
+qui est toujours connue.
+
+**Le fantôme dessine aussi les cellules hors carte.** Un bâtiment à moitié dans le vide
+se voit alors tel qu'il est, ce qui explique le refus mieux qu'une empreinte tronquée.
+Vérifié en capture au bord est de la carte.
+
+**Couleur et hauteur des bâtiments vivent dans `data/`.** Même raison que pour les
+terrains : un renderer qui commuterait sur un identifiant obligerait à toucher au
+GDScript à chaque ajout. La hauteur est en **fractions de tuile**, la leçon des
+décorations de `T3` : régler `tile_size` doit emporter les bâtiments avec la carte.
+
+**`DevShot` tient les drapeaux de capture.** Le README les documente comme une
+fonctionnalité du projet et non d'un harnais ; deux harnais qui les redéfiniraient
+chacun de leur côté finiraient par diverger sans que personne ne s'en aperçoive avant
+de taper la commande de l'un sur l'autre.
+
+### Ce qui reste
+
+Rien pour `C2`. Trois choses volontairement laissées de côté :
+
+- **l'adjacence et la prévisualisation du delta** — c'est `C3`, nommément.
+- **le coût à la pose** — `E1`, et la décision est déjà prise : il passera par
+  l'Économie ou les cartes, pas par le placement.
+- **la sélection par carte** — `D2`. Les touches 1 à 9 du harnais sont un sélecteur de
+  debug, pas une UI.
+
+### Prochain jalon
+
+`C3` — règles d'adjacence et prévisualisation du delta au survol. Le terrain est prêt :
+`BuildingData.neighbourhood_at()` attend son premier appelant depuis `C1`, la
+validation tourne déjà à chaque image sous le curseur, et le rapport a la place
+d'afficher un delta à côté de son verdict.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'input
+ajoutée — les clics sont lus en `InputEventMouseButton` brut.
+
+- `F5` lance le **harnais Construction** : la carte, quatre bâtiments déjà posés en
+  haut à droite, le fantôme sous le curseur. Clic gauche pose, clic droit détruit,
+  1 à 9 choisissent. Q/E, molette, WASD et R restent à la caméra. `HARNESS` revient à
+  `&"terrain"` en un mot.
+- les quatre `.tres` de `data/buildings/` sont toujours **sans `uid`** — une passe
+  headless de l'éditeur ne leur en attribue pas, seule l'ouverture réelle le fait :
+  **diff à committer, pas à jeter**. Leurs empreintes, couleurs et hauteurs sont
+  provisoires et se corrigent sans risque dans l'inspecteur : le boot refuse toute
+  empreinte vide, sans ancre ou redondante, ainsi qu'une couleur ou une hauteur non
+  renseignée.
+
+---
+
 ## 2026-08-24 — `C1` : la ville, les empreintes et les règles de placement
 
 **État : terminé.** Six commits, une couche chacun, sur `feat/c1-placement`. Les trois

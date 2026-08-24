@@ -46,11 +46,12 @@ dossier. Le harnais à lancer se choisit dans la constante `HARNESS` de
 ## Capturer un rendu depuis un terminal
 
 Un harnais qui affiche quelque chose ne se vérifie ni au parsing ni aux tests : il
-faut le regarder. Le harnais Terrain accepte donc une capture en ligne de commande,
-qui rend une image puis quitte.
+faut le regarder. Les harnais graphiques acceptent donc une capture en ligne de
+commande, qui rend une image puis quitte.
 
-Elle suppose `HARNESS` sur `&"terrain"` : les arguments ci-dessous sont ceux de ce
-harnais-là, et un autre harnais actif les ignorera.
+C'est le harnais désigné par `HARNESS` qui répond. Les drapeaux sont les mêmes pour
+tous — ils vivent dans `scenes/dev/dev_shot.gd`, en un seul endroit, pour que la même
+commande marche partout.
 
 ```bash
 "$GODOT_BIN" --path . --resolution 1280x720 -- --shot /tmp/rendu.png --shot-turns 1 --shot-hover 16,16
@@ -66,11 +67,15 @@ ne prouve rien à son sujet, et souris à `(0, 0)` le survol réel tomberait hor
 importée par le prochain scan de l'éditeur, qui lui colle un `.png.import` à ranger
 ensuite. Un chemin absolu hors de `res://` évite le ménage.
 
-Chaque capture imprime aussi une sonde : elle reprojette la cellule désignée vers
-l'écran, retire un rayon depuis cette position comme le ferait la souris, et dit si les
-deux tombent sur la même cellule. C'est le seul contrôle du raccord entre la caméra
-orthogonale et le `CellPicker` — les tests unitaires tirent des rayons fabriqués à la
-main, et les trois commandes de vérification ne regardent pas l'écran.
+La capture du harnais Terrain imprime aussi une sonde : elle reprojette la cellule
+désignée vers l'écran, retire un rayon depuis cette position comme le ferait la souris,
+et dit si les deux tombent sur la même cellule. C'est le seul contrôle du raccord entre
+la caméra orthogonale et le `CellPicker` — les tests unitaires tirent des rayons
+fabriqués à la main, et les trois commandes de vérification ne regardent pas l'écran.
+
+Celle du harnais Construction imprime à la place la ligne de survol : la cellule visée,
+son terrain, et le verdict du domaine sur une pose à cet endroit. C'est la légende de
+l'image — le fantôme y est vert ou rouge, cette ligne dit pourquoi.
 
 **Les coordonnées de la sonde ne sont pas des pixels de l'image.** `project.godot` est
 en `stretch/mode="canvas_items"` : le viewport garde la résolution de base du projet
