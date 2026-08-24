@@ -9,5 +9,5 @@ upkeep_per_worker = 1
 upkeep_resource = &"food"
 starting_stock = Dictionary[StringName, int]({
 &"food": 20,
-&"wood": 30
+&"wood": 50
 })
