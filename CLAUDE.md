@@ -246,6 +246,8 @@ L'adapter caméra fournit `origin` et `dir` via `project_ray_origin` / `project_
 
 L'occlusion par le relief est un problème connu du système Terrain. V1 : la rotation suffit. Fondu par shader plus tard si nécessaire.
 
+**Toute `DirectionalLight3D` éclairant cette caméra doit être en `SHADOW_ORTHOGONAL`**, jamais en cascades. Le défaut de Godot (`SHADOW_PARALLEL_4_SPLITS`, sans fondu) découpe l'ombre en quatre résolutions selon la profondeur : sous une caméra orthogonale, où la profondeur croît linéairement du bas vers le haut de l'écran, ces frontières deviennent des **lignes horizontales fixes à l'écran**, floues d'un côté et nettes de l'autre, que le terrain traverse quand on déplace la vue. Les cascades servent à couvrir un horizon lointain ; ici la scène est bornée. Serrer aussi `directional_shadow_max_distance` sur ce que la caméra voit vraiment — l'étaler au-delà ne fait que diluer les texels. Constaté à `T2`.
+
 ### Structure de la journée — pilotée par data
 
 `DayCycle` ne connaît ni « matin » ni « soir ». Une journée est une liste ordonnée de `PhaseDef` chargées depuis `data/balance/`, chacune déclarant ses types d'action autorisés et si une résolution se déclenche à sa fin. Aucun nom de phase ne doit apparaître en dur dans le code, ni dans le domaine ni dans les adapters — l'UI lit le libellé et les actions permises depuis la `PhaseDef` courante.

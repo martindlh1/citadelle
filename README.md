@@ -42,3 +42,19 @@ de la 4.7.2 qui expliquent pourquoi il en faut trois et pas une.
 `scenes/dev/dev_boot.tscn` est la scène principale et le seul fichier de scène du
 dossier. Le harnais à lancer se choisit dans la constante `HARNESS` de
 `scenes/dev/dev_boot.gd`. Vide, on obtient le rapport de boot.
+
+## Capturer un rendu depuis un terminal
+
+Un harnais qui affiche quelque chose ne se vérifie ni au parsing ni aux tests : il
+faut le regarder. Le harnais Terrain accepte donc une capture en ligne de commande,
+qui rend une image puis quitte.
+
+```bash
+"$GODOT_BIN" --path . --resolution 1280x720 -- --shot rendu.png --shot-turns 1
+```
+
+Les arguments après `--` sont ceux du jeu et non du moteur. `--shot-turns` est
+optionnel : c'est le nombre de quarts de tour appliqués à la caméra avant la capture.
+
+C'est aussi ce qui rend une passe d'équilibrage visuelle tenable — comparer deux
+valeurs de `step_height` revient à éditer un `.tres` et relancer deux fois.

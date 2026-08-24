@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="CameraBalance" format=3]
+
+[ext_resource type="Script" path="res://src/schema/camera_balance.gd" id="1_camera_balance"]
+
+[resource]
+script = ExtResource("1_camera_balance")
+zoom_min = 8.0
+zoom_max = 60.0
+zoom_factor = 1.15
+pan_speed = 0.9
+rotation_seconds = 0.35
+frame_margin = 1.15
