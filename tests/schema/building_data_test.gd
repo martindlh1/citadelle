@@ -11,8 +11,24 @@ extends GdUnitTestSuite
 
 const BUILDING_ROOT := "res://data/buildings"
 
-func test_a_blank_building_reports_its_two_required_fields() -> void:
-	assert_array(BuildingData.new().missing_fields()).contains(["id", "footprint"])
+func test_a_blank_building_reports_all_its_required_fields() -> void:
+	assert_array(BuildingData.new().missing_fields()) \
+		.contains(["id", "color", "height", "footprint"])
+
+## La sentinelle de couleur est recopiée de TerrainData, comme TerrainDecor la recopie
+## déjà. Ce cas est ce qui empêche les copies de dériver les unes des autres.
+func test_the_unset_colour_sentinels_agree() -> void:
+	assert_bool(BuildingData.UNSET_COLOR == TerrainData.UNSET_COLOR) \
+		.override_failure_message("les sentinelles ont divergé : %s contre %s"
+			% [BuildingData.UNSET_COLOR, TerrainData.UNSET_COLOR]) \
+		.is_true()
+
+## Une hauteur nulle écraserait la boîte sur le sol, et Godot n'écrit pas un 0.0 dans
+## un .tres : « oublié » et « à plat » y seraient indiscernables.
+func test_a_zero_height_is_reported() -> void:
+	var building := _building(_l_shape())
+	building.height = 0.0
+	assert_array(building.missing_fields()).contains(["height"])
 
 func test_a_filled_building_reports_nothing() -> void:
 	assert_array(_building(_l_shape()).missing_fields()).is_empty()
@@ -109,5 +125,7 @@ func _l_shape() -> Array[Vector2i]:
 func _building(offsets: Array[Vector2i]) -> BuildingData:
 	var building := BuildingData.new()
 	building.id = &"test_hut"
+	building.color = Color(0.5, 0.4, 0.3)
+	building.height = 0.6
 	building.footprint = offsets
 	return building

@@ -13,6 +13,14 @@ extends Resource
 ##
 ## Aucun @export ne porte de défaut, pour la raison exposée dans terrain_balance.gd.
 
+## Couleur qu'on lit comme « non renseignée ».
+##
+## Recopiée de TerrainData plutôt qu'importée, comme TerrainDecor la recopie déjà.
+## Là-bas c'était pour ne pas fermer un cycle de types ; ici il n'y en a pas, mais
+## faire dépendre un bâtiment du schéma du terrain pour une constante serait un
+## couplage sans contrepartie. Un cas de test épingle l'égalité des copies.
+const UNSET_COLOR := Color(0.0, 0.0, 0.0, 1.0)
+
 ## Identifiant stable, repris par les sorties de debug et par les cartes.
 ## Par convention il reprend le nom du fichier .tres.
 @export var id: StringName
@@ -33,6 +41,20 @@ extends Resource
 ## une forme que rien ne casse serait une règle de contenu déguisée en règle de
 ## schéma.
 @export var footprint: Array[Vector2i]
+
+## Couleur de la boîte au rendu, en attendant de vrais assets.
+##
+## Elle vit ici et non dans le renderer pour la raison qui vaut déjà pour les
+## terrains : ajouter un bâtiment doit rester une édition de data, et un renderer qui
+## commuterait sur un identifiant obligerait à toucher au GDScript à chaque ajout.
+@export var color: Color
+
+## Hauteur de la boîte, en **fractions de tuile** et non en unités de monde.
+##
+## C'est la leçon des décorations à T3 : régler tile_size doit redimensionner la carte
+## entière, bâtiments compris, et non laisser des maisons à leur ancienne taille au
+## milieu de cellules qui ont changé.
+@export_range(0.0, 4.0, 0.05) var height: float
 
 ## Cellules absolues qu'une pose sur cette ancre couvrirait.
 ##
@@ -90,6 +112,10 @@ func missing_fields() -> PackedStringArray:
 	var missing := PackedStringArray()
 	if id.is_empty():
 		missing.append("id")
+	if color == UNSET_COLOR:
+		missing.append("color")
+	if height <= 0.0:
+		missing.append("height")
 	if footprint.is_empty():
 		missing.append("footprint")
 		return missing
