@@ -104,3 +104,21 @@ lancement après un démarrage à froid n'obtient d'ailleurs pas toujours la fen
 qu'il a demandée. Une capture qui paraît « plus zoomée » qu'une autre est presque
 toujours ça, et non le rendu qui a changé — au moindre doute, `cmp` sur les deux
 `.png` tranche là où l'oeil se trompe.
+
+## Les harnais qui n'affichent rien
+
+Tous les harnais ne dessinent pas. Le harnais **Économie** est un rapport texte : il
+imprime la construction, l'affectation et le tableau des soirs sur la **sortie
+standard** en plus de l'écran, donc
+
+```bash
+"$GODOT_BIN" --headless --quit --path .
+```
+
+suffit à le lire, sans capture ni fenêtre. C'est la même commande que la première
+vérification, ce qui est voulu — un rapport qu'on ne voit qu'en lançant le jeu finit
+par ne plus être lu du tout.
+
+Ce rapport se termine sur un verdict d'équilibrage que les tests ne peuvent pas
+donner, puisqu'ils travaillent sur des chiffres choisis : avec les valeurs de
+`data/balance/`, qui casse en premier — la famine ou la réserve pleine.

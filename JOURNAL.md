@@ -4,6 +4,210 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-24 — `E1` : la réserve, la résolution du soir, l'upkeep et la famine
+
+**État : terminé.** Sept commits sur `feat/e1-economy`, tirée de
+`feat/c2-placement-ghost` — la chaîne habituelle, `master` n'a toujours rien reçu. Les
+trois commandes passent : boot sans erreur ni warning, tout `src/domain/` parse,
+**241 tests verts contre 160** à l'ouverture.
+
+Un accroc de procédure à consigner, parce qu'il explique l'histoire de la branche : la
+session s'est ouverte **sans créer de branche**, et le premier commit — la mise à jour
+de `DESIGN.md` — a atterri sur `feat/c2-placement-ghost`. Repéré par l'humain avant
+tout push. Réparé en créant `feat/e1-economy` à cet endroit et en ramenant `c2` sur sa
+remote : aucun commit perdu, `c2` de nouveau identique à ce qu'elle valait. La leçon
+tient en une ligne : **la branche se crée à l'orientation, avant le premier commit**,
+pas quand on y pense.
+
+### Ce qui a été livré
+
+- `src/domain/contracts/` — sept DTO : `CitySnapshot` et `BuildingSnapshot`,
+  `LaborForce` et `LaborUnit`, `Assignment`, `WorkLine`, `ProductionReport`.
+- `src/domain/economy/` — `ledger.gd` et `production_resolver.gd`.
+- `CityState.to_snapshot()`, seule ligne touchée dans `domain/city/`.
+- `src/schema/` — `commodity_data.gd`, `economy_balance.gd`, et le bloc économie de
+  `BuildingData`.
+- `data/commodities/` — trois ressources ; `data/balance/economy_balance.tres` ;
+  `data/buildings/farm.tres` et `warehouse.tres`.
+- `GameDatabase` — `get_commodity()`, `list_commodity_ids()`, et le contrôle croisé.
+- `scenes/dev/economy_harness.gd`, et `HARNESS` basculé sur `&"economy"`.
+- `DESIGN.md` 3.3 et 3.4, `README.md`.
+
+### Quatre questions arbitrées avant d'écrire
+
+Comme à `C1`, le plan en posait quatre. Une réponse a franchement changé le jalon.
+
+**La réserve est commune, pas par ressource.** C'est la réponse qui coûte, et c'est
+l'inverse de ce que je recommandais. Cent unités partagées entre le bois, la pierre et
+la nourriture : remplir sa réserve de bois, c'est renoncer à stocker de la pierre. Le
+plafond ne force plus seulement à dépenser, il force à choisir *quoi* garder, et
+l'entrepôt devient un vrai arbitrage au lieu d'un relèvement de trois compteurs
+indépendants.
+
+**La `LaborForce` porte un multiplicateur par famille**, et `BuildingData` déclare la
+sienne. L'argument décisif n'était pas la pureté mais le coût : c'est un champ dans
+quatre `.tres` que j'ouvrais déjà, contre les rouvrir tous à `W1` *et* changer un
+contrat.
+
+**La famine se constate et ne se punit pas.** `DESIGN.md` ne disait nulle part ce
+qu'elle fait. Plutôt que de le laisser non-dit, c'est entré comme un `OUVERT` explicite
+en 3.3 : le rapport porte le compte des non-nourris, donc mort, blessure, départ ou
+malus restent les quatre également ouvertes.
+
+**Le catalogue de ressources existe**, dans `data/`. Sans lui, un `&"wodo"` dans un coût
+créerait une ressource fantôme qui se stockerait, ne s'achèterait jamais et ne
+s'afficherait nulle part.
+
+### La réserve commune, et ce qu'elle coûte vraiment
+
+Le choix a une conséquence que ni le plan ni la question ne voyaient : **une récolte qui
+déborde doit décider laquelle de ses ressources entre.** Avec un plafond par ressource,
+ce problème n'existe simplement pas.
+
+La réponse évidente — premier arrivé, premier servi — est un piège. L'ordre des clés
+vient de l'ordre de pose des bâtiments : deux villes identiques bâties dans un ordre
+différent perdraient des choses différentes, sans que rien à l'écran ne l'explique.
+C'est la même famille d'erreur que les quatre passes du validateur à `C1`, où la raison
+affichée aurait dépendu de l'ordre d'écriture du `.tres`.
+
+La règle retenue est **proportionnelle à ce que le dépôt apporte**, le reste de la
+division allant aux plus grosses parts fractionnaires, l'identifiant tranchant à
+égalité. Elle est entièrement déterminée par les quantités. Le cas de test qui compte
+dépose les mêmes montants dans deux ordres de clés opposés et exige le même résultat :
+un premier-arrivé-premier-servi passerait tous les autres cas et échouerait sur
+celui-là.
+
+Le même écrêtage sert quand la capacité **baisse** — un entrepôt détruit par une vague.
+Une règle écrite une fois, utilisée deux fois.
+
+### La doctrine du zéro ne s'applique pas au bloc économie
+
+Tout le projet repose depuis `I0` sur « un champ non renseigné vaut 0, donc détectable ».
+Les quatre champs économiques de `BuildingData` y échappent, et il valait mieux le dire
+que le contourner : **0 slot, un coût vide et une réserve nulle sont trois valeurs
+légitimes** du tableau de `DESIGN.md` 4 — la palissade n'a pas de poste, la cabane de
+bûcheron est gratuite. Les réclamer refuserait de démarrer sur des données correctes.
+
+Ce qui les remplace est un contrôle de **cohérence entre eux**, qui lui est bien réel :
+des slots sans rendement ne produiraient rien, un rendement sans slot ne serait jamais
+versé, un poste sans famille ne saurait quelle piste créditer. Les trois se chargent
+sans erreur et ne cassent qu'au premier soir. Un cas de test énonce le point à voix
+haute : un bâtiment sans aucun bloc économie est complet.
+
+### Décisions
+
+**`CommodityData` et non `ResourceData`.** Deux raisons qui se cumulent : `Resource` est
+déjà le type de base de Godot dont le fichier hérite, et `GameDatabase.get_resource()`
+est déjà l'accesseur générique de l'index — un `get_resource(&"resources", &"wood")`
+serait illisible. Le vocabulaire du jeu ne bouge pas : `DESIGN.md` dit « ressource » et
+les identifiants restent `&"wood"`, `&"stone"`, `&"food"`.
+
+**Le résolveur mute le `Ledger`, et ce n'est pas une entorse.** Le ledger est l'état
+*interne* de l'Économie, exactement comme `CityState` l'est de Construction, et
+`place()` a déjà le même profil — valider, muter, rendre le résultat. La ligne de
+contrat de `DESIGN.md` 3.3 énumère les entrées **inter-systèmes**, ce qui est
+précisément pourquoi le ledger n'y figure pas.
+
+**Le rapport rapporte, il ne punit pas.** Il ne calcule aucune XP non plus : combien
+vaut une soirée de travail est un chiffre des Effectifs. Il porte un **journal de
+travail** — qui a tenu quel poste, dans quelle famille — et `W1` en fera ce qu'il veut.
+La famille y figure pour que les Effectifs n'aient pas à rouvrir la ville pour retrouver
+le bâtiment.
+
+**L'upkeep tombe sur le roster entier, oisifs compris.** C'est ce qui rend un ouvrier
+non affecté coûteux, donc le pool tendu, donc la tension centrale de `DESIGN.md` 1
+réelle plutôt que déclarative. `LaborForce.size()` est le roster et non le nombre
+d'affectés, et son docstring le dit.
+
+**Les oisifs se déduisent du roster moins ceux qui ont travaillé.** Cette soustraction
+couvre d'un coup les quatre façons de ne rien produire — non affecté, ancre vide,
+bâtiment sans poste, slot déjà pris — sans qu'aucune ait à être énumérée. Un ouvrier que
+l'affectation nomme mais que le roster ignore n'apparaît nulle part : une affectation
+peut survivre à celui qui la portait, et un mort ne chôme pas.
+
+**`upkeep_resource` est un champ d'équilibrage**, trouvé en écrivant le résolveur. Un
+`&"food"` en constante dans `src/domain/` aurait été le nombre magique que les
+conventions interdisent, et surtout il aurait survécu à un renommage du catalogue sans
+que rien ne le signale.
+
+**Le contrôle croisé vit dans `GameDatabase`.** C'est le seul contrôle qu'aucune
+`Resource` de `src/schema/` ne peut faire seule, puisqu'aucune ne lit l'index — et c'est
+très bien ainsi. Vérifié en cassant une clé exprès : le boot nomme le fautif et liste ce
+qu'il connaît. Quatrième copie de la même boucle de validation ; le seuil annoncé à `C1`
+se rapproche sans être atteint.
+
+**Deux bâtiments entrent, chacun pour une raison précise** — le motif de la palissade à
+`C2`. L'**entrepôt** est la seule chose qui relève la réserve commune, soit la décision
+phare du jalon ; la **ferme** est le seul producteur de nourriture, sans lequel le
+harnais meurt de faim au premier soir et la boucle ne montre rien.
+
+### Le harnais, et ce qu'il a répondu
+
+Il fait ce que `C1` a rendu possible et que rien n'avait encore fait tourner : il pose
+les **deux** questions à la suite — payable, puis posable, puis on dépense. L'ordre
+compte, payer avant de savoir si ça tient sur le relief laisserait la ville plus pauvre
+sans rien de bâti. La sixième entrée de sa liste de construction est là pour être
+refusée bourse vide, ce qui n'est pas un refus de placement.
+
+Et comme celui de `C1`, il **cherche** son cas au lieu de le mettre en scène : il laisse
+tourner vingt soirs et dit lequel a cassé le premier, la famine ou la réserve pleine.
+
+Réponse sur l'équilibrage actuel : **famine au soir 6, réserve jamais pleine — 160/200
+au vingtième.** C'est un signal qu'aucune suite de tests ne peut donner, puisqu'elles
+travaillent sur des chiffres choisis et que la question porte justement sur ceux de
+`data/balance/`. Il dit qu'avec dix ouvriers pour six postes, c'est la nourriture qui
+étrangle bien avant le plafond. À `I3` de décider si c'est le bon dosage.
+
+Un défaut trouvé en lisant le rapport, et pas autrement : deux lignes voisines
+annonçaient `20/100` puis « capacité 200 ». La réserve ne prenait sa nouvelle capacité
+qu'à la résolution suivante, alors qu'un entrepôt doit compter dès qu'il est bâti. Le
+résolveur la repose de toute façon, ce qui rendait l'oubli parfaitement silencieux —
+donc à écrire là où le HUD de `E2` le fera aussi.
+
+### Ce qui reste
+
+Rien pour `E1`. Quatre choses volontairement laissées de côté :
+
+- **les modificateurs d'adjacence** — `C3`. Le résolveur documente la couture : ils
+  entreront comme un argument de plus, appliqués au rendement d'un slot juste avant le
+  multiplicateur de l'ouvrier.
+- **le HUD et le panneau de rapport** — `E2`, nommément. `capacity_for()` est publique
+  et pure exprès, pour qu'il affiche « 47 / 200 » sans rien résoudre.
+- **l'application de l'XP** — `W1`, qui consommera le journal de travail.
+- **les 3:1 du marché et le rayon de l'atelier** — du contenu, donc `I3`.
+
+`CombatForce` et `DamageReport` ne sont pas écrits : `F1` n'existe pas, et on n'invente
+pas une frontière que personne ne franchit. `BuildingSnapshot` ne porte pas de PV pour
+la même raison.
+
+### Prochain jalon
+
+**`E2`** — HUD des ressources et panneau de rapport de production — si l'on veut voir
+l'économie ; **`W1`** si l'on préfère fermer la boucle du domaine avant toute UI. Les
+deux sont débloqués et `W1` est le seul des deux qui rende le journal de travail utile
+à quelque chose. Il est aussi le dernier à pouvoir encore faire bouger `LaborForce` sans
+douleur.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'input
+ajoutée.
+
+- `F5` lance le **harnais Économie** : un rapport texte, aucune 3D. Il s'imprime aussi
+  sur la sortie standard, donc `godot --headless --quit --path .` suffit à le lire —
+  c'est la commande de vérification n°1. `HARNESS` revient à `&"city"` ou `&"terrain"`
+  en un mot dans `scenes/dev/dev_boot.gd`.
+- les `.tres` neufs — trois dans `data/commodities/`, `economy_balance.tres`, `farm` et
+  `warehouse` — naissent **sans `uid`**, comme à chaque jalon : **diff à committer, pas
+  à jeter**.
+- **les chiffres du bloc économie sont à relire.** Coûts, slots et rendements viennent du
+  tableau de `DESIGN.md` 4 ; les empreintes de la ferme et de l'entrepôt, elles, sont
+  inventées, comme les quatre autres depuis `C1`. Le boot refuse un bloc incohérent —
+  des slots sans rendement, un rendement sans slot, un coût nommant une ressource
+  inconnue — donc les corriger dans l'inspecteur est sans risque.
+
+---
+
 ## 2026-08-24 — `C2` : fantôme de placement, pose et destruction
 
 **État : terminé.** Dix commits sur `feat/c2-placement-ghost`, tirée de
