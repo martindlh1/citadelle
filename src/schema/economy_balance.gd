@@ -15,6 +15,15 @@ extends Resource
 ## ouvrier non affecté coûteux, donc le pool tendu.
 @export_range(0, 10, 1) var upkeep_per_worker: int
 
+## Ressource que l'upkeep consomme.
+##
+## Elle est ici et non en constante dans le résolveur, parce qu'un &"food" écrit en dur
+## dans src/domain/ serait précisément le nombre magique que les conventions
+## interdisent, et parce qu'il survivrait à un renommage dans data/commodities/ sans
+## que rien ne le signale. Le jour où l'upkeep se paie en autre chose, c'est une
+## édition de data.
+@export var upkeep_resource: StringName
+
 ## Ce que la réserve contient à l'ouverture d'un run.
 ##
 ## Les clés sont des identifiants de data/commodities/. Ce fichier ne peut pas les
@@ -33,6 +42,8 @@ func missing_fields() -> PackedStringArray:
 		missing.append("base_storage_cap")
 	if upkeep_per_worker <= 0:
 		missing.append("upkeep_per_worker")
+	if upkeep_resource.is_empty():
+		missing.append("upkeep_resource")
 	for resource in starting_stock:
 		if starting_stock[resource] < 0:
 			missing.append("starting_stock.%s" % resource)
