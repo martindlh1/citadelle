@@ -15,15 +15,18 @@ extends RefCounted
 var _data: BuildingData
 var _anchor: Vector2i
 var _height: int
+var _turns: int
 
-## Bâtiment posé sur cette ancre, à cette hauteur.
-static func create(data: BuildingData, anchor: Vector2i, height: int) -> PlacedBuilding:
+## Bâtiment posé sur cette ancre, à cette hauteur, dans cette orientation.
+static func create(data: BuildingData, anchor: Vector2i, height: int,
+		turns: int = 0) -> PlacedBuilding:
 	assert(data != null, "bâtiment posé sans données")
 	assert(not data.footprint.is_empty(), "bâtiment posé sans empreinte : %s" % data.id)
 	var building := PlacedBuilding.new()
 	building._data = data
 	building._anchor = anchor
 	building._height = height
+	building._turns = posmod(turns, BuildingData.QUARTER_TURNS)
 	return building
 
 ## Contenu du bâtiment : son identité, son empreinte, et ce que les systèmes suivants
@@ -39,6 +42,11 @@ func anchor() -> Vector2i:
 func height() -> int:
 	return _height
 
-## Cellules absolues qu'il occupe, dans l'ordre de son empreinte.
+## Orientation dans laquelle il a été posé, en quarts de tour, toujours dans [0, 3].
+func turns() -> int:
+	return _turns
+
+## Cellules absolues qu'il occupe, dans l'ordre de son empreinte et dans son
+## orientation. Rien en dehors d'ici n'a à savoir qu'une rotation est en jeu.
 func cells() -> Array[Vector2i]:
-	return _data.cells_at(_anchor)
+	return _data.cells_at(_anchor, _turns)

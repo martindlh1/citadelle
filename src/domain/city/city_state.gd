@@ -65,16 +65,21 @@ func anchor_at(cell: Vector2i) -> Vector2i:
 func has_anchor(anchor: Vector2i) -> bool:
 	return _buildings.has(anchor)
 
-## Pose ce bâtiment sur cette ancre si le placement est valide, et ne mute rien sinon.
+## Pose ce bâtiment sur cette ancre, dans cette orientation, si le placement est valide.
+## Ne mute rien sinon.
+##
+## L'orientation est enregistrée sur le bâtiment posé et n'apparaît nulle part dans les
+## index : ceux-ci ne voient que des cellules, déjà pivotées.
 ##
 ## Rend le PlacementResult de la validation tel quel, de sorte qu'un appelant qui
 ## prévisualisait déjà retrouve exactement la réponse qu'il affichait — le fantôme de
 ## C2 et la pose ne peuvent pas diverger.
-func place(terrain: TerrainQuery, data: BuildingData, anchor: Vector2i) -> PlacementResult:
-	var result := PlacementValidator.validate(self, terrain, data, anchor)
+func place(terrain: TerrainQuery, data: BuildingData, anchor: Vector2i,
+		turns: int = 0) -> PlacementResult:
+	var result := PlacementValidator.validate(self, terrain, data, anchor, turns)
 	if not result.is_ok():
 		return result
-	_buildings[anchor] = PlacedBuilding.create(data, anchor, result.height())
+	_buildings[anchor] = PlacedBuilding.create(data, anchor, result.height(), turns)
 	for cell in result.cells():
 		_anchors[cell] = anchor
 	return result

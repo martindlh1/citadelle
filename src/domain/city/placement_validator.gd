@@ -29,14 +29,17 @@ extends RefCounted
 ## déborde — c'est une précondition du contrat Terrain, pas une préférence. Puis du
 ## plus local — cette cellule-ci accepte-t-elle un bâtiment — au plus global : la
 ## planéité est la seule règle qui doive avoir vu toute l'empreinte pour conclure.
+## `turns` oriente l'empreinte par quarts de tour. Les règles, elles, ne changent pas
+## d'un iota : elles reçoivent une liste de cellules et ne savent pas d'où elle vient.
+## C'est tout l'intérêt d'avoir fait pivoter l'empreinte autour de son ancre.
 static func validate(city: CityState, terrain: TerrainQuery,
-		data: BuildingData, anchor: Vector2i) -> PlacementResult:
+		data: BuildingData, anchor: Vector2i, turns: int = 0) -> PlacementResult:
 	assert(city != null, "placement sans ville")
 	assert(terrain != null, "placement sans terrain")
 	assert(data != null, "placement sans données de bâtiment")
 	assert(not data.footprint.is_empty(),
 		"placement d'un bâtiment sans empreinte : %s" % data.id)
-	var cells := data.cells_at(anchor)
+	var cells := data.cells_at(anchor, turns)
 	# is_buildable() répondrait déjà false hors grille, mais confondre les deux cas
 	# rendrait « c'est de la roche » là où il faut lire « c'est hors de la carte ».
 	for cell in cells:
