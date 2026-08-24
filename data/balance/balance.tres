@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="BalanceData" load_steps=3 format=3]
+[gd_resource type="Resource" script_class="BalanceData" format=3 uid="uid://cev3gmxsge525"]
 
-[ext_resource type="Script" path="res://src/schema/balance_data.gd" id="1_balance_data"]
-[ext_resource type="Resource" path="res://data/balance/terrain_balance.tres" id="2_terrain_balance"]
+[ext_resource type="Script" uid="uid://qerw8ritwj7q" path="res://src/schema/balance_data.gd" id="1_balance_data"]
+[ext_resource type="Resource" uid="uid://bmnk21p3xbrik" path="res://data/balance/terrain_balance.tres" id="2_terrain_balance"]
 
 [resource]
 script = ExtResource("1_balance_data")

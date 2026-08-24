@@ -260,6 +260,8 @@ Tout l'aléatoire passe par `RunState.rng`, un `RandomNumberGenerator` seedé à
 
 Tous les nombres réglables vivent dans `data/balance/*.tres`. Modifier un équilibrage ne doit jamais toucher à du GDScript. Corollaire : `data/balance/` est le seul endroit où l'on itère sur les questions encore ouvertes de `DESIGN.md`.
 
+**Aucun `@export` de `src/schema/` ne porte de valeur par défaut.** Godot n'écrit pas dans un `.tres` une propriété égale à son défaut : en donner un fait remonter le chiffre dans le `.gd` dès le premier réenregistrement par l'éditeur, et le fichier de data se vide en silence sans que rien ne casse. Un champ non renseigné vaut donc `0`, ce qui est détectable — chaque `Resource` d'équilibrage expose `missing_fields() -> PackedStringArray`, `BalanceData` les agrège, et `GameDatabase` refuse de démarrer sur un champ vide. Le test `tests/schema/balance_data_test.gd` couvre la même chose sans figer aucun chiffre.
+
 ---
 
 ## Conventions de code

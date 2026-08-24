@@ -18,8 +18,7 @@ var _index: Dictionary[StringName, Dictionary] = {}
 func _ready() -> void:
 	_index.clear()
 	_scan(DATA_ROOT)
-	assert(get_balance() != null,
-		"data/balance/balance.tres est introuvable ou n'est pas une BalanceData")
+	_assert_balance_is_complete()
 	EventBus.database_ready.emit.call_deferred()
 
 ## Racine de l'équilibrage. Jamais null une fois le boot passé.
@@ -45,6 +44,19 @@ func list_categories() -> Array[StringName]:
 	categories.assign(_index.keys())
 	categories.sort()
 	return categories
+
+## Un champ d'équilibrage non renseigné vaut 0 — les Resource de src/schema/ ne portent
+## aucun défaut, pour que le chiffre reste dans data/. Le rattraper au boot évite qu'il
+## se propage silencieusement dans une division ou une géométrie plate.
+func _assert_balance_is_complete() -> void:
+	var balance := get_balance()
+	assert(balance != null,
+		"data/balance/balance.tres est introuvable ou n'est pas une BalanceData")
+	if balance == null:
+		return
+	var missing := balance.missing_fields()
+	assert(missing.is_empty(),
+		"champs d'équilibrage non renseignés dans data/balance/ : %s" % ", ".join(missing))
 
 func _scan(root: String) -> void:
 	for directory in DirAccess.get_directories_at(root):

@@ -1,6 +1,6 @@
-[gd_resource type="Resource" script_class="TerrainBalance" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="TerrainBalance" format=3 uid="uid://bmnk21p3xbrik"]
 
-[ext_resource type="Script" path="res://src/schema/terrain_balance.gd" id="1_terrain_balance"]
+[ext_resource type="Script" uid="uid://cox4ns3g7een1" path="res://src/schema/terrain_balance.gd" id="1_terrain_balance"]
 
 [resource]
 script = ExtResource("1_terrain_balance")

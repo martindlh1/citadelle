@@ -97,6 +97,25 @@ un changement de `GODOT_BIN` et rien d'autre. Les trois commandes de vérificati
 Le README reste volontairement générique sur ce chemin : il est propre à la machine, il
 n'a rien à faire dans le dépôt.
 
+### Correctif — l'éditeur vidait le data d'équilibrage
+
+Au premier réenregistrement des `.tres` par l'éditeur, `tile_size` et `step_height` ont
+**disparu** de `data/balance/terrain_balance.tres`. Godot n'écrit pas une propriété
+égale à son défaut `@export`, et je leur avais donné les mêmes valeurs en défaut : les
+chiffres d'équilibrage étaient donc silencieusement remontés dans le `.gd`, en
+contradiction directe avec la règle d'équilibrage et avec un anti-pattern déclaré. Rien
+ne cassait, ce qui est précisément ce qui rend le piège dangereux.
+
+Corrigé en retirant tout défaut des `@export` de `src/schema/`. Un champ non renseigné
+vaut désormais `0`, détectable : chaque resource expose `missing_fields()`, `BalanceData`
+les agrège, `GameDatabase` refuse de démarrer sur un champ vide. Vérifié dans les deux
+sens — en supprimant `step_height` d'un `.tres`, le boot lève l'assertion et le test
+échoue, tous deux en nommant `terrain.step_height`.
+
+Les `uid://` que l'éditeur a ajoutés aux `.tres` au passage sont commités : `project.godot`
+référence déjà la scène principale et les autoloads par `uid`, et des uid non versionnés
+seraient régénérés différemment au prochain clone.
+
 ### Git
 
 `feat/i0-skeleton` fusionnée en fast-forward dans `master`, poussée, et `master` remis
