@@ -5,11 +5,11 @@ extends Resource
 ## Les .tres vivent dans data/buildings/, un par bâtiment. Le domaine les reçoit en
 ## argument et ne lit jamais GameDatabase, comme pour TerrainData.
 ##
-## C1 n'y met que ce que le placement consomme. Coût, slots, rendement, défense, PV
-## et bonus d'adjacence arrivent avec leur système — E1, C3, F1 — de la même façon que
-## BalanceData gagne un bloc quand un système atterrit. Un champ ajouté plus tard
-## oblige à rouvrir les .tres ; un champ ajouté d'avance oblige à deviner sa forme,
-## ce qui coûte plus cher.
+## C1 n'y mettait que ce que le placement consomme ; E1 y ajoute le bloc économie —
+## coût, slots, rendement, famille, réserve. Défense, PV et bonus d'adjacence
+## arriveront avec leur système — C3, F1 — de la même façon que BalanceData gagne un
+## bloc quand un système atterrit. Un champ ajouté plus tard oblige à rouvrir les
+## .tres ; un champ ajouté d'avance oblige à deviner sa forme, ce qui coûte plus cher.
 ##
 ## Aucun @export ne porte de défaut, pour la raison exposée dans terrain_balance.gd.
 
@@ -58,6 +58,32 @@ const QUARTER_TURNS := 4
 ## entière, bâtiments compris, et non laisser des maisons à leur ancienne taille au
 ## milieu de cellules qui ont changé.
 @export_range(0.0, 4.0, 0.05) var height: float
+
+## Ce qu'il coûte à poser, par ressource.
+##
+## Le coût ne participe **pas** à la validation du placement : « ai-je les 15 bois ? »
+## ne regarde pas la carte, et c'est la couche qui orchestre la journée qui enchaîne
+## les deux questions. Tranché à C1, voir DESIGN.md 3.2.
+@export var cost: Dictionary[StringName, int]
+
+## Nombre de postes de travail. 0 pour un bâtiment qui ne produit rien — palissade,
+## entrepôt, habitation.
+@export_range(0, 8, 1) var slots: int
+
+## Ce qu'un slot occupé rapporte en un soir, avant le multiplicateur de l'ouvrier.
+@export var yield_per_slot: Dictionary[StringName, int]
+
+## Famille de compétence que ses postes emploient.
+##
+## C'est elle qui décide quel multiplicateur de l'ouvrier s'applique au rendement, et
+## quelle piste l'XP créditera en retour. Un bâtiment sans slot n'en a pas besoin.
+@export var skill_family: StringName
+
+## Ce qu'il ajoute à la réserve commune. 0 pour tout ce qui n'est pas un entrepôt.
+##
+## En réserve commune, ce chiffre ne relève pas trois compteurs indépendants mais la
+## seule capacité partagée : c'est ce qui donne à l'entrepôt une valeur d'arbitrage.
+@export_range(0, 500, 1) var storage_bonus: int
 
 ## Ce décalage, pivoté de `turns` quarts de tour dans le sens horaire.
 ##
@@ -139,6 +165,7 @@ func missing_fields() -> PackedStringArray:
 		missing.append("color")
 	if height <= 0.0:
 		missing.append("height")
+	missing.append_array(_economy_fields())
 	if footprint.is_empty():
 		missing.append("footprint")
 		return missing
@@ -146,6 +173,40 @@ func missing_fields() -> PackedStringArray:
 		missing.append("footprint.anchor")
 	if _has_duplicate_offset():
 		missing.append("footprint.duplicate")
+	return missing
+
+## Incohérences du bloc économie.
+##
+## Ici la doctrine « non renseigné vaut 0, donc détectable » **ne s'applique pas** : 0
+## slot, un coût vide et un storage_bonus nul sont tous des valeurs légitimes du
+## tableau de DESIGN.md 4 — la palissade n'a pas de poste, la cabane de bûcheron est
+## gratuite. Aucun de ces champs ne peut donc être réclamé comme absent, et prétendre
+## le contraire refuserait de démarrer sur des données correctes.
+##
+## Ce qui la remplace est un contrôle de cohérence **entre** ces champs, qui lui est
+## réel : des slots sans rendement ne produiraient rien, un rendement sans slot ne
+## serait jamais versé, et un poste sans famille ne saurait ni quel multiplicateur
+## appliquer ni quelle piste créditer. Les trois se chargent sans erreur et ne cassent
+## qu'au premier soir de production.
+##
+## Les clés de cost et yield_per_slot ne sont pas contrôlées ici : une Resource de
+## schéma ne lit jamais l'index. C'est GameDatabase qui les confronte au catalogue.
+func _economy_fields() -> PackedStringArray:
+	var missing := PackedStringArray()
+	if slots > 0 and yield_per_slot.is_empty():
+		missing.append("yield_per_slot")
+	if slots > 0 and skill_family.is_empty():
+		missing.append("skill_family")
+	if slots == 0 and not yield_per_slot.is_empty():
+		missing.append("slots")
+	if storage_bonus < 0:
+		missing.append("storage_bonus")
+	for resource in cost:
+		if cost[resource] <= 0:
+			missing.append("cost.%s" % resource)
+	for resource in yield_per_slot:
+		if yield_per_slot[resource] <= 0:
+			missing.append("yield_per_slot.%s" % resource)
 	return missing
 
 ## L'empreinte nomme-t-elle deux fois la même cellule ?

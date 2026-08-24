@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="EconomyBalance" format=3]
+
+[ext_resource type="Script" path="res://src/schema/economy_balance.gd" id="1_economy_balance"]
+
+[resource]
+script = ExtResource("1_economy_balance")
+base_storage_cap = 100
+upkeep_per_worker = 1
+starting_stock = Dictionary[StringName, int]({
+&"food": 20,
+&"wood": 30
+})
