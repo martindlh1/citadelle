@@ -69,5 +69,12 @@ deux tombent sur la même cellule. C'est le seul contrôle du raccord entre la c
 orthogonale et le `CellPicker` — les tests unitaires tirent des rayons fabriqués à la
 main, et les trois commandes de vérification ne regardent pas l'écran.
 
+**Les coordonnées de la sonde ne sont pas des pixels de l'image.** `project.godot` est
+en `stretch/mode="canvas_items"` : le viewport garde la résolution de base du projet
+pendant que la fenêtre, elle, suit `--resolution`. La capture sort donc à la taille de
+la fenêtre, et tout ce que `unproject_position` ou `project_ray_*` manipule est en
+coordonnées de viewport — plus petites d'un facteur constant. Comparer les deux sans
+convertir fait apparaître des décalages qui n'existent pas.
+
 C'est aussi ce qui rend une passe d'équilibrage visuelle tenable — comparer deux
 valeurs de `step_height` revient à éditer un `.tres` et relancer deux fois.
