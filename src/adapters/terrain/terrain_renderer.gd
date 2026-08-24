@@ -12,11 +12,6 @@ extends MultiMeshInstance3D
 ## Le renderer ne connaît aucun terrain par son nom : il lit la couleur sur le
 ## TerrainData de la cellule. Ajouter un terrain reste une édition de data.
 
-## Épaisseur minimale d'une colonne, en crans. Toutes les colonnes s'enracinent ce
-## nombre de crans sous la plus basse de la carte, ce qui donne à la carte un socle
-## plein et garantit une épaisseur non nulle même sur un terrain parfaitement plat.
-const BASE_SKIRT_STEPS := 1
-
 var _metrics: TerrainMetrics
 
 ## Renderer prêt à être ajouté à l'arbre, déjà peuplé pour cette grille.
@@ -42,7 +37,10 @@ func rebuild(grid: HeightGrid) -> void:
 	assert(_metrics != null, "renderer non initialisé — passer par create()")
 	var extent := grid.size()
 	multimesh.instance_count = extent.x * extent.y
-	var floor_y := _metrics.surface_y(_lowest_height(grid) - BASE_SKIRT_STEPS)
+	# Le socle vient de la métrique, pas d'une constante locale : le CellPicker ferme
+	# ses colonnes sur ce même plan, et une silhouette dessinée ailleurs que là où on
+	# la désigne rendrait le survol faux sous le bord de la carte.
+	var floor_y := _metrics.base_y(grid.lowest_height())
 	var tile := _metrics.tile_size()
 	var index := 0
 	for y in extent.y:
@@ -58,15 +56,6 @@ func rebuild(grid: HeightGrid) -> void:
 				Transform3D(Basis.IDENTITY.scaled(Vector3(tile, thickness, tile)), top))
 			multimesh.set_instance_color(index, grid.terrain_at(cell).color)
 			index += 1
-
-## Hauteur la plus basse de la grille, qui sert d'assise au socle.
-static func _lowest_height(grid: HeightGrid) -> int:
-	var extent := grid.size()
-	var lowest := grid.height_at(Vector2i.ZERO)
-	for y in extent.y:
-		for x in extent.x:
-			lowest = mini(lowest, grid.height_at(Vector2i(x, y)))
-	return lowest
 
 static func _make_multimesh() -> MultiMesh:
 	var multimesh := MultiMesh.new()

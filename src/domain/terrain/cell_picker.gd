@@ -14,10 +14,15 @@ extends RefCounted
 ## La fonction reste pure et statique, et reçoit son réglage en argument comme
 ## TerrainGen.generate() reçoit le sien.
 ##
-## Modèle de collision : une colonne est SOLIDE VERS LE BAS, sans fond. On ne regarde
-## jamais le terrain par en dessous, et le socle que le renderer dessine sous la carte
-## n'est qu'une épaisseur d'affichage — lui donner un fond ici ouvrirait des tirs qui
-## passent sous la carte pour ressortir de l'autre côté.
+## Modèle de collision : une colonne est une BOÎTE FERMÉE, du socle de la carte à sa
+## face supérieure. Le socle est celui que le renderer dessine — les deux le tirent de
+## TerrainMetrics.base_y() — pour que ce qu'on désigne soit exactement ce qu'on voit.
+##
+## Le fond n'est pas décoratif. Sans lui, un rayon passant sous le bord de la carte y
+## entre par en dessous et accroche la première rangée qu'il croise : le survol colle
+## alors à la bande du bas au lieu de sortir de la carte, alors qu'il en sort bien par
+## les bords du haut, où le rayon passe au-dessus de tout. C'est cette asymétrie-là que
+## le fond supprime.
 
 ## Marge sur le nombre de cellules qu'un rayon peut visiter. Une droite en coupe au
 ## plus largeur + profondeur + 1 ; le facteur absorbe les pas dégénérés que produit un
@@ -40,14 +45,16 @@ static func pick(grid: HeightGrid, metrics: TerrainMetrics,
 	# span.y < 0      : il la traverserait, mais entièrement derrière son origine.
 	if span.x > span.y or span.y < 0.0:
 		return PickResult.miss()
-	return _walk(grid, metrics, origin, ray, maxf(span.x, 0.0), span.y)
+	# Le socle est commun à toute la carte : il se calcule une fois, pas par cellule.
+	var base := metrics.base_y(grid.lowest_height())
+	return _walk(grid, metrics, origin, ray, maxf(span.x, 0.0), span.y, base)
 
 ## Marche de cellule en cellule, de l'entrée dans l'emprise jusqu'à la sortie.
 ##
 ## À chaque cellule visitée on tient l'intervalle [u, u_exit] du rayon qui la traverse,
 ## et on teste sa colonne. C'est la seule boucle du picker.
 static func _walk(grid: HeightGrid, metrics: TerrainMetrics,
-		origin: Vector3, ray: Vector3, u_in: float, u_out: float) -> PickResult:
+		origin: Vector3, ray: Vector3, u_in: float, u_out: float, base: float) -> PickResult:
 	var size := grid.size()
 	var tile := metrics.tile_size()
 	var u := u_in
@@ -70,11 +77,12 @@ static func _walk(grid: HeightGrid, metrics: TerrainMetrics,
 		var top := metrics.surface_y(height)
 		var y_enter := origin.y + ray.y * u
 		var y_exit := origin.y + ray.y * u_exit
-		# Le rayon plonge sous le sommet quelque part dans la cellule : il est dans la
-		# colonne. y étant linéaire en u, son minimum sur l'intervalle est à l'un des
-		# deux bouts, et il n'y a rien de plus à chercher.
-		if minf(y_enter, y_exit) <= top:
-			return PickResult.hit_at(cell, height, _impact(origin, ray, u, y_enter, top))
+		# Le segment que le rayon parcourt dans cette cellule recouvre-t-il la tranche
+		# [socle, sommet] de sa colonne ? y étant linéaire en u, ses extrêmes sur
+		# l'intervalle sont à ses deux bouts, et il n'y a rien de plus à chercher.
+		if minf(y_enter, y_exit) <= top and maxf(y_enter, y_exit) >= base:
+			return PickResult.hit_at(cell, height,
+				_impact(origin, ray, u, y_enter, top, base))
 		if step_x == 0 and step_z == 0:
 			# Rayon vertical : il n'y a qu'une colonne sur son chemin, et elle vient
 			# d'être testée. Sans cette sortie la marche piétinerait jusqu'à épuiser son
@@ -92,21 +100,33 @@ static func _walk(grid: HeightGrid, metrics: TerrainMetrics,
 			return PickResult.miss()
 	return PickResult.miss()
 
-## Point d'impact sur une colonne dont le sommet est à `top`, sachant que le rayon
-## entre dans la cellule au paramètre `u_enter`, à l'altitude `y_enter`.
+## Point d'impact sur une colonne allant de `base` à `top`, sachant que le rayon entre
+## dans la cellule au paramètre `u_enter`, à l'altitude `y_enter`.
+##
+## Appelé seulement quand l'intersection est acquise, ce dont les deux divisions
+## ci-dessous tirent leur sûreté : arriver au-dessus du sommet et toucher quand même
+## impose une descente, arriver sous le socle impose une montée.
 static func _impact(origin: Vector3, ray: Vector3,
-		u_enter: float, y_enter: float, top: float) -> Vector3:
-	if y_enter <= top:
-		# Le rayon entrait déjà sous le sommet : il touche un FLANC, sur l'arête
-		# verticale par laquelle il est entré dans la cellule.
-		return origin + ray * u_enter
-	# Sinon il franchit le plan du sommet à l'intérieur de la cellule : c'est la FACE
-	# SUPÉRIEURE. y_enter > top impose ray.y < 0, la division est donc sûre.
-	var impact := origin + ray * ((top - origin.y) / ray.y)
-	# Ce y vaut exactement le sommet par construction. Le laisser sortir du calcul
-	# flottant y remettrait quelques ulp de bruit, dans la valeur même sur laquelle un
-	# bâtiment viendra se poser.
-	impact.y = top
+		u_enter: float, y_enter: float, top: float, base: float) -> Vector3:
+	if y_enter > top:
+		# Le rayon franchit le plan du sommet à l'intérieur de la cellule : c'est la
+		# FACE SUPÉRIEURE, celle sur laquelle un bâtiment viendra se poser.
+		return _crossing(origin, ray, top)
+	if y_enter < base:
+		# Il franchit le socle en montant : c'est le DESSOUS de la carte.
+		return _crossing(origin, ray, base)
+	# Sinon il entrait déjà dans la tranche de la colonne : il touche un FLANC, sur
+	# l'arête verticale par laquelle il est entré dans la cellule.
+	return origin + ray * u_enter
+
+## Point où le rayon croise le plan horizontal d'altitude `plane`.
+##
+## Le y est recalé sur le plan plutôt que laissé au calcul flottant : il y vaut
+## exactement `plane` par construction, et quelques ulp de bruit n'ont rien à faire
+## dans une coordonnée dont on se sert pour poser quelque chose.
+static func _crossing(origin: Vector3, ray: Vector3, plane: float) -> Vector3:
+	var impact := origin + ray * ((plane - origin.y) / ray.y)
+	impact.y = plane
 	return impact
 
 ## Intervalle (entrée, sortie) du rayon dans l'emprise au sol de la carte, en

@@ -155,14 +155,43 @@ func test_a_ray_with_no_x_component_still_walks() -> void:
 	assert_vector(result.position()) \
 		.is_equal_approx(Vector3(3.0, 1.0, 4.0), Vector3.ONE * EPSILON)
 
-## Une colonne est solide VERS LE BAS et sans fond : un tir parti de sous la carte est
-## déjà dans la roche et la touche sur place. C'est le modèle choisi, pas un accident
-## — lui donner un fond ouvrirait des tirs qui passent sous la carte.
-func test_a_ray_starting_under_the_terrain_is_already_inside_it() -> void:
+## Une colonne est une boîte FERMÉE : un tir parti de sous la carte rencontre son
+## dessous, à l'altitude du socle, et non l'intérieur de la première colonne venue.
+func test_a_ray_from_under_the_map_hits_its_base() -> void:
 	var grid := HeightGrid.create(SIZE, 0, _plain)
 	var result := CellPicker.pick(grid, _metrics, Vector3(3.0, -5.0, 5.0), Vector3.UP)
 	assert_bool(result.is_hit()).is_true()
 	assert_vector(result.cell()).is_equal(Vector2i(1, 2))
+	assert_float(result.position().y).is_equal(_metrics.base_y(0))
+
+# --- Sous le bord de la carte -------------------------------------------------
+
+## La régression qui a motivé le fond des colonnes.
+##
+## Un rayon visant SOUS le bord proche de la carte y entrait par en dessous et
+## accrochait la première rangée qu'il croisait : le survol collait à la bande du bas,
+## alors qu'il sortait bien de la carte par les bords du haut, où le rayon passe
+## au-dessus de tout. Le tir part ici du ras du socle, hors emprise, et descend : il ne
+## doit plus rien rencontrer.
+func test_a_ray_passing_under_the_map_misses() -> void:
+	var grid := HeightGrid.create(SIZE, 0, _plain)
+	var direction := _isometric_direction()
+	# Hors de l'emprise en x comme en z, exactement au niveau du socle. Tout ce qui
+	# suit sur ce rayon est plus bas encore.
+	var under := Vector3(9.0, _metrics.base_y(0), 7.0)
+	var result := CellPicker.pick(grid, _metrics, under - direction * 20.0, direction)
+	assert_bool(result.is_hit()).is_false()
+
+## Le pendant, qui empêche la correction d'aller trop loin : le flanc du socle reste
+## désignable. La rangée du bord se survole encore, et sur sa vraie cellule.
+func test_the_skirt_of_the_near_edge_is_still_pickable() -> void:
+	var grid := HeightGrid.create(SIZE, 0, _plain)
+	var direction := _isometric_direction()
+	# Sur la face du socle du bord +X, à mi-hauteur entre le socle et la surface.
+	var flank := Vector3(SIZE.x * TILE, _metrics.base_y(0) * 0.5, 3.0)
+	var result := CellPicker.pick(grid, _metrics, flank - direction * 20.0, direction)
+	assert_bool(result.is_hit()).is_true()
+	assert_vector(result.cell()).is_equal(Vector2i(SIZE.x - 1, 1))
 
 # --- La géométrie réelle du rig -----------------------------------------------
 

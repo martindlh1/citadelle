@@ -23,6 +23,23 @@ func test_create_fills_every_cell() -> void:
 			assert_int(grid.height_at(cell)).is_equal(2)
 			assert_object(grid.terrain_at(cell)).is_same(_plain)
 
+## C'est cette hauteur qui fixe le dessous de la carte, pour le rendu comme pour le
+## picking.
+func test_lowest_height_finds_the_bottom_of_the_map() -> void:
+	var grid := HeightGrid.create(SIZE, 4, _plain)
+	assert_int(grid.lowest_height()).is_equal(4)
+	grid.set_height(Vector2i(2, 1), -2)
+	assert_int(grid.lowest_height()).is_equal(-2)
+
+## Elle suit les écritures dans les deux sens : relever la cellule la plus basse ne doit
+## pas laisser la carte croire qu'elle descend encore aussi bas.
+func test_lowest_height_follows_writes_back_up() -> void:
+	var grid := HeightGrid.create(SIZE, 4, _plain)
+	grid.set_height(Vector2i(0, 0), 1)
+	assert_int(grid.lowest_height()).is_equal(1)
+	grid.set_height(Vector2i(0, 0), 6)
+	assert_int(grid.lowest_height()).is_equal(4)
+
 func test_in_bounds_accepts_the_corners() -> void:
 	var grid := HeightGrid.create(SIZE, 0, _plain)
 	assert_bool(grid.in_bounds(Vector2i.ZERO)).is_true()

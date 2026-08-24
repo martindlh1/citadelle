@@ -18,6 +18,18 @@ extends RefCounted
 ##     l'invariant du système : ni le socle sous la colonne, ni l'épaisseur qu'un
 ##     renderer lui donne ne le déplacent.
 
+## Profondeur du socle sous la colonne la plus basse, en crans.
+##
+## Toutes les colonnes s'enracinent sur ce plan : la carte a un dessous plein plutôt
+## que des colonnes flottantes, et l'épaisseur reste non nulle sur un terrain
+## parfaitement plat.
+##
+## La constante vit ici, et non dans le renderer où elle est née, parce que le picker
+## en dépend autant : ce plan est la silhouette de la carte, et ce qu'on DÉSIGNE doit
+## être ce qu'on VOIT. Les deux qui la dérivent d'un même endroit, c'est ce qui empêche
+## le survol de mordre sous le bord visible.
+const BASE_SKIRT_STEPS := 1
+
 var _tile_size: float
 var _step_height: float
 
@@ -48,6 +60,14 @@ func step_height() -> float:
 ## Y de la face supérieure d'une cellule à cette hauteur.
 func surface_y(height: int) -> float:
 	return height * _step_height
+
+## Y du dessous de la carte, sachant la hauteur de sa colonne la plus basse.
+##
+## C'est le plan qui ferme les colonnes par le bas. Sans lui, un rayon passant sous le
+## bord visible de la carte entrerait dans les colonnes par en dessous et accrocherait
+## la première rangée qu'il croise, au lieu de passer dessous et de ne rien toucher.
+func base_y(lowest_height: int) -> float:
+	return surface_y(lowest_height - BASE_SKIRT_STEPS)
 
 ## Centre d'une cellule dans le plan XZ, à y = 0.
 func cell_center_xz(cell: Vector2i) -> Vector3:
