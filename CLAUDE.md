@@ -85,6 +85,20 @@ dicte, donc le résolveur doit pouvoir le lire. Il voit le contrat, jamais la gr
 suffisait plus à désigner sans ambiguïté ce qu'un ouvrier fait — *Terraformer* et
 *Récolter* peuvent viser la même case nue.
 
+**Un rapport reste chez son système tant qu'aucun autre ne le franchit.** `PickResult`
+vit dans `domain/terrain/`, `ProgressReport` dans `domain/workforce/`, et `I1` y a rangé
+`PlayResult`, `SiteReport` et `EveningReport` sous `domain/run/`. Le critère est un
+second **système du domaine**, pas un adapter : les adapters lisent le domaine, c'est
+leur métier. Le coût d'une promotion ultérieure est un déplacement de fichier ; le coût
+d'une frontière inventée trop tôt est une forme figée avant qu'on la connaisse. Et une
+frontière qui doit vraiment traverser se remarque : `EveningReport` porte un
+`ProgressReport`, ce qui l'aurait fait entrer dans `contracts/` en traînant un interne
+des Effectifs derrière lui.
+
+**`domain/run/` est le seul dossier autorisé à connaître les autres**, et c'est
+`DESIGN.md` 3.8 qui l'autorise nommément. Il tient les états internes de tous les
+systèmes ; aucun ne le connaît en retour.
+
 **Changer l'intérieur d'un système est libre. Changer un contrat se discute.**
 
 ---
@@ -276,6 +290,10 @@ L'occlusion par le relief est un problème connu du système Terrain. V1 : la ro
 ### Structure de la journée — pilotée par data
 
 `DayCycle` ne connaît ni « matin » ni « soir ». Une journée est une liste ordonnée de `PhaseDef` chargées depuis `data/balance/`, chacune déclarant ses types d'action autorisés et si une résolution se déclenche à sa fin. Aucun nom de phase ne doit apparaître en dur dans le code, ni dans le domaine ni dans les adapters — l'UI lit le libellé et les actions permises depuis la `PhaseDef` courante.
+
+*(Écrit à `I1`.)* La règle vaut aussi pour **les tests** : un cas qui écrirait `&"evening"` pour vérifier une règle figerait exactement ce que `DESIGN.md` 2 garde ouvert. Les suites fabriquent leurs propres journées, sur des noms qui n'existent dans aucun `.tres`.
+
+`resolves` est un booléen, donc le seul champ de tout `data/balance/` que la doctrine du zéro ne protège pas : effacé par un réenregistrement, il vaut faux sans que rien ne le dise. Le filet est posé un cran plus haut — `RunBalance` exige qu'**au moins une** phase de la journée résolve. Même geste que `C4` sur `build_actions`.
 
 ### Effectifs — un vivier ou deux, indécidé
 

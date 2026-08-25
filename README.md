@@ -66,7 +66,7 @@ obligatoire ; les autres sont optionnels :
 | `--shot-hover x,y` | cellule à désigner. À défaut, le centre de la carte |
 | `--shot-turns n` | quarts de tour appliqués à la **caméra** |
 | `--shot-rotate n` | quarts de tour appliqués au **bâtiment** à poser *(harnais Construction)* |
-| `--shot-evenings n` | soirs résolus avant de capturer *(harnais Cartes)* |
+| `--shot-evenings n` | soirs résolus avant de capturer *(harnais Cartes)*, journées jouées *(harnais Run)* |
 
 `--shot-hover` a une valeur par défaut plutôt que rien, parce qu'une capture qui ne
 montre pas la surbrillance ne prouve rien à son sujet, et que souris à `(0, 0)` le
@@ -96,6 +96,13 @@ quelle carte, sur quelle cible, combien de postes, et qui les tient. C'est ce qu
 attrapé le seul vrai bug de `D2` — deux *Récolter* sur une même cabane à deux postes, et
 trois ouvriers dedans. Il ne se voyait ni au parsing, ni aux tests, ni à l'œil sur
 l'image : il se lisait dans cette table.
+
+Celle du harnais **Run** imprime les quatre à la fois — le bandeau de phase, la ligne de
+survol, la table des actions posées et le **rapport du dernier soir**. Elle joue une
+journée entière par `--shot-evenings` plutôt qu'un geste : ouvrir un chantier, le payer,
+y envoyer des ouvriers, le voir monter d'un cran et le relief se creuser à côté. Une
+capture qui ne montrerait qu'une carte posée ne dirait rien de ce que `I1` ajoute, et le
+rapport imprimé est la seule preuve que la bourse a bien été débitée.
 
 **Les coordonnées de la sonde ne sont pas des pixels de l'image.** `project.godot` est
 en `stretch/mode="canvas_items"` : le viewport garde la résolution de base du projet
@@ -152,7 +159,18 @@ maintenant en jouant, exactement comme le rapport de `C1` a cédé la place à l
 `C2`. Son verdict statistique avait fait son travail et n'avait pas à être rejoué à
 chaque lancement ; les chiffres restent dans l'entrée `D1` du journal.
 
-C'est aujourd'hui le seul harnais où une **phase entière** se joue : prendre une carte,
-la poser sur une cible, y envoyer des ouvriers, résoudre le soir. Il compose donc trois
-systèmes du domaine — Cartes, Économie, Effectifs — là où celui des Effectifs en
-composait deux.
+Il a été le premier harnais où une **phase entière** se jouait : prendre une carte, la
+poser sur une cible, y envoyer des ouvriers, résoudre le soir. Il compose trois systèmes
+du domaine — Cartes, Économie, Effectifs — là où celui des Effectifs en composait deux.
+
+Le harnais **Run**, arrivé à `I1`, est le seul qui ne montre pas un système mais **une
+journée**, et le seul à ne plus appeler le domaine du tout : tout passe par
+`RunManager`. Il lit son bandeau de phase et les gestes qu'il allume sur la `PhaseDef`
+courante, jamais sur un nom écrit à l'écran — c'est ce qui fera de l'arbitrage de `I2b`
+un échange de `.tres`. Une carte de bâtiment y affiche son coût et se voit refuser quand
+la réserve ne suit pas, un chantier monte vraiment d'un cran, et le relief se creuse
+vraiment. Il remplace le harnais Cartes comme scène de travail par défaut ; les autres
+restent utiles pour isoler un système.
+
+`Tab` y fait une seule chose, exprimée deux fois : elle agit sur ce que la carte tenue
+**ferait**. Elle pivote un bâtiment, elle retourne un terrassement.

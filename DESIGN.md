@@ -30,11 +30,21 @@ Deux modèles sur la table, aucun n'est tranché.
 
 **Conséquence sur l'implémentation.** Le `DayCycle` ne code ni « matin » ni « soir » en dur. Une journée est une **liste ordonnée de `PhaseDef`** définies en data, chaque phase déclarant les types d'action autorisés — bâtir, affecter, échanger, piocher — et si une résolution se déclenche à sa fin. Les deux modèles ci-dessus deviennent deux fichiers `.tres`, et on peut en tester un troisième sans toucher au code.
 
+*(Écrit à `I1`.)* La machine existe, et la promesse tient jusqu'au bout : **aucun nom de phase n'apparaît nulle part**, ni dans le domaine, ni dans les adapters, ni même dans les tests. L'écran lit son libellé et les gestes qu'il allume sur la phase courante. Deux gestes seulement sont déclarables aujourd'hui — poser et affecter ; *échanger* attend le marché et *piocher* n'est pas encore un geste du joueur.
+
+La journée que `data/` porte est **les deux gestes de `D2`** : on pose ses cartes, puis on y envoie ses ouvriers, et le soir se résout à la fin de la seconde phase. C'est la lecture des « deux phases asymétriques » ci-dessus qui donne vraiment deux décisions de nature différente. C'est une hypothèse de départ au même titre qu'un coût de 4.1, et `I2b` l'arbitrera en éditant un `.tres`.
+
+**La durée d'un run est un champ de `data/balance/`** depuis le même jalon, pour la même raison.
+
 ### Séquence de résolution
 
 Quel que soit le modèle retenu, une phase qui résout le fait dans cet ordre : **actions jouées** → événement → upkeep → combat s'il y a lieu → gain d'XP → rapport.
 
 La production n'est plus une étape passive qui balaye les bâtiments : c'est le résultat des actions que le joueur a posées. Un bâtiment dont aucun slot n'a reçu d'action ne rend rien.
+
+**Les actions jouées se résolvent en deux temps, et l'ordre est imposé.** *(Tranché à `I1`.)* La production se calcule sur la ville **d'avant le soir** ; les chantiers et les terrassements s'appliquent ensuite. Sans cette règle, un entrepôt achevé le soir même relèverait la réserve du même soir, et l'ordre dans lequel les cartes ont été posées déciderait du résultat — ce que 3.3 refuse déjà pour l'écrêtage, et pour le même motif : deux villes identiques bâties dans un ordre différent doivent rendre la même chose.
+
+Conséquence à connaître pour lire un rapport : le rapport de production ne connaît que les postes de production, donc il **compte un bâtisseur parmi les oisifs**. Chacun des deux rapports est juste dans son système ; c'est le rapport de la soirée, qui voit les deux journaux de travail, qui répond pour le soir entier.
 
 **`OUVERT`** — durée d'un run, fréquence des vagues, sort de la main non jouée.
 
@@ -99,7 +109,11 @@ Un chantier est donc un **état du bâtiment posé**, pas un type de bâtiment �
 
 **`OUVERT`** — que rend un chantier détruit ou annulé ? Rien, une partie du coût, tout ? Et un chantier peut-il être abandonné volontairement pour récupérer la case ? `C4` n'y a pas touché : détruire un chantier libère ses cellules et ne rend rien, ce qui est l'état par défaut et non une réponse.
 
-**`OUVERT`** — quelle piste de compétence l'action *Construire* crédite-t-elle ? Aucune des trois familles de 3.4 — Récolte, Artisanat, Combat — ne la couvre. La question est apparue à `C4`, qui ne la tranche pas : elle appartient à `D2`, où *Construire* deviendra une carte jouée par un ouvrier nommé, et elle a trois issues — une quatrième famille, un rattachement à l'Artisanat, ou de l'XP de niveau seule, ce que 3.4 rend déjà possible.
+**La piste que *Construire* crédite est une quatrième famille.** *(Tranché à `I1`.)* La question était ouverte depuis `C4` et avait trois issues — une quatrième famille, un rattachement à l'Artisanat, ou de l'XP de niveau seule. C'est la première : bâtir est un **métier**, avec sa piste et son multiplicateur, et non un travail qu'on subit. Le rattacher à l'Artisanat aurait rempli une piste que `X2` n'a pas encore ouverte ; l'XP de niveau seule aurait fait d'un chantier un pur coût.
+
+Ce que ce multiplicateur multiplie est écrit et vérifié : les crans d'un soir sont la **somme des efficacités de l'équipe, tronquée, plafonnée à ce qu'il reste à bâtir**. Deux ouvriers chevronnés posent trois crans là où deux bleus en posent deux. C'est la même arithmétique que la production, et c'est ce qui distingue une piste d'un compteur.
+
+Le nom de la famille vit dans `data/balance/`, comme celui de la famille qu'emploie une action à cru. Rien dans le code n'énumère les familles — les pistes se créent à l'usage —, donc en ajouter une n'a coûté aucune ligne de GDScript. *Terraformer* crédite la même : les deux verbes remuent la même terre.
 
 #### Adjacence
 
@@ -143,7 +157,7 @@ Deux bénéfices immédiats. La cohérence devient **structurelle** au lieu d'ê
 
 Un effectif n'est pas un compteur. Chaque unité est un individu nommé, avec :
 
-- des **pistes de compétence** par famille — Récolte, Artisanat, Combat — qui gagnent de l'XP à l'usage et donnent un multiplicateur d'efficacité
+- des **pistes de compétence** par famille — Récolte, Construction, Artisanat, Combat — qui gagnent de l'XP à l'usage et donnent un multiplicateur d'efficacité. **La liste n'est pas close** : elle vit dans `data/`, aucun code ne l'énumère, et une famille naît le jour où un travail la crédite. La Construction est entrée ainsi à `I1` *(cf. 3.2)*
 - un **niveau d'ouvrier**, qui agrège toute l'XP gagnée quelle qu'en soit la source *(cf. ci-dessous)*
 - éventuellement des **traits**, acquis ou de naissance, qui donnent des bonus conditionnels plutôt que des chiffres bruts. C'est aux paliers de niveau qu'ils s'acquerront — `X5`
 
@@ -155,7 +169,7 @@ Ce qui en découle : spécialiser rend excellent à un poste et médiocre ailleu
 
 *(Tranché à `W1`.)* Un ouvrier progresse sur **deux compteurs distincts**, qui ne disent pas la même chose.
 
-La **piste de compétence** dit *ce qu'il sait faire*. Une par famille — Récolte, Artisanat, Combat —, elle monte par paliers, et chaque palier ajoute un cran au multiplicateur d'efficacité de cette famille. C'est le seul des deux que l'Économie consomme, via la `LaborForce`.
+La **piste de compétence** dit *ce qu'il sait faire*. Une par famille, elle monte par paliers, et chaque palier ajoute un cran au multiplicateur d'efficacité de cette famille. C'est le seul des deux que l'Économie consomme, via la `LaborForce` — et depuis `I1`, aussi le Cycle de jour, qui l'applique aux crans d'un chantier.
 
 Le **niveau d'ouvrier** dit *ce qu'il a vécu*. Un seul par unité, alimenté par **toute** source d'XP — travail, combat, événement —, il ne donne par lui-même aucun multiplicateur. Sa raison d'être est double : un vétéran se distingue d'un bleu d'un coup d'œil, sans lire trois pistes, et c'est à ses paliers que se branchera le choix de compétence *(cf. `X5`)*.
 
@@ -239,7 +253,13 @@ Elle porte aussi sa **capacité**, figée à la pose : les postes du bâtiment v
 
 **Une carte ouvre les postes de sa cible une fois.** Une seconde du même nom au même endroit les rouvrirait, et trois ouvriers produiraient dans une cabane qui n'en tient que deux — la carte cesserait d'être une permission pour devenir un multiplicateur. Deux cartes *différentes* sur une même cellule restent acceptées ; c'est le doublon qui est refusé, pas le partage.
 
-**`OUVERT`** — la direction de *Terraformer*. 4.2 dit « monte ou descend », `data/cards/` n'en contient qu'une carte, donc le sens est un choix fait à la pose. `D2` ne l'a pas tranché : le verbe se pose et s'affecte sans être exécuté, et lui inventer un champ avant que quoi que ce soit le lise reviendrait à deviner sa forme. La question appartient au jalon qui l'exécute. Même remarque pour les terrains qu'il accepte — l'eau et le rocher se terrassent-ils ?
+**Le sens d'un terrassement se choisit à la pose.** *(Tranché à `I1`.)* Il y a **une** carte *Terraformer* et deux sens, et le sens appartient au **jeu** de la carte, exactement comme l'orientation d'un bâtiment appartient au placement et non à sa `BuildingData`. La carte reste un outil que l'on oriente plutôt qu'un tirage dont on subit le sens.
+
+Le prix est connu et il a été payé sciemment : deux DTO de `contracts/` — l'action posée et le verdict de ciblage — portent désormais un sens, et le ciblage le reçoit en argument. Un défaut le rend invisible aux trois verbes qui ne déplacent rien.
+
+**L'eau et le rocher ne se terrassent pas.** *(Tranché à `I1`.)* Seul un terrain **constructible** l'accepte, et la raison est mécanique plutôt que thématique : terrasser déplace la **hauteur**, pas le `TerrainData`. Monter une case d'eau la laisserait eau — inconstructible, toujours tagguée `water` — pour le prix d'une carte et d'un ouvrier. Le jour où l'on voudra changer le sol lui-même, ce sera un *Défricher*, et c'est un autre verbe.
+
+Deux **bornes de relief** encadrent le terrassement, dans `data/balance/`, et elles sont volontairement distinctes de celles de la génération : celles-là décrivent la carte qu'on reçoit, celles-ci jusqu'où on a le droit de la pousser. Les confondre interdirait de creuser sous le point le plus bas de la génération, ce qui est pourtant le geste évident quand on veut un plateau.
 
 #### Certains bâtiments débloquent des actions
 
@@ -274,6 +294,12 @@ Source d'aléatoire quotidien indépendante de la pioche. Pistes : arrivée d'ou
 > Le seul système qui connaît tous les autres. C'est volontaire : il orchestre, les autres s'ignorent.
 
 Machine à états sur les phases, séquence de résolution, conditions de fin, transition vers l'écran de récompense.
+
+*(Écrit à `I1`.)* Il tient trois choses. Le **cycle**, qui marche sur la liste de `PhaseDef` sans jamais savoir où il est. L'**état du run** — relief, ville, réserve, roster, deck, actions posées, brouillon d'affectation —, qui est le seul objet du projet à tenir les internes de plusieurs systèmes, et c'est cette section qui l'autorise. L'**orchestrateur**, qui ne calcule rien : il enchaîne deux questions là où chaque système n'en répond qu'à une, et il applique des ordres que les résolveurs se contentent de rendre.
+
+C'est ce qui a permis à deux choses annoncées de longue date de devenir vraies. La **bourse au moment de bâtir** de 3.2 — « ai-je les 15 bois ? » est une seconde question, posée par la couche qui orchestre la journée. Et l'**exécution** de *Construire* et de *Terraformer*, que `D2` avait laissée en attente parce que leur effet mute l'état de deux autres systèmes : le résolveur ordonne, l'orchestrateur applique, et il est le seul à tenir les deux.
+
+**Le déterminisme cesse d'être une consigne.** Un seed plus une suite de gestes rejoue un run à l'identique — la réserve, le relief, l'avancement des chantiers, l'XP —, et c'est vérifié plutôt que promis.
 
 ### 3.9 Expéditions — `HORS MVP`
 
@@ -315,7 +341,7 @@ Les bonus d'adjacence ne sont pas dans cette table : ils viennent avec `C3`, qui
 
 **Débloque** était annoncée pour `D1` et n'y est pas entrée. *(Tranché à `D1`.)* Les trois actions qu'elle concerne — *S'entraîner*, *Fabriquer*, *Explorer* — sont marquées `MVP : non` en 4.2 et ne sont donc pas au catalogue de cartes ; un champ qui ne débloquerait rien serait une frontière que personne ne franchit, ce qui est exactement l'argument qui a sorti `CombatForce` de `W1`. Elle entrera avec `X3`, `X2` et `X1`, en même temps que les cartes qu'elle verrouille. Le coût du report est connu et faible : un champ sur `BuildingData`, trois `.tres` à rouvrir, et une lecture de plus sur `CitySnapshot.completed()` — qui a déjà trois consommateurs et la porte ouverte.
 
-Le « — » du Cœur dans la colonne Chantier est un **zéro**, comme son « posé au départ » dans la colonne Coût est un coût vide. C'est ce qui lui évite un chemin de pose particulier : un bâtiment qui ne réclame aucune action est achevé dès qu'il est posé, sans que rien n'ait à connaître le cas. Le prix assumé de ce choix est qu'un `build_actions` oublié dans un `.tres` vaut 0 et fait sauter le chantier en silence ; un cas de test exige donc qu'au moins un bâtiment de `data/` en déclare un, ce qui rattrape la disparition du format entier. *(Tranché à `C4`.)*
+Le « — » du Cœur dans la colonne Chantier est un **zéro**, comme son « posé au départ » dans la colonne Coût est un coût vide. C'est ce qui lui évite un chemin de pose particulier : un bâtiment qui ne réclame aucune action est achevé dès qu'il est posé, sans que rien n'ait à connaître le cas. *(Vérifié à `I1`, où l'ouverture d'un run le pose vraiment : il sort achevé, sans une ligne de cas particulier. Son « posé au départ » est un champ de `data/balance/` — l'identifiant d'un bâtiment écrit dans du GDScript aurait été le nombre magique que les conventions refusent. Le poser au centre est un bouchon : l'écran qui le demandera au joueur appartient à `I2`.)* Le prix assumé de ce choix est qu'un `build_actions` oublié dans un `.tres` vaut 0 et fait sauter le chantier en silence ; un cas de test exige donc qu'au moins un bâtiment de `data/` en déclare un, ce qui rattrape la disparition du format entier. *(Tranché à `C4`.)*
 
 Les places de roster de l'habitation y sont entrées à `W1`, ce qui a sorti ce bâtiment de la coquille vide où `E1b` l'avait laissé. La conséquence à ne pas confondre avec un oubli : **cinq bâtiments portent « 1 slot » dans ce tableau et n'ont pourtant aucun bloc `production`** — tour de guet, caserne, marché, atelier, camp d'exploration. Leur poste n'est pas un poste de production ; il héberge une défense, un échange ou une action débloquée, et la nature qui le décrira n'existe pas encore. Leur écrire un `slots = 1` que rien ne lit ferait mentir la data et détruirait la garantie que `E1b` vient d'acheter — un bloc qui existe produit.
 
@@ -326,7 +352,7 @@ Les places de roster de l'habitation y sont entrées à `W1`, ce qui a sorti ce 
 | Récolter | +1 de la ressource du tag visé (`forest`, `stone`, `ore`) | rendement du bâtiment × piste Récolte | oui |
 | Chasser | +1 nourriture sur une case `forest` | — *(pas de bâtiment de chasse pour l'instant)* | oui |
 | Construire | — | avance un chantier d'un cran | oui |
-| Terraformer | monte ou descend une case d'un cran | — | oui |
+| Terraformer | monte **ou** descend d'un cran une case libre et **constructible**, sens choisi à la pose | — | oui |
 | S'entraîner | — | XP de la piste choisie, à la caserne | non |
 | Fabriquer | — | convertit des ressources, à l'atelier | non |
 | Explorer | — | envoie une expédition, au camp d'exploration | non |
@@ -337,7 +363,9 @@ Les places de roster de l'habitation y sont entrées à `W1`, ce qui a sorti ce 
 
 Ce qu'une action **fait** n'est pas dans `data/` non plus, et ne le sera pas : les sept verbes se résolvent chacun autrement, donc une *nature* d'action est du code de `src/domain/`. La carte porte son identité et son pool ; c'est tout ce que le deck consomme. Même règle qu'en 3.3 pour les bâtiments.
 
-*(Écrit à `D2`.)* Cette règle a tenu à l'épreuve : les quatre verbes MVP sont ciblés par un seul fichier de `src/domain/deck/`, qui est le seul endroit du projet où un identifiant de carte est écrit en dur. Leurs **chiffres**, eux, sont en data — quels tags chaque verbe exploite, ce qu'une case nue rend, combien d'ouvriers elle accepte —, et c'est cette séparation qui permet au résolveur d'Économie de n'avoir aucune liste de noms.
+*(Écrit à `D2`.)* Cette règle a tenu à l'épreuve : les quatre verbes MVP sont ciblés par un seul fichier de `src/domain/deck/`. Leurs **chiffres**, eux, sont en data — quels tags chaque verbe exploite, ce qu'une case nue rend, combien d'ouvriers elle accepte —, et c'est cette séparation qui permet au résolveur d'Économie de n'avoir aucune liste de noms.
+
+*(Corrigé à `I1`.)* `D2` ajoutait que ce fichier était « le seul endroit du projet où un identifiant de carte est écrit en dur ». Il y en a deux depuis que les verbes s'exécutent, et c'est juste : **où** un verbe se pose et **ce qu'il fait** sont deux questions, la seconde étant précisément celle que le paragraphe ci-dessus refuse de mettre en data. Ce que la phrase protégeait — que le résolveur d'Économie ne nomme personne — tient toujours. La garantie « un seul fichier » est remplacée par une plus forte, et vérifiée par un cas de test : **tout verbe que le ciblage accepte est soit productif selon `data/balance/`, soit exécuté par le résolveur de chantiers.** Aucun ne peut se poser, s'affecter et ne rien faire — ce qui était l'état de deux d'entre eux entre `D2` et `I1`.
 
 **La colonne « À cru » de la ligne *Récolter* n'a pas de cible pour `ore`.** *(Constaté à `D2`.)* La règle est écrite et la table de data la nomme, mais `data/terrain/` ne contient aucun terrain « filon » et la génération n'en pose pas — la palette de 3.1 s'arrête à la plaine, la forêt, le gisement, l'eau et le rocher. Le minerai ne s'obtient donc aujourd'hui qu'à la mine. Ce n'est pas un bug de ce jalon : c'est une ligne de 3.1 que `data/` n'a jamais reçue, et elle entrera avec le terrain, pas avec la carte.
 
@@ -409,7 +437,8 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 
 ### Intégration — `I`
 - **I0** ✅ — Squelette : projet, arborescence, autoloads, `EventBus`, `GameDatabase`.
-- **I1** — Boucle minimale : Terrain + Construction + Économie branchés, une journée en deux phases.
+- **I1** ✅ — **Boucle minimale.** `PhaseDef`, `DayCycle`, `RunState`, `SiteResolver`, `RunOrchestrator`, le bloc `run_balance`, et les trois rapports du run — `PlayResult`, `SiteReport`, `EveningReport`. `RunManager` cesse d'être la coquille de `I0`. Une journée en deux phases, en data, sans qu'un nom de phase existe dans le code. La **bourse au moment de bâtir** que 3.2 annonçait depuis `C1`, et l'**exécution** de *Construire* et *Terraformer* que `D2` avait laissée en attente. Trois `OUVERT` refermés : la piste que crédite un chantier *(3.2)*, le sens d'un terrassement et les terrains qu'il accepte *(3.5)*.
+  Le jalon touche **deux DTO de `contracts/`**, ce qui est rare et a été décidé avant d'écrire : le sens du terrassement voyage sur l'action posée et sur le verdict de ciblage. Les trois rapports neufs, eux, restent dans `domain/run/` — aucun second système du domaine ne les franchit, ce qui est l'argument que `PickResult` et `ProgressReport` portaient déjà.
 - **I2** — Boucle complète : Cartes + Effectifs + Combat bouchon, run jouable du début à la fin.
 - **I2b** — Playtest : arbitrage de la **structure de journée** (2.) et du sort de la main non jouée (3.5). Les deux se testent en échangeant un `.tres`.
 - **I3** — Passe de contenu et d'équilibrage, **arbitrage des `OUVERT`** restants.
@@ -424,6 +453,8 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 - **X4** — Powers : le troisième pool se remplit *(3.5)*.
 - **X5** — Ce qu'un palier de **niveau d'ouvrier** offre : le choix de compétence *(3.4)*. `W1` écrit l'accumulateur et les paliers, qui se gagnent et se lisent ; ce qu'ils débloquent est du contenu et de l'UI, et se décide devant un roster qui a vraiment vécu quinze jours.
 
-**Ordre suivant** — `I1`, qui a maintenant tout ce qu'il lui faut : la journée, la bourse au moment de poser un bâtiment, et l'exécution de *Construire* et *Terraformer* que `D2` a laissée à l'orchestrateur. `E1b` est passé avant `W1` parce qu'il touchait les `.tres` de bâtiments et que leur nombre a doublé ; `W1` a suivi parce qu'il était le dernier moment où `LaborForce` pouvait bouger sans douleur — elle n'a finalement pas bougé — et parce qu'il est le seul jalon qui rende le journal de travail de `E1` utile à quelque chose. `C4` est venu ensuite parce qu'il rouvrait ces mêmes `.tres` une dernière fois avant que les cartes n'arrivent, et parce que `D2` a besoin d'une cible pour *Construire* : sans chantier, cette carte n'aurait rien à avancer. `D1` a suivi sans surprise, étant le seul jalon qui ne dépende de rien — le `Deck` ne connaît ni la grille, ni la bourse, ni le roster.
+**Ordre suivant** — `F1`, le bouchon de combat, puis `I2`. `I1` a refermé la boucle sur tout ce qui existait ; ce qui manque désormais à un run jouable du début à la fin est un adversaire. `F1` est aussi le dernier système qui fera bouger un contrat — `CombatForce` et `DamageReport` —, et le faire avant `I2` évite de câbler deux fois. `E2` et `W2` peuvent s'intercaler à tout moment : ce sont des écrans, et le harnais de `I1` montre exactement ce qu'ils auront à remplacer.
+
+*(Historique.)* `E1b` est passé avant `W1` parce qu'il touchait les `.tres` de bâtiments et que leur nombre a doublé ; `W1` a suivi parce qu'il était le dernier moment où `LaborForce` pouvait bouger sans douleur — elle n'a finalement pas bougé — et parce qu'il est le seul jalon qui rende le journal de travail de `E1` utile à quelque chose. `C4` est venu ensuite parce qu'il rouvrait ces mêmes `.tres` une dernière fois avant que les cartes n'arrivent, et parce que `D2` a besoin d'une cible pour *Construire* : sans chantier, cette carte n'aurait rien à avancer. `D1` a suivi sans surprise, étant le seul jalon qui ne dépende de rien — le `Deck` ne connaît ni la grille, ni la bourse, ni le roster.
 
 Le jeu devient jouable à `I2`. Tout ce qui suit est de l'enrichissement.
