@@ -107,9 +107,9 @@ toujours ça, et non le rendu qui a changé — au moindre doute, `cmp` sur les 
 
 ## Les harnais qui n'affichent rien
 
-Tous les harnais ne dessinent pas. Les harnais **Économie** et **Effectifs** sont des
-rapports texte : ils impriment leurs tableaux sur la **sortie standard** en plus de
-l'écran, donc
+Tous les harnais ne dessinent pas. Les harnais **Économie**, **Effectifs** et
+**Cartes** sont des rapports texte : ils impriment leurs tableaux sur la **sortie
+standard** en plus de l'écran, donc
 
 ```bash
 "$GODOT_BIN" --headless --quit --path .
@@ -134,3 +134,14 @@ l'XP, et la main-d'œuvre est reprojetée avant le soir suivant — ce que
 vient de la produire, et son verdict répond à trois questions que les tests ne peuvent
 pas poser : au bout de combien de soirs un ouvrier devient bon, ce que la spécialisation
 rapporte une fois la troncature passée, et ce qu'une absence coûte.
+
+Le harnais **Cartes**, arrivé à `D1`, est le premier à mesurer sur un **échantillon de
+seeds** plutôt que sur un seul run. Sa table déroule huit phases lisibles — mains
+tirées, piles restantes, remélanges —, mais son verdict vient de deux cents seeds : au
+bout de combien de phases une main revoit la carte qu'on attend, et à quelle fréquence
+elle ne la voit pas du tout. Une fréquence lue sur un run ne dit rien, et c'est
+exactement le genre de chiffre qu'un test ne peut pas asserter sans figer un tirage.
+
+Il répond aussi à une question qu'aucune autre couche ne pose : ce qu'un draft coûte.
+Grossir son deck fait revenir chaque carte précise moins souvent, et le harnais le
+chiffre au lieu de le supposer.

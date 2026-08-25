@@ -4,6 +4,216 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-25 — `D1` : trois pools, un mélange qui ne triche pas, et ce qu'un draft coûte
+
+**État : terminé.** Cinq commits sur `feat/d1-deck`, tirée de `master` — la chaîne
+empilée de trois jalons s'arrête ici, `C4` ayant été fusionné entre-temps. Les trois
+commandes passent : boot sans erreur ni warning, tout `src/domain/` parse, **396 tests
+verts contre 324** à l'ouverture.
+
+La branche a de nouveau été créée **à l'orientation**, avant la première ligne. Quatre
+jalons d'affilée.
+
+### Ce qui a été livré
+
+- `CardData` et `DeckBalance` ; **seize `.tres`** dans `data/cards/` — les quatre
+  actions MVP de `DESIGN.md` 4.2 et une carte par bâtiment de 4.1 sauf le Cœur ; le
+  sixième bloc de `BalanceData`.
+- `CardCatalogue`, `CardShuffle`, `Deck`, `Hand`, `DraftPool`.
+- **Sept suites, 72 cas neufs.**
+- `GameDatabase` — `get_card()`, `list_card_ids()`, et deux contrôles de boot de plus.
+- `deck_harness.gd`, cinquième harnais, troisième en rapport texte.
+- `DESIGN.md` 3.5, 4.1, 4.2 et 8 ; `README.md`.
+
+### Deux arbitrages avant d'écrire
+
+**La colonne « Débloque » de 4.1 est reportée**, alors que ce même tableau l'annonçait
+pour `D1`. Les trois actions qu'elle concerne — *S'entraîner*, *Fabriquer*, *Explorer* —
+portent `MVP : non` en 4.2, et leurs systèmes sont `X1`, `X2`, `X3`. En les laissant hors
+du catalogue, il **n'y a rien à débloquer** : le champ n'aurait aucun lecteur et la
+requête « qu'est-ce qui est débloqué ? » serait une frontière que personne ne franchit —
+le motif exact qui a sorti `CombatForce` de `W1`. Le prix du report a été chiffré avant
+de le prendre : un champ sur `BuildingData`, trois `.tres` à rouvrir, une quatrième
+lecture de `CitySnapshot.completed()`. C'est peu, et `C4` a déjà laissé la porte ouverte.
+
+**Le pool est un `StringName` et non un `enum`**, contre la convention générale du
+projet — « `enum` plutôt que `String` pour les états ». Deux raisons se cumulent et
+l'emportent. Un `enum` non renseigné vaut 0, donc `&"action"` **en silence** : la
+doctrine du zéro perdrait sa prise sur le seul champ qui décide de tout le classement
+d'une carte, alors qu'un `&""` se détecte. Et un pool n'est pas un état en mémoire, c'est
+un identifiant écrit dans `data/`, où la convention est déjà le `StringName` — `&"wood"`,
+`&"harvest"`. L'ensemble reste fermé : `CardData.POOLS` le tient, et `missing_fields()`
+refuse tout ce qui n'y est pas.
+
+### La décision qui porte le jalon : le Deck ne décide de rien
+
+Il refuse deux choses, et ces deux refus sont le jalon.
+
+**Il ne juge aucune jouabilité.** `DESIGN.md` 3.5 dit qu'un jeu de carte est une
+*intention* que le système concerné accepte ou refuse. Le Deck ne connaît ni la grille,
+ni la bourse, ni le placement, et jouer une carte, vu d'ici, c'est l'appelant qui la
+défausse une fois la réponse obtenue. Il n'y a donc pas de verbe `play()` : `discard()`
+suffit, et il ne ment pas.
+
+**Il ne décide d'aucun moment.** Les trois tailles de main vivent dans `data/balance/`,
+et *quand* on pioche appartient à la journée, donc à `I1`. `discard_hand()` est une
+**capacité et non une politique** : rien dans le domaine ne dit qu'une phase se termine
+ainsi.
+
+Ce second refus est ce qui laisse entier l'`OUVERT` de 3.5 — le sort de la main non
+jouée. Un `Deck` qui aurait pris l'habitude de défausser tout seul en fin de phase aurait
+tranché la question sans que personne ne le décide, et la trancher dans du GDScript
+l'aurait rendue coûteuse à retester. Là, les deux réponses candidates s'essaieront en
+échangeant un `.tres`, ce qui est précisément la promesse de `data/balance/`.
+
+### Ce que le harnais a trouvé, et ce qu'il a fallu jeter
+
+Le harnais a produit un chiffre juste, un chiffre faux, et un chiffre inutile. Les trois
+méritent d'être consignés, parce que le tri entre les deux derniers est tout le travail.
+
+**Le chiffre faux.** La première version mesurait le cycle de la pioche en divisant les
+phases jouées par le nombre de remélanges, et sortait 2,7 phases là où le régime établi
+est 2. Les premières phases d'un run vident une pioche pleine sans jamais la recycler :
+les compter allonge le cycle d'un tiers. Un chiffre qui dépend de l'endroit où l'on
+commence à compter ne mesure rien. Corrigé en comptant l'écart entre deux remélanges
+successifs, ce qui donne 2,0.
+
+**Le chiffre inutile.** Une fois juste, il s'est révélé **muet** : il vaut deux phases
+que le pool d'actions en tienne dix ou quatorze, parce qu'une pioche qu'on vient de
+recharger garde toujours de quoi faire exactement une main de plus. Il dit quelque chose
+de vrai sur les piles et rien sur le jeu. Remplacé par la question que le design pose
+vraiment : au bout de combien de phases une main **revoit** la carte qu'on attend. Le
+remélange, lui, n'a pas disparu du rapport — il a sa colonne dans la table, où il se voit
+au lieu de se moyenner.
+
+**Le chiffre juste, et il répond à une question de design.** Sur deux cents seeds,
+7,8 % des phases n'offrent aucune carte *Construire* — la tension que `DESIGN.md` 3.2
+annonce quand il dit qu'un chantier qui attend est une vraie situation. Et surtout :
+après quatre drafts d'action pris au hasard dans l'offre, ce chiffre monte à **11,2 %**
+et le délai de retour de 1,07 à 1,11 phase. **Grossir son deck le rend moins fiable.**
+C'est le classique du deckbuilder, mais il est ici mesuré sur les chiffres réels de
+`data/` et non supposé, et il dit quelque chose que `I3` devra équilibrer : si drafter
+est une récompense, il faudra que ce qu'on gagne compense ce que la dilution coûte.
+
+Cinquième jalon d'affilée où le harnais dit quelque chose qu'aucune des trois commandes
+ne pouvait dire — et le premier où c'est un **échantillon** qui parle, pas un run. Une
+fréquence lue sur un seul seed n'aurait rien valu.
+
+### Ce que la commande 2 a rattrapé, et que la commande 1 n'a pas vu
+
+`CardShuffle` ne compilait pas — `var held := mixed[index]` sur un `Array` typé ne
+s'infère pas. Le boot est passé **sans un mot** : rien à ce moment-là ne chargeait le
+fichier, et son code de sortie valait 0. C'est exactement le piège que `CLAUDE.md`
+documente en disant que la commande 1 ne dit rien de la santé du projet, et la première
+fois qu'il se manifeste pour de vrai. Trois commandes, pas une.
+
+### Décisions
+
+**`CardShuffle` a son propre fichier, pour une seule fonction.** `Array.shuffle()` tire
+sur le RNG global de Godot et non sur celui du run : un deck mélangé par lui rendrait un
+même seed non rejouable, sans rien signaler. Le piège devait être évité à deux endroits —
+la pioche et l'offre de draft —, et une règle qu'on recopie est une règle qu'on oublie à
+la troisième occurrence. Un cas de test le garde en reseedant le générateur global entre
+deux mélanges et en exigeant le même ordre : c'est le seul cas qu'un `Array.shuffle()`
+échouerait, donc le seul qui protège vraiment.
+
+**Le RNG est un argument, jamais un membre.** Le Deck ne possède pas de flux d'aléatoire,
+il consomme celui du run. Un Deck qui garderait le sien serait un second flux à seeder,
+donc un second endroit où un run cesserait d'être rejouable. C'est le choix inverse de
+`TerrainGen`, qui prend un seed et le sale — et la différence se justifie : une
+génération est un tirage isolé qu'on ne veut pas corréler, une pioche est un événement du
+run comme un autre.
+
+**`create()` ne mélange pas.** Composer un deck reste sans aléatoire, donc assertable
+sans rng, et `shuffle(pool, rng)` est un geste public que l'ouverture d'un run fait sur
+les trois pools. Le risque assumé est qu'on l'oublie ; il est documenté, et il n'y aura
+qu'un seul appelant à `I1`.
+
+**Une carte draftée entre par la défausse.** Elle ne doit pas s'intercaler dans une
+pioche déjà entamée, ce qui la ferait passer devant des cartes qui attendaient leur tour
+depuis deux phases. Entre deux runs la question ne se pose pas, tout est recomposé.
+
+**`remove()` cherche dans un ordre fixé** — pioche, puis défausse, puis main. L'ordre est
+arbitraire, mais un retrait qui dépendrait de l'endroit où la carte se trouve ferait
+diverger deux runs partis du même seed.
+
+**Les tailles de main sont une table et non trois champs plats.** C'est ce qui rend le
+zéro du pool des powers écrivable *et* un pool oublié détectable : la présence de la clé
+vaut déclaration. Trois champs plats auraient rendu les deux situations indiscernables —
+même geste que le bloc nullable de `E1b`, appliqué à un dictionnaire.
+
+**`list_card_ids()` trie, et ça compte plus ici qu'ailleurs.** C'est dans cet ordre que
+le `CardCatalogue` reçoit les cartes, et c'est cet ordre que les offres de draft
+mélangent : un catalogue chargé dans l'ordre d'un `DirAccess` tirerait différemment d'une
+machine à l'autre sur le même seed.
+
+**Une carte de bâtiment nomme son bâtiment**, même quand c'est le même mot. Rien
+n'oblige une carte à porter le nom de ce qu'elle pose, et deux cartes qui poseraient la
+même ferme à des conditions différentes sont exactement ce qu'un draft de
+méta-progression fera. `missing_fields()` réclame le lien **dans les deux sens** : une
+carte de bâtiment sans bâtiment n'aurait rien à poser, une carte d'action qui en nommerait
+un ferait croire à un lien que rien ne suivra.
+
+### Ce qui reste
+
+Rien pour `D1`. Cinq choses volontairement laissées de côté :
+
+- **jouer une carte, et la jouabilité** — `D2`. Le Deck rend une intention ; qui
+  l'accepte n'existe pas encore.
+- **les trois actions non-MVP et la colonne « Débloque »** — `X1`, `X2`, `X3`, argumenté
+  plus haut.
+- **le pool des powers** — il existe, il est vide, il se pioche sans rien rendre. `X4`.
+- **le moment de piocher et de défausser** — `I1`, et c'est ce qui garde l'`OUVERT` de
+  3.5 ouvert.
+- **la récompense alternative d'un draft** — choix d'écran, il viendra avec l'écran.
+
+Et un constat de design neuf, à porter à `D2` — le seul de la session, et il est venu de
+la conversation et non du code. La ligne de 8 dit aujourd'hui que jouer une carte produit
+un `Assignment` — ouvrier → (action, cible) —, donc un geste **atomique**. Le flux
+réellement voulu en compte deux : on joue la carte **sur une cible**, ce qui crée une
+*action posée*, puis on y affecte **des** ouvriers. La différence n'est pas ergonomique.
+Si une carte valait un ouvrier, cartes et ouvriers se **doubleraient** — chaque action en
+consommant une de chaque, la contrainte réelle deviendrait `min(cartes, ouvriers)` — et
+c'est exactement ce que 3.4 refuse en disant « deux contraintes qui se croisent, et non
+deux ressources qui se doublent ». Il manque donc un objet de domaine entre la carte et
+l'ouvrier. `Assignment` ne changerait presque pas de forme — il associe déjà
+`ouvrier → clé`, et la clé cesserait de désigner un bâtiment pour désigner une action
+posée —, mais une question resterait franchement ouverte : **si deux actions posées
+visent la même cellule**, l'ancre `Vector2i` ne suffit plus comme clé. Rien n'a été écrit
+ni dans `DESIGN.md` ni dans le code : la question se tranchera à `D2`, avec la main à
+l'écran sous les yeux, et c'est le choix explicite de la session.
+
+Les reports de `W1` et `C4` tiennent tous : la troncature du rendement à `I3`, la trame
+d'ombre sur le dessus des boîtes qui est du travail Terrain, et la mise en commun des
+rapports texte des harnais — toujours sans jalon attitré, `_make_label()` en est
+maintenant à **six** exemplaires.
+
+### Prochain jalon
+
+**`D2`** — la main à l'écran, et la question ci-dessus tranchée : ce qu'une carte jouée
+crée, et à quoi un ouvrier s'affecte. `I1` ensuite.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'input
+ajoutée — le harnais Cartes ne lit pas le clavier.
+
+- `F5` lance le **harnais Cartes** : `HARNESS` vaut `&"deck"` dans
+  `scenes/dev/dev_boot.gd`. Il n'affiche rien en 3D — un rapport texte, également
+  imprimé sur la sortie standard, donc `godot --headless --quit --path .` suffit à le
+  lire. `&"city"`, `&"economy"`, `&"workforce"` et `&"terrain"` restent à un mot près.
+- **les chiffres du deck de départ sont à relire.** Dix cartes d'action — 4 *Récolter*,
+  3 *Construire*, 2 *Chasser*, 1 *Terraformer* — et six de bâtiment, mains de 5 et 2,
+  draft à 3 choix. Ce sont des hypothèses au même titre que les coûts de 4.1, et ce sont
+  elles que le verdict du harnais mesure : les changer change les deux pourcentages.
+- **dix-sept `.tres` neufs**, sans `uid://` — comme les treize bâtiments écrits à la main
+  avant eux. L'éditeur leur en ajoutera un la première fois qu'il les réenregistrera ;
+  c'est un diff à attendre, pas un problème. Les caches de classes et d'uid ont été
+  reconstruits pendant la session, et les `.gd.uid` des quinze scripts neufs — huit de
+  code, sept de tests — sont commités.
+
+---
+
 ## 2026-08-25 — `C4` : le chantier, ses deux lectures, et un contrôle par l'image
 
 **État : terminé.** Cinq commits sur `feat/c4-construction-sites`, tirée de

@@ -209,6 +209,8 @@ Le deck est réparti en **trois pools**, qui se piochent et se draftent séparé
 
 **Powers** — **`HORS MVP`.** Effets qui ne dépensent pas d'ouvriers : buffs de production ou de combat, apparition de ressources, coups d'éclat ponctuels. Le pool existe dès `D1`, vide, pour que rien dans le `Deck` ne suppose qu'il n'y a que deux natures de cartes.
 
+**Ce que `D1` a écrit, et ce qu'il a délibérément laissé ouvert.** Le `Deck` tient trois pioches, trois défausses et une main ; il pioche, défausse, remélange quand une pioche s'épuise, et drafte. Il ne juge **aucune** jouabilité — une intention se refuse ailleurs — et ne décide d'**aucun moment** : les trois tailles de main vivent dans `data/balance/`, et *quand* on pioche appartient à la journée, donc à `I1`. C'est ce qui laisse l'`OUVERT` ci-dessous entier plutôt que tranché par accident, et ce qui permettra d'en tester deux réponses en échangeant un `.tres`.
+
 #### Une action se joue à cru ou dans un bâtiment
 
 C'est la règle qui donne aux bâtiments leur raison d'être sans les rendre obligatoires.
@@ -287,7 +289,9 @@ La **palissade** est entrée par la pratique et non par le design : `C2` l'a cr�
 
 Les bonus d'adjacence ne sont pas dans cette table : ils viennent avec `C3`, qui décidera de leur forme avant de les chiffrer.
 
-**Ce que `data/` porte, et ce qu'il ne porte pas encore.** *(Constaté à `E1b`.)* Un champ arrive avec le système qui le lit : la colonne **Chantier** y est entrée à `C4`, **Déf.** et **PV** viendront à `F1`, **Débloque** à `D1`.
+**Ce que `data/` porte, et ce qu'il ne porte pas encore.** *(Constaté à `E1b`.)* Un champ arrive avec le système qui le lit : la colonne **Chantier** y est entrée à `C4`, **Déf.** et **PV** viendront à `F1`.
+
+**Débloque** était annoncée pour `D1` et n'y est pas entrée. *(Tranché à `D1`.)* Les trois actions qu'elle concerne — *S'entraîner*, *Fabriquer*, *Explorer* — sont marquées `MVP : non` en 4.2 et ne sont donc pas au catalogue de cartes ; un champ qui ne débloquerait rien serait une frontière que personne ne franchit, ce qui est exactement l'argument qui a sorti `CombatForce` de `W1`. Elle entrera avec `X3`, `X2` et `X1`, en même temps que les cartes qu'elle verrouille. Le coût du report est connu et faible : un champ sur `BuildingData`, trois `.tres` à rouvrir, et une lecture de plus sur `CitySnapshot.completed()` — qui a déjà trois consommateurs et la porte ouverte.
 
 Le « — » du Cœur dans la colonne Chantier est un **zéro**, comme son « posé au départ » dans la colonne Coût est un coût vide. C'est ce qui lui évite un chemin de pose particulier : un bâtiment qui ne réclame aucune action est achevé dès qu'il est posé, sans que rien n'ait à connaître le cas. Le prix assumé de ce choix est qu'un `build_actions` oublié dans un `.tres` vaut 0 et fait sauter le chantier en silence ; un cas de test exige donc qu'au moins un bâtiment de `data/` en déclare un, ce qui rattrape la disparition du format entier. *(Tranché à `C4`.)*
 
@@ -306,6 +310,10 @@ Les places de roster de l'habitation y sont entrées à `W1`, ce qui a sorti ce 
 | Explorer | — | envoie une expédition, au camp d'exploration | non |
 
 *Chasser* est la façon d'obtenir de la nourriture avant d'avoir une ferme : la version à cru d'un besoin qui devient ensuite un bâtiment. Un bâtiment de chasse pourra s'ajouter plus tard sans rien changer à la règle.
+
+**`data/cards/` ne contient que les quatre premières.** *(Écrit à `D1`.)* La colonne MVP n'est pas indicative : les trois dernières n'ont ni résolution, ni bâtiment pour les débloquer, et les écrire aujourd'hui reviendrait à mettre dans le deck des cartes injouables pour plusieurs jalons. Elles entrent avec `X1`, `X2` et `X3`, en même temps que la colonne **Débloque** de 4.1.
+
+Ce qu'une action **fait** n'est pas dans `data/` non plus, et ne le sera pas : les sept verbes se résolvent chacun autrement, donc une *nature* d'action est du code de `src/domain/`. La carte porte son identité et son pool ; c'est tout ce que le deck consomme. Même règle qu'en 3.3 pour les bâtiments.
 
 ---
 
@@ -364,7 +372,7 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 - **W2** — Panneau d'affectation, fiches d'unité, auto-affectation.
 
 ### Cartes — `D`
-- **D1** — `Deck`, `Hand`, les **trois pools**, défausse, remélange, draft, tests. Les actions sont de la data.
+- **D1** ✅ — `Deck`, `Hand`, `CardCatalogue`, `DraftPool`, les **trois pools**, défausse, remélange, draft, tests. Les cartes sont de la data : seize `.tres` dans `data/cards/`, les quatre actions MVP de 4.2 et une par bâtiment de 4.1 sauf le Cœur, qui est posé au départ. Le pool des powers existe et reste vide. La colonne **Débloque** n'y est pas entrée, voir 4.1. Le mélange est écrit à la main — `Array.shuffle()` tire sur le RNG global de Godot et non sur celui du run.
 - **D2** — Main à l'écran. Jouer une carte produit un `Assignment` — **ouvrier → (action, cible)** — à cru ou dans un slot.
 
 ### Combat — `F`
@@ -389,6 +397,6 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 - **X4** — Powers : le troisième pool se remplit *(3.5)*.
 - **X5** — Ce qu'un palier de **niveau d'ouvrier** offre : le choix de compétence *(3.4)*. `W1` écrit l'accumulateur et les paliers, qui se gagnent et se lisent ; ce qu'ils débloquent est du contenu et de l'UI, et se décide devant un roster qui a vraiment vécu quinze jours.
 
-**Ordre suivant** — `D1` et `D2`, puis `I1`. `E1b` est passé avant `W1` parce qu'il touchait les `.tres` de bâtiments et que leur nombre a doublé ; `W1` a suivi parce qu'il était le dernier moment où `LaborForce` pouvait bouger sans douleur — elle n'a finalement pas bougé — et parce qu'il est le seul jalon qui rende le journal de travail de `E1` utile à quelque chose. `C4` est venu ensuite parce qu'il rouvrait ces mêmes `.tres` une dernière fois avant que les cartes n'arrivent, et parce que `D2` a besoin d'une cible pour *Construire* : sans chantier, cette carte n'aurait rien à avancer.
+**Ordre suivant** — `D2`, puis `I1`. `E1b` est passé avant `W1` parce qu'il touchait les `.tres` de bâtiments et que leur nombre a doublé ; `W1` a suivi parce qu'il était le dernier moment où `LaborForce` pouvait bouger sans douleur — elle n'a finalement pas bougé — et parce qu'il est le seul jalon qui rende le journal de travail de `E1` utile à quelque chose. `C4` est venu ensuite parce qu'il rouvrait ces mêmes `.tres` une dernière fois avant que les cartes n'arrivent, et parce que `D2` a besoin d'une cible pour *Construire* : sans chantier, cette carte n'aurait rien à avancer. `D1` a suivi sans surprise, étant le seul jalon qui ne dépende de rien — le `Deck` ne connaît ni la grille, ni la bourse, ni le roster.
 
 Le jeu devient jouable à `I2`. Tout ce qui suit est de l'enrichissement.
