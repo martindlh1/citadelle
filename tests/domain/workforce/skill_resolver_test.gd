@@ -12,6 +12,10 @@ extends GdUnitTestSuite
 ## ça ne vient de data/balance/ — ces chiffres bougeront, la mécanique non.
 
 const HARVEST := &"harvest"
+
+## La carte qui met la piste de récolte au travail. Le même mot que la famille sans être
+## la même chose : l'une est une piste des Effectifs, l'autre un identifiant de data/cards/.
+const HARVEST_CARD := &"harvest"
 const CRAFT := &"craft"
 const WOOD := &"wood"
 const FOOD := &"food"
@@ -163,7 +167,7 @@ func _city() -> CitySnapshot:
 ## les Effectifs, et lui ajouter le ciblage lui demanderait un vrai relief pour rien.
 func _plan() -> ActionPlan:
 	var posted: Array[PlayedAction] = [
-		PlayedAction.create(HUT_ACTION, &"harvest", HUT, PlayedAction.Kind.BUILDING, 1)]
+		PlayedAction.create(HUT_ACTION, HARVEST_CARD, HUT, PlayedAction.Kind.BUILDING, 1)]
 	return ActionPlan.create(posted)
 
 func _at_the_hut(worker: StringName) -> Dictionary[StringName, int]:
@@ -185,6 +189,8 @@ func _actions() -> ActionBalance:
 	balance.bare_capacity = 1
 	balance.bare_yield = 1
 	balance.bare_skill_family = HARVEST
+	var slots: Array[StringName] = [HARVEST_CARD]
+	balance.slot_cards = slots
 	return balance
 
 func _stock() -> Dictionary[StringName, int]:

@@ -63,6 +63,26 @@ extends Resource
 ## lit jamais l'index. C'est `GameDatabase` qui les confronte au catalogue au démarrage.
 @export var bare_sources: Dictionary[StringName, Dictionary]
 
+## Cartes qui tiennent un **poste de production** quand elles sont jouées dans un
+## bâtiment.
+##
+## Le pendant exact de `bare_sources` pour l'autre lecture de DESIGN.md 3.5, et il existe
+## pour la même raison : que le résolveur sache ce qu'une action rapporte sans jamais
+## nommer une carte. Sans lui, il ne lui resterait qu'une question — « ce bâtiment
+## produit-il ? » —, et **toute** action posée sur une ferme achevée en tirerait une
+## récolte, *Construire* comprise. Le ciblage l'interdit aujourd'hui en refusant
+## *Construire* sur un bâtiment fini, mais faire reposer la justesse du soir sur une
+## règle écrite dans un autre fichier est exactement le genre de dette qui se paie le
+## jour où I1 avancera les chantiers pendant la résolution.
+##
+## Une carte absente ne tient aucun poste : c'est le cas de *Construire*, qui avance un
+## chantier, et de *Terraformer*, qui ne se joue pas dans un bâtiment du tout.
+@export var slot_cards: Array[StringName]
+
+## Cette carte tient-elle un poste de production dans un bâtiment ?
+func works_a_slot(card: StringName) -> bool:
+	return slot_cards.has(card)
+
 ## Cette carte se joue-t-elle à cru ?
 ##
 ## Une méthode plutôt qu'un `bare_sources.has(card)` recopié, du même motif que
@@ -91,6 +111,11 @@ func missing_fields() -> PackedStringArray:
 		missing.append("bare_yield")
 	if bare_skill_family.is_empty():
 		missing.append("bare_skill_family")
+	if slot_cards.is_empty():
+		missing.append("slot_cards")
+	for card in slot_cards:
+		if card.is_empty():
+			missing.append("slot_cards.blank")
 	missing.append_array(_source_fields())
 	return missing
 

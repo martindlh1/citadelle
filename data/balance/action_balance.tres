@@ -7,6 +7,7 @@ script = ExtResource("1_action_balance")
 bare_capacity = 1
 bare_yield = 1
 bare_skill_family = &"harvest"
+slot_cards = Array[StringName]([&"harvest"])
 bare_sources = Dictionary[StringName, Dictionary]({
 &"harvest": {
 &"forest": &"wood",

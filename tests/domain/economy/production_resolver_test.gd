@@ -23,10 +23,23 @@ const FOOD := &"food"
 const HARVEST := &"harvest"
 const HARVEST_CARD := &"harvest"
 
+const HUNT_CARD := &"hunt"
+
 const HUT := Vector2i(1, 1)
 const FARM := Vector2i(5, 5)
 const STORE := Vector2i(8, 8)
 const NOWHERE := Vector2i(20, 20)
+
+## Une forêt, et une plaine sans le moindre tag. Les cas « à cru » se jouent là.
+const WOODS := Vector2i(3, 1)
+const BARREN := Vector2i(4, 1)
+
+## Où les deux cas qui posent *Construire* installent leur chantier, loin des trois
+## bâtiments de la ville de travail.
+const SITE_CELL := Vector2i(6, 1)
+
+## Ce qu'un ouvrier tire d'une case nue, dans l'équilibrage de ce fichier.
+const BARE_YIELD := 1
 
 ## Capacité donnée à une action que le ciblage aurait refusée — une ancre vide, un
 ## entrepôt, un chantier. Large exprès : c'est ainsi que les cas qui les visent prouvent
@@ -159,6 +172,110 @@ func test_a_work_line_carries_the_family_of_its_building() -> void:
 	assert_str(line.family()).is_equal(HARVEST)
 	assert_vector(line.cell()).is_equal(HUT)
 	assert_str(line.worker()).is_equal(&"ana")
+
+# --- Les actions jouées à cru ---------------------------------------------------------
+
+## La seconde lecture de DESIGN.md 3.5, et la moitié qui n'avait aucun code avant D2.
+## Une case nue rend ce que son tag dicte, et beaucoup moins qu'un poste de bâtiment.
+func test_a_bare_harvest_yields_what_the_tag_dictates() -> void:
+	var report := _resolve_bare([_bare(1, HARVEST_CARD, WOODS)], [&"ana", 1],
+		_crew([&"ana"]))
+	assert_int(report.produced()[WOOD]).is_equal(BARE_YIELD)
+	assert_int(report.work().size()).is_equal(1)
+	assert_array(report.idle()).is_empty()
+
+## L'écart qui fait qu'on construit : la même carte, le même ouvrier, deux fois plus sur
+## un poste de cabane. Sans ce couple, « rend peu » ne voudrait rien dire.
+func test_the_same_card_yields_more_in_a_building_than_bare() -> void:
+	var bare := _resolve_bare([_bare(1, HARVEST_CARD, WOODS)], [&"ana", 1],
+		_crew([&"ana"]))
+	var slot := _resolve(_city, [&"ana", HUT], _crew([&"ana"]), Ledger.create(100))
+	assert_int(slot.produced()[WOOD]).is_greater(bare.produced()[WOOD])
+
+## Deux verbes sur la même forêt, chacun avec son ouvrier et sa ressource. C'est ce que
+## D2 achète en donnant une identité aux actions : tant que l'affectation désignait une
+## cellule, ces deux-là étaient indiscernables.
+func test_two_actions_on_the_same_cell_both_resolve() -> void:
+	var report := _resolve_bare(
+		[_bare(1, HARVEST_CARD, WOODS), _bare(2, HUNT_CARD, WOODS)],
+		[&"ana", 1, &"bo", 2], _crew([&"ana", &"bo"]))
+	assert_int(report.produced()[WOOD]).is_equal(BARE_YIELD)
+	assert_int(report.produced()[FOOD]).is_equal(BARE_YIELD)
+	assert_int(report.work().size()).is_equal(2)
+
+## La ligne porte la famille des actions à cru, celle de data/balance/, et sa cellule est
+## la case nue. C'est par elle que les Effectifs sauront quoi créditer.
+func test_a_bare_work_line_carries_the_bare_family_and_its_cell() -> void:
+	var report := _resolve_bare([_bare(1, HARVEST_CARD, WOODS)], [&"ana", 1],
+		_crew([&"ana"]))
+	var line := report.work()[0]
+	assert_str(line.family()).is_equal(HARVEST)
+	assert_vector(line.cell()).is_equal(WOODS)
+
+func test_a_skilled_worker_produces_more_bare_too() -> void:
+	var report := _resolve_bare([_bare(1, HARVEST_CARD, WOODS)], [&"ana", 1],
+		_skilled_crew(&"ana", 3.0))
+	assert_int(report.produced()[WOOD]).is_equal(3 * BARE_YIELD)
+
+## Le ciblage refuserait cette pose, et le résolveur n'en dépend pas : une action dont la
+## cible a perdu son tag ne rend rien plutôt que de verser une ressource vide.
+func test_a_bare_action_on_an_untagged_cell_yields_nothing() -> void:
+	var report := _resolve_bare([_bare(1, HARVEST_CARD, BARREN)], [&"ana", 1],
+		_crew([&"ana"]))
+	assert_dict(report.produced()).is_empty()
+	assert_array(report.idle()).contains_exactly([&"ana"])
+
+## Le périmètre assumé de D2, et il vaut mieux qu'un test le dise qu'un commentaire :
+## *Construire* et *Terraformer* se posent et s'affectent, et ne produisent rien tant que
+## I1 ne les exécute pas. Leurs ouvriers comptent comme oisifs.
+##
+## Les deux sont écartés pour des raisons **structurelles** et non par leur nom, et le
+## cas les met chacune sous la bonne : *Terraformer* vise une forêt parfaitement
+## récoltable et ne rend rien parce que data/balance/ ne lui donne aucune table ;
+## *Construire* vise un vrai chantier, sur un bâtiment qui produira très bien une fois
+## fini, et ne rend rien parce qu'il n'est pas achevé. Sans cette précision, tous deux
+## passeraient aussi bien en visant dans le vide.
+func test_build_and_terraform_are_posted_but_yield_nothing_yet() -> void:
+	var city := _city_at(_site(_farm, 2), SITE_CELL, 1)
+	var report := ProductionResolver.resolve(_terrain(), city, ActionPlan.create([
+			_bare(1, &"terraform", WOODS),
+			PlayedAction.create(2, &"build", SITE_CELL, PlayedAction.Kind.BUILDING, 1)]),
+		_on([&"ana", 1, &"bo", 2]), _crew([&"ana", &"bo"]), Ledger.create(100),
+		_balance, _actions())
+	assert_dict(report.produced()).is_empty()
+	assert_array(report.work()).is_empty()
+	assert_array(report.idle()).contains_exactly([&"ana", &"bo"])
+
+## Son jumeau, et il est indispensable : le cas ci-dessus passerait tout aussi bien si
+## plus rien ne produisait jamais. Le même chantier achevé, la même cellule, mais une
+## carte *Récolter* — et cette fois le soir paie.
+func test_the_same_site_finished_pays_a_harvest_but_still_not_a_build() -> void:
+	var city := _city_at(_site(_farm, 2), SITE_CELL, 2)
+	var harvest := ProductionResolver.resolve(_terrain(), city, ActionPlan.create([
+			PlayedAction.create(1, HARVEST_CARD, SITE_CELL,
+				PlayedAction.Kind.BUILDING, 1)]),
+		_on([&"ana", 1]), _crew([&"ana"]), Ledger.create(100), _balance, _actions())
+	assert_int(harvest.produced()[FOOD]).is_equal(3)
+	var build := ProductionResolver.resolve(_terrain(), city, ActionPlan.create([
+			PlayedAction.create(1, &"build", SITE_CELL, PlayedAction.Kind.BUILDING, 1)]),
+		_on([&"ana", 1]), _crew([&"ana"]), Ledger.create(100), _balance, _actions())
+	assert_dict(build.produced()).is_empty()
+
+## Une action retirée après qu'on y a mis quelqu'un. L'affectation lui survit, ne
+## désigne plus rien, et son ouvrier chôme sans que rien ne casse.
+func test_an_assignment_naming_a_withdrawn_action_leaves_its_worker_idle() -> void:
+	var report := _resolve_bare([_bare(1, HARVEST_CARD, WOODS)], [&"ana", 9],
+		_crew([&"ana"]))
+	assert_dict(report.produced()).is_empty()
+	assert_array(report.idle()).contains_exactly([&"ana"])
+
+## La capacité voyage figée sur l'action, et c'est elle qui plafonne — pas une relecture
+## de la ville. Deux ouvriers sur une case nue qui n'en accepte qu'un : le second chôme.
+func test_the_frozen_capacity_of_a_bare_action_caps_it() -> void:
+	var report := _resolve_bare([_bare(1, HARVEST_CARD, WOODS)],
+		[&"ana", 1, &"bo", 1], _crew([&"ana", &"bo"]))
+	assert_int(report.produced()[WOOD]).is_equal(BARE_YIELD)
+	assert_array(report.idle()).contains_exactly([&"bo"])
 
 func test_the_harvest_enters_the_reserve() -> void:
 	var ledger := Ledger.create(100)
@@ -302,23 +419,66 @@ func _assign(city: CitySnapshot, played: Array) -> Assignment:
 		index += 2
 	return Assignment.create(table)
 
-## Un relief quelconque, plat et constructible.
+## Résout un soir dont les actions sont données telles quelles, avec leurs ouvriers.
 ##
-## Aucun de ces cas ne joue à cru — ils visent tous un bâtiment —, mais le résolveur
-## réclame le contrat Terrain depuis que la seconde lecture de DESIGN.md 3.5 existe.
+## Les cas « à cru » ont besoin de nommer la carte et la nature de chaque action, ce que
+## la liste plate de _resolve() ne permet pas — elle ne pose que des récoltes en slot. Ils
+## passent donc par ici, et la ville qu'ils voient est vide : rien de ce qu'ils testent
+## n'est bâti.
+func _resolve_bare(posted: Array, workers: Array,
+		labor: LaborForce) -> ProductionReport:
+	var actions: Array[PlayedAction] = []
+	actions.assign(posted)
+	return ProductionResolver.resolve(_terrain(), CitySnapshot.empty(),
+		ActionPlan.create(actions), _on(workers), labor, Ledger.create(100),
+		_balance, _actions())
+
+## Une action posée sur une case nue.
+func _bare(id: int, card: StringName, cell: Vector2i) -> PlayedAction:
+	return PlayedAction.create(id, card, cell, PlayedAction.Kind.BARE, 1)
+
+## Affectation depuis une liste plate — [ouvrier, action, ouvrier, action].
+func _on(flat: Array) -> Assignment:
+	var table: Dictionary[StringName, int] = {}
+	var index := 0
+	while index < flat.size():
+		table[flat[index]] = flat[index + 1]
+		index += 2
+	return Assignment.create(table)
+
+## Un relief plat et constructible, avec une forêt en (3, 1) et rien de taggé en (4, 1).
+##
+## Les cas « en slot » n'en lisent jamais les tags — ils visent un bâtiment —, mais le
+## résolveur réclame le contrat Terrain depuis que la seconde lecture de DESIGN.md 3.5
+## existe, et les cas « à cru » ont besoin d'une cellule qui rend et d'une qui ne rend
+## rien.
 func _terrain() -> TerrainQuery:
 	var plain := TerrainData.new()
 	plain.id = &"plain"
 	plain.build = TerrainData.Build.ALLOWED
-	return HeightGrid.create(Vector2i(24, 24), 0, plain).to_query()
+	var forest := TerrainData.new()
+	forest.id = &"forest"
+	forest.build = TerrainData.Build.ALLOWED
+	var tags: Array[StringName] = [&"forest"]
+	forest.tags = tags
+	var grid := HeightGrid.create(Vector2i(24, 24), 0, plain)
+	grid.set_terrain(WOODS, forest)
+	return grid.to_query()
 
-## Équilibrage des actions à cru, sans aucune table de sources : aucun cas de ce
-## fichier ne joue à cru, et lui en donner une ferait croire le contraire.
+## Équilibrage des actions à cru : la forêt rend du bois à *Récolter* et de la nourriture
+## à *Chasser*. *Terraformer* n'a pas de table, et c'est par là qu'il sort de la
+## production sans que le résolveur ait à le nommer.
 func _actions() -> ActionBalance:
 	var balance := ActionBalance.new()
 	balance.bare_capacity = 1
-	balance.bare_yield = 1
+	balance.bare_yield = BARE_YIELD
 	balance.bare_skill_family = HARVEST
+	var slots: Array[StringName] = [HARVEST_CARD]
+	balance.slot_cards = slots
+	var sources: Dictionary[StringName, Dictionary] = {}
+	sources[HARVEST_CARD] = {&"forest": WOOD}
+	sources[HUNT_CARD] = {&"forest": FOOD}
+	balance.bare_sources = sources
 	return balance
 
 ## Un bâtiment de travail. `slots` à 0 le laisse **sans bloc de production**, ce qui

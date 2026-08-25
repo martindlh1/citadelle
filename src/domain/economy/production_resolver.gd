@@ -154,14 +154,24 @@ static func _produce(terrain: TerrainQuery, city: CitySnapshot, plan: ActionPlan
 ## Le seul juge de « cette action rapporte-t-elle quelque chose ». La question est posée
 ## ici et nulle part ailleurs, et sa réponse vaut pour les deux passes.
 ##
-## Aucun nom de carte n'apparaît, et c'est le point. *Construire* est écarté parce qu'un
-## chantier n'est pas achevé — le ciblage lui interdit toute autre cible —, et
-## *Terraformer* parce que data/balance/ ne lui donne aucune table de sources. Les deux
-## sont ignorés pour des raisons **structurelles**, de sorte qu'un cinquième verbe entre
-## sans qu'on ait à venir l'exclure d'une liste.
+## Aucun nom de carte n'apparaît, et c'est le point. Les deux lectures de DESIGN.md 3.5
+## posent chacune leur question à data/balance/ : « cette carte tient-elle un poste ? »
+## dans un bâtiment, « cette carte tire-t-elle quelque chose de ce tag ? » à cru.
+## *Construire* et *Terraformer* répondent non aux deux, donc sortent de la production
+## sans être nommés, et un cinquième verbe entre sans qu'on ait à venir l'exclure d'une
+## liste.
+##
+## La première des deux questions n'était pas là d'abord, et son absence était un piège :
+## il ne restait alors que « ce bâtiment produit-il ? », si bien que **toute** action
+## posée sur une ferme achevée en aurait tiré une récolte, *Construire* comprise. Le
+## ciblage l'interdit — il refuse *Construire* sur un bâtiment fini —, mais faire reposer
+## la justesse du soir sur une règle écrite dans un autre système est la dette que I1
+## aurait payée en avançant les chantiers pendant la résolution.
 static func _family_of(action: PlayedAction, terrain: TerrainQuery, city: CitySnapshot,
 		actions: ActionBalance) -> StringName:
 	if action.is_on_building():
+		if not actions.works_a_slot(action.card()):
+			return &""
 		var building := city.at_anchor(action.target())
 		if building == null:
 			return &""
