@@ -14,25 +14,14 @@ extends Node
 ##
 ## Caméra : Q et E tournent, la molette zoome, les flèches ou WASD et le clic milieu
 ## déplacent, R recadre.
+##
+## Le ciel, le soleil, la caméra, le rendu du relief et le survol sont montés par
+## DevWorld depuis C2 : le harnais Construction en avait besoin à l'identique, et un
+## soleil réglé une fois ne doit pas exister en double. Ne reste ici que ce qui est
+## propre au Terrain — les décomptes, le seed, la capture et sa sonde.
 
 ## Seed de départ. Espace donne FIRST_SEED + 1, puis + 2, etc.
 const FIRST_SEED := 1234
-
-## Argument de ligne de commande qui déclenche une capture puis quitte.
-const SHOT_FLAG := "--shot"
-
-## Argument optionnel : nombre de quarts de tour à appliquer avant de capturer.
-## C'est ce qui rend la rotation de la caméra vérifiable depuis un terminal.
-const SHOT_TURNS_FLAG := "--shot-turns"
-
-## Argument optionnel « x,y » : cellule à désigner avant de capturer. Sans lui, la
-## capture vise le centre de la carte — jamais rien, parce qu'une capture qui ne
-## montre pas la surbrillance ne prouve rien à son sujet.
-const SHOT_HOVER_FLAG := "--shot-hover"
-
-## Images laissées passer avant une capture. La première ne porte encore ni le tampon
-## d'instances téléversé ni la lumière, et rendrait un cadre vide.
-const SHOT_WARMUP_FRAMES := 3
 
 ## Marge du rapport, en pixels.
 const REPORT_MARGIN := 16.0
@@ -47,36 +36,13 @@ const REPORT_OUTLINE_SIZE := 4
 ## Largeur de l'histogramme des altitudes, en caractères.
 const HISTOGRAM_WIDTH := 30
 
-## Fond de la vue, au-delà de la carte.
-const SKY_COLOR := Color(0.09, 0.11, 0.14)
-
-## Lumière ambiante. Sans elle les flancs à l'ombre tombent au noir et le relief se
-## lit comme des trous plutôt que comme des marches.
-const AMBIENT_COLOR := Color(0.45, 0.52, 0.62)
-const AMBIENT_ENERGY := 0.55
-
-## Orientation du soleil. Volontairement décalée de l'axe de la caméra : c'est ce
-## décalage qui donne aux quatre flancs d'une colonne quatre valeurs différentes, donc
-## au relief son volume. Un éclairage frontal aplatirait tout.
-const SUN_ROTATION_DEGREES := Vector3(-52.0, -125.0, 0.0)
-const SUN_ENERGY := 1.15
-
-## Marge de portée des ombres au-delà du recul du rig. Elle doit couvrir la moitié
-## arrière de ce que la caméra voit au zoom le plus large ; en dessous, le fond de la
-## carte perd son ombre, au-dessus chaque texel de la carte d'ombre couvre plus de
-## monde pour rien et tout se floute.
-const SUN_SHADOW_MARGIN := 60.0
-
 ## Rappel des touches, en pied du rapport. Constante parce que le rapport se
 ## reconstruit à chaque image depuis que le survol y figure.
 const CONTROLS := """Espace : seed suivant.   Q/E : tourner.   Molette : zoom.
 Flèches ou WASD, clic milieu : déplacer.   R : recadrer."""
 
 var _metrics: TerrainMetrics
-var _renderer: TerrainRenderer
-var _decor: Array[TerrainDecorRenderer] = []
-var _rig: CameraRig
-var _cursor: CellCursor
+var _world: DevWorld
 var _label: Label
 var _grid: HeightGrid
 var _report_body: String
@@ -85,19 +51,9 @@ var _seed := FIRST_SEED
 func _ready() -> void:
 	var balance := GameDatabase.get_balance()
 	_metrics = TerrainMetrics.from_balance(balance.terrain)
-	add_child(_make_environment())
-	add_child(_make_sun())
 	var grid := _generate(FIRST_SEED)
-	_renderer = TerrainRenderer.create(grid, _metrics)
-	add_child(_renderer)
-	_decor = TerrainDecorRenderer.create_all(_palette(), _metrics)
-	for decor_pass in _decor:
-		add_child(decor_pass)
-	_rig = CameraRig.create(balance.camera)
-	add_child(_rig)
-	_rig.frame(_metrics.world_center(grid.size()), _metrics.world_extent(grid.size()))
-	_cursor = CellCursor.create(grid, _metrics, _rig.get_camera())
-	add_child(_cursor)
+	_world = DevWorld.create(grid, _metrics, balance)
+	add_child(_world)
 	_label = _make_label()
 	add_child(_label)
 	_show(grid)
@@ -116,25 +72,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	_show(_generate(_seed + 1))
 	get_viewport().set_input_as_handled()
 
-## Montre cette grille : le sol, ses décorations, et le survol qui la désigne.
+## Montre cette grille : le plateau la redessine, le harnais réécrit son rapport.
 func _show(grid: HeightGrid) -> void:
 	_grid = grid
-	_renderer.rebuild(grid)
-	for decor_pass in _decor:
-		decor_pass.rebuild(grid)
-	_cursor.set_grid(grid)
+	_world.show_grid(grid)
 	_publish(grid)
-
-## Tous les terrains connus, décorés ou non.
-##
-## Les passes de décoration se construisent sur la palette et non sur la grille : un
-## seed qui ne sortirait aucun rocher ne doit pas supprimer la passe des rochers, que
-## le seed suivant remplirait.
-func _palette() -> Array[TerrainData]:
-	var terrains: Array[TerrainData] = []
-	for id in GameDatabase.list_terrain_ids():
-		terrains.append(GameDatabase.get_terrain(id))
-	return terrains
 
 func _generate(new_seed: int) -> HeightGrid:
 	_seed = new_seed
@@ -163,7 +105,7 @@ func _report(grid: HeightGrid) -> String:
 ## si le picker raconte la même histoire que ce qui est à l'écran. Un décalage d'une
 ## cellule entre la marque et ces coordonnées se lit tout de suite.
 func _hover_line() -> String:
-	var result := _cursor.hovered()
+	var result := _world.cursor().hovered()
 	if not result.is_hit():
 		return "Survol : —"
 	var cell := result.cell()
@@ -229,21 +171,21 @@ func _sorted_names(keys: Array) -> Array[StringName]:
 ## vérifier T2 depuis un terminal. Les arguments passés après -- sont ceux du jeu et
 ## non du moteur, d'où get_cmdline_user_args().
 func _capture_if_asked() -> void:
-	var path := _shot_path()
+	var path := DevShot.path()
 	if path.is_empty():
 		return
 	# La souris est à (0, 0) dans une session pilotée en ligne de commande, donc le
 	# survol réel tomberait hors de la carte. On coupe l'input du curseur et on désigne
 	# une cellule à la main : sans ça, aucune capture ne montrerait la surbrillance, et
 	# c'est justement ce qu'on cherche à regarder.
-	_cursor.input_enabled = false
-	_cursor.hover_cell(_shot_hover_cell(_shot_argument(SHOT_HOVER_FLAG)))
-	var turns := _shot_argument(SHOT_TURNS_FLAG).to_int()
+	_world.cursor().input_enabled = false
+	_world.cursor().hover_cell(DevShot.hover_cell(_grid.size() / 2))
+	var turns := DevShot.argument(DevShot.SHOT_TURNS_FLAG).to_int()
 	if turns != 0:
-		_rig.rotate_steps(turns)
+		_world.rig().rotate_steps(turns)
 		var seconds: float = GameDatabase.get_balance().camera.rotation_seconds
 		await get_tree().create_timer(seconds).timeout
-	for _frame in SHOT_WARMUP_FRAMES:
+	for _frame in DevShot.WARMUP_FRAMES:
 		await get_tree().process_frame
 	_probe_camera_ray()
 	var error := get_viewport().get_texture().get_image().save_png(path)
@@ -261,11 +203,16 @@ func _capture_if_asked() -> void:
 ## depuis cette position d'écran exactement comme le ferait la souris. Les deux doivent
 ## tomber sur la même cellule.
 func _probe_camera_ray() -> void:
-	var expected := _cursor.hovered()
+	var expected := _world.cursor().hovered()
 	if not expected.is_hit():
 		print("[terrain_harness] sonde caméra : rien de survolé, contrôle sauté")
 		return
-	var camera := _rig.get_camera()
+	var camera := _world.rig().get_camera()
+	# Le zoom et le viewport en toutes lettres : sans eux, deux captures d'apparence
+	# différente ne se départagent pas — un cadrage qui a bougé et une fenêtre qui a
+	# changé de taille produisent la même impression à l'oeil.
+	print("[terrain_harness] cadrage : camera.size = %.3f, viewport = %s"
+		% [camera.size, get_viewport().get_visible_rect().size])
 	var screen := camera.unproject_position(expected.position())
 	var probed := CellPicker.pick(_grid, _metrics,
 		camera.project_ray_origin(screen), camera.project_ray_normal(screen))
@@ -273,61 +220,6 @@ func _probe_camera_ray() -> void:
 	var agreed := probed.is_hit() and probed.cell() == expected.cell()
 	print("[terrain_harness] sonde caméra : écran %s -> %s, attendu %s : %s"
 		% [screen.round(), landed, expected.cell(), "OK" if agreed else "DÉSACCORD"])
-
-func _shot_path() -> String:
-	return _shot_argument(SHOT_FLAG)
-
-## Cellule à désigner sur une capture, lue en « x,y ». Le centre de la carte à défaut,
-## et aussi sur un argument mal formé : une capture doit montrer quelque chose plutôt
-## que d'échouer sur une virgule.
-func _shot_hover_cell(argument: String) -> Vector2i:
-	var middle := _grid.size() / 2
-	if argument.is_empty():
-		return middle
-	var parts := argument.split(",")
-	if parts.size() != 2:
-		return middle
-	return Vector2i(parts[0].to_int(), parts[1].to_int())
-
-## Valeur qui suit ce drapeau sur la ligne de commande, ou "" s'il est absent.
-func _shot_argument(flag: String) -> String:
-	var args := OS.get_cmdline_user_args()
-	var index := args.find(flag)
-	if index < 0 or index + 1 >= args.size():
-		return ""
-	return args[index + 1]
-
-func _make_environment() -> WorldEnvironment:
-	var environment := Environment.new()
-	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = SKY_COLOR
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = AMBIENT_COLOR
-	environment.ambient_light_energy = AMBIENT_ENERGY
-	var node := WorldEnvironment.new()
-	node.name = "Environment"
-	node.environment = environment
-	return node
-
-func _make_sun() -> DirectionalLight3D:
-	var sun := DirectionalLight3D.new()
-	sun.name = "Sun"
-	sun.rotation_degrees = SUN_ROTATION_DEGREES
-	sun.light_energy = SUN_ENERGY
-	sun.shadow_enabled = true
-	# Une seule carte d'ombre, pas de cascades.
-	#
-	# Le défaut de Godot en découpe quatre selon la profondeur, chacune à une
-	# résolution différente et sans fondu entre elles. Sous une caméra orthogonale la
-	# profondeur croît linéairement du bas vers le haut de l'écran : ces frontières
-	# deviennent des lignes horizontales FIXES à l'écran, nettes d'un côté et floues de
-	# l'autre, que le terrain traverse quand on déplace la vue. Les cascades servent à
-	# couvrir un horizon lointain ; ici la scène est bornée et tient dans une carte.
-	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
-	# Serrer la portée sur ce que la caméra voit réellement : la même carte d'ombre
-	# étalée sur 400 unités au lieu de 180 divise par deux et demi sa densité de texels.
-	sun.directional_shadow_max_distance = CameraRig.ORBIT_DISTANCE + SUN_SHADOW_MARGIN
-	return sun
 
 func _make_label() -> Label:
 	var label := Label.new()

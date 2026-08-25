@@ -16,6 +16,9 @@ extends Resource
 ## Caméra isométrique : zoom, pan, rotation, cadrage.
 @export var camera: CameraBalance
 
+## Économie : réserve commune, upkeep, stock d'ouverture.
+@export var economy: EconomyBalance
+
 ## Champs non renseignés de tous les blocs, préfixés du nom de leur bloc.
 ## Vide = équilibrage exploitable. Vérifié au boot par GameDatabase.
 ##
@@ -40,4 +43,9 @@ func missing_fields() -> PackedStringArray:
 	else:
 		for field in camera.missing_fields():
 			missing.append("camera.%s" % field)
+	if economy == null:
+		missing.append("economy")
+	else:
+		for field in economy.missing_fields():
+			missing.append("economy.%s" % field)
 	return missing

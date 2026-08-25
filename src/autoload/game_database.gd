@@ -11,6 +11,8 @@ extends Node
 const DATA_ROOT := "res://data"
 const CATEGORY_BALANCE := &"balance"
 const CATEGORY_TERRAIN := &"terrain"
+const CATEGORY_BUILDINGS := &"buildings"
+const CATEGORY_COMMODITIES := &"commodities"
 const ID_BALANCE := &"balance"
 
 ## Catégorie -> (identifiant -> Resource).
@@ -21,6 +23,9 @@ func _ready() -> void:
 	_scan(DATA_ROOT)
 	_assert_balance_is_complete()
 	_assert_terrain_is_complete()
+	_assert_buildings_are_complete()
+	_assert_commodities_are_complete()
+	_assert_resources_are_known()
 	EventBus.database_ready.emit.call_deferred()
 
 ## Racine de l'équilibrage. Jamais null une fois le boot passé.
@@ -34,6 +39,22 @@ func get_terrain(id: StringName) -> TerrainData:
 ## Identifiants de terrain connus, triés.
 func list_terrain_ids() -> Array[StringName]:
 	return list_ids(CATEGORY_TERRAIN)
+
+## Bâtiment indexé, ou null si l'identifiant est inconnu.
+func get_building(id: StringName) -> BuildingData:
+	return get_resource(CATEGORY_BUILDINGS, id) as BuildingData
+
+## Identifiants de bâtiment connus, triés.
+func list_building_ids() -> Array[StringName]:
+	return list_ids(CATEGORY_BUILDINGS)
+
+## Ressource indexée, ou null si l'identifiant est inconnu.
+func get_commodity(id: StringName) -> CommodityData:
+	return get_resource(CATEGORY_COMMODITIES, id) as CommodityData
+
+## Identifiants de ressource connus, triés.
+func list_commodity_ids() -> Array[StringName]:
+	return list_ids(CATEGORY_COMMODITIES)
 
 ## Resource indexée, ou null si la paire (catégorie, identifiant) est inconnue.
 func get_resource(category: StringName, id: StringName) -> Resource:
@@ -77,6 +98,76 @@ func _assert_terrain_is_complete() -> void:
 		var missing := terrain.missing_fields()
 		assert(missing.is_empty(),
 			"champs non renseignés dans data/terrain/%s.tres : %s" % [id, ", ".join(missing)])
+
+## Et sur les bâtiments : une empreinte vide, sans son ancre ou nommant deux fois la
+## même cellule se charge sans erreur et ne casse qu'au moment de poser. La rattraper
+## au boot vaut mieux que de la découvrir sous le curseur.
+##
+## Troisième copie de la même boucle, comme BalanceData recopie l'agrégation de ses
+## blocs : il n'existe pas de classe parente commune aux Resource de src/schema/, et
+## passer par une Resource nue pour appeler missing_fields() rendrait l'appel non
+## typé. Le jour où il y aura six catégories, une base commune vaudra le coup.
+func _assert_buildings_are_complete() -> void:
+	for id in list_building_ids():
+		var building := get_building(id)
+		assert(building != null, "data/buildings/%s.tres n'est pas un BuildingData" % id)
+		if building == null:
+			continue
+		var missing := building.missing_fields()
+		assert(missing.is_empty(),
+			"champs non renseignés dans data/buildings/%s.tres : %s" % [id, ", ".join(missing)])
+
+## Et sur les ressources : sans libellé ni couleur, le HUD n'aurait rien à afficher.
+##
+## Quatrième copie de la même boucle. Le seuil annoncé à C1 — « le jour où il y aura
+## six catégories, une base commune vaudra le coup » — se rapproche, mais l'écrire
+## maintenant reviendrait à passer par une Resource nue pour appeler missing_fields(),
+## donc à perdre le typage sur les quatre.
+func _assert_commodities_are_complete() -> void:
+	for id in list_commodity_ids():
+		var commodity := get_commodity(id)
+		assert(commodity != null, "data/commodities/%s.tres n'est pas une CommodityData" % id)
+		if commodity == null:
+			continue
+		var missing := commodity.missing_fields()
+		assert(missing.is_empty(),
+			"champs non renseignés dans data/commodities/%s.tres : %s"
+				% [id, ", ".join(missing)])
+
+## Les identifiants de ressource nommés ailleurs existent-ils dans le catalogue ?
+##
+## C'est le seul contrôle que les Resource de src/schema/ ne peuvent pas faire
+## elles-mêmes : ni une BuildingData ni une EconomyBalance ne lit l'index, et c'est
+## très bien ainsi. Sans lui, un &"wodo" dans un coût créerait une ressource fantôme
+## qui se stockerait, ne s'achèterait jamais et ne s'afficherait nulle part.
+func _assert_resources_are_known() -> void:
+	var known := list_commodity_ids()
+	if known.is_empty():
+		return
+	var balance := get_balance()
+	if balance != null and balance.economy != null:
+		_assert_known(known, balance.economy.upkeep_resource,
+			"balance/economy_balance.tres → upkeep_resource")
+		for resource in balance.economy.starting_stock:
+			_assert_known(known, resource, "balance/economy_balance.tres → starting_stock")
+	for id in list_building_ids():
+		var building := get_building(id)
+		if building == null:
+			continue
+		for resource in building.cost:
+			_assert_known(known, resource, "buildings/%s.tres → cost" % id)
+		for resource in building.yield_per_slot:
+			_assert_known(known, resource, "buildings/%s.tres → yield_per_slot" % id)
+
+## Cette ressource figure-t-elle au catalogue ?
+func _assert_known(known: Array[StringName], resource: StringName, where: String) -> void:
+	if known.has(resource):
+		return
+	var catalogue := PackedStringArray()
+	for id in known:
+		catalogue.append(String(id))
+	assert(false, "ressource inconnue « %s » dans data/%s — le catalogue contient : %s"
+		% [resource, where, ", ".join(catalogue)])
 
 ## Trie des StringName par leur texte.
 ##

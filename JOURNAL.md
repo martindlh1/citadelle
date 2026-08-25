@@ -4,6 +4,604 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-24 — `E1` : la réserve, la résolution du soir, l'upkeep et la famine
+
+**État : terminé.** Sept commits sur `feat/e1-economy`, tirée de
+`feat/c2-placement-ghost` — la chaîne habituelle, `master` n'a toujours rien reçu. Les
+trois commandes passent : boot sans erreur ni warning, tout `src/domain/` parse,
+**241 tests verts contre 160** à l'ouverture.
+
+Un accroc de procédure à consigner, parce qu'il explique l'histoire de la branche : la
+session s'est ouverte **sans créer de branche**, et le premier commit — la mise à jour
+de `DESIGN.md` — a atterri sur `feat/c2-placement-ghost`. Repéré par l'humain avant
+tout push. Réparé en créant `feat/e1-economy` à cet endroit et en ramenant `c2` sur sa
+remote : aucun commit perdu, `c2` de nouveau identique à ce qu'elle valait. La leçon
+tient en une ligne : **la branche se crée à l'orientation, avant le premier commit**,
+pas quand on y pense.
+
+### Ce qui a été livré
+
+- `src/domain/contracts/` — sept DTO : `CitySnapshot` et `BuildingSnapshot`,
+  `LaborForce` et `LaborUnit`, `Assignment`, `WorkLine`, `ProductionReport`.
+- `src/domain/economy/` — `ledger.gd` et `production_resolver.gd`.
+- `CityState.to_snapshot()`, seule ligne touchée dans `domain/city/`.
+- `src/schema/` — `commodity_data.gd`, `economy_balance.gd`, et le bloc économie de
+  `BuildingData`.
+- `data/commodities/` — trois ressources ; `data/balance/economy_balance.tres` ;
+  `data/buildings/farm.tres` et `warehouse.tres`.
+- `GameDatabase` — `get_commodity()`, `list_commodity_ids()`, et le contrôle croisé.
+- `scenes/dev/economy_harness.gd`, et `HARNESS` basculé sur `&"economy"`.
+- `DESIGN.md` 3.3 et 3.4, `README.md`.
+
+### Quatre questions arbitrées avant d'écrire
+
+Comme à `C1`, le plan en posait quatre. Une réponse a franchement changé le jalon.
+
+**La réserve est commune, pas par ressource.** C'est la réponse qui coûte, et c'est
+l'inverse de ce que je recommandais. Cent unités partagées entre le bois, la pierre et
+la nourriture : remplir sa réserve de bois, c'est renoncer à stocker de la pierre. Le
+plafond ne force plus seulement à dépenser, il force à choisir *quoi* garder, et
+l'entrepôt devient un vrai arbitrage au lieu d'un relèvement de trois compteurs
+indépendants.
+
+**La `LaborForce` porte un multiplicateur par famille**, et `BuildingData` déclare la
+sienne. L'argument décisif n'était pas la pureté mais le coût : c'est un champ dans
+quatre `.tres` que j'ouvrais déjà, contre les rouvrir tous à `W1` *et* changer un
+contrat.
+
+**La famine se constate et ne se punit pas.** `DESIGN.md` ne disait nulle part ce
+qu'elle fait. Plutôt que de le laisser non-dit, c'est entré comme un `OUVERT` explicite
+en 3.3 : le rapport porte le compte des non-nourris, donc mort, blessure, départ ou
+malus restent les quatre également ouvertes.
+
+**Le catalogue de ressources existe**, dans `data/`. Sans lui, un `&"wodo"` dans un coût
+créerait une ressource fantôme qui se stockerait, ne s'achèterait jamais et ne
+s'afficherait nulle part.
+
+### La réserve commune, et ce qu'elle coûte vraiment
+
+Le choix a une conséquence que ni le plan ni la question ne voyaient : **une récolte qui
+déborde doit décider laquelle de ses ressources entre.** Avec un plafond par ressource,
+ce problème n'existe simplement pas.
+
+La réponse évidente — premier arrivé, premier servi — est un piège. L'ordre des clés
+vient de l'ordre de pose des bâtiments : deux villes identiques bâties dans un ordre
+différent perdraient des choses différentes, sans que rien à l'écran ne l'explique.
+C'est la même famille d'erreur que les quatre passes du validateur à `C1`, où la raison
+affichée aurait dépendu de l'ordre d'écriture du `.tres`.
+
+La règle retenue est **proportionnelle à ce que le dépôt apporte**, le reste de la
+division allant aux plus grosses parts fractionnaires, l'identifiant tranchant à
+égalité. Elle est entièrement déterminée par les quantités. Le cas de test qui compte
+dépose les mêmes montants dans deux ordres de clés opposés et exige le même résultat :
+un premier-arrivé-premier-servi passerait tous les autres cas et échouerait sur
+celui-là.
+
+Le même écrêtage sert quand la capacité **baisse** — un entrepôt détruit par une vague.
+Une règle écrite une fois, utilisée deux fois.
+
+### La doctrine du zéro ne s'applique pas au bloc économie
+
+Tout le projet repose depuis `I0` sur « un champ non renseigné vaut 0, donc détectable ».
+Les quatre champs économiques de `BuildingData` y échappent, et il valait mieux le dire
+que le contourner : **0 slot, un coût vide et une réserve nulle sont trois valeurs
+légitimes** du tableau de `DESIGN.md` 4 — la palissade n'a pas de poste, la cabane de
+bûcheron est gratuite. Les réclamer refuserait de démarrer sur des données correctes.
+
+Ce qui les remplace est un contrôle de **cohérence entre eux**, qui lui est bien réel :
+des slots sans rendement ne produiraient rien, un rendement sans slot ne serait jamais
+versé, un poste sans famille ne saurait quelle piste créditer. Les trois se chargent
+sans erreur et ne cassent qu'au premier soir. Un cas de test énonce le point à voix
+haute : un bâtiment sans aucun bloc économie est complet.
+
+### Décisions
+
+**`CommodityData` et non `ResourceData`.** Deux raisons qui se cumulent : `Resource` est
+déjà le type de base de Godot dont le fichier hérite, et `GameDatabase.get_resource()`
+est déjà l'accesseur générique de l'index — un `get_resource(&"resources", &"wood")`
+serait illisible. Le vocabulaire du jeu ne bouge pas : `DESIGN.md` dit « ressource » et
+les identifiants restent `&"wood"`, `&"stone"`, `&"food"`.
+
+**Le résolveur mute le `Ledger`, et ce n'est pas une entorse.** Le ledger est l'état
+*interne* de l'Économie, exactement comme `CityState` l'est de Construction, et
+`place()` a déjà le même profil — valider, muter, rendre le résultat. La ligne de
+contrat de `DESIGN.md` 3.3 énumère les entrées **inter-systèmes**, ce qui est
+précisément pourquoi le ledger n'y figure pas.
+
+**Le rapport rapporte, il ne punit pas.** Il ne calcule aucune XP non plus : combien
+vaut une soirée de travail est un chiffre des Effectifs. Il porte un **journal de
+travail** — qui a tenu quel poste, dans quelle famille — et `W1` en fera ce qu'il veut.
+La famille y figure pour que les Effectifs n'aient pas à rouvrir la ville pour retrouver
+le bâtiment.
+
+**L'upkeep tombe sur le roster entier, oisifs compris.** C'est ce qui rend un ouvrier
+non affecté coûteux, donc le pool tendu, donc la tension centrale de `DESIGN.md` 1
+réelle plutôt que déclarative. `LaborForce.size()` est le roster et non le nombre
+d'affectés, et son docstring le dit.
+
+**Les oisifs se déduisent du roster moins ceux qui ont travaillé.** Cette soustraction
+couvre d'un coup les quatre façons de ne rien produire — non affecté, ancre vide,
+bâtiment sans poste, slot déjà pris — sans qu'aucune ait à être énumérée. Un ouvrier que
+l'affectation nomme mais que le roster ignore n'apparaît nulle part : une affectation
+peut survivre à celui qui la portait, et un mort ne chôme pas.
+
+**`upkeep_resource` est un champ d'équilibrage**, trouvé en écrivant le résolveur. Un
+`&"food"` en constante dans `src/domain/` aurait été le nombre magique que les
+conventions interdisent, et surtout il aurait survécu à un renommage du catalogue sans
+que rien ne le signale.
+
+**Le contrôle croisé vit dans `GameDatabase`.** C'est le seul contrôle qu'aucune
+`Resource` de `src/schema/` ne peut faire seule, puisqu'aucune ne lit l'index — et c'est
+très bien ainsi. Vérifié en cassant une clé exprès : le boot nomme le fautif et liste ce
+qu'il connaît. Quatrième copie de la même boucle de validation ; le seuil annoncé à `C1`
+se rapproche sans être atteint.
+
+**Deux bâtiments entrent, chacun pour une raison précise** — le motif de la palissade à
+`C2`. L'**entrepôt** est la seule chose qui relève la réserve commune, soit la décision
+phare du jalon ; la **ferme** est le seul producteur de nourriture, sans lequel le
+harnais meurt de faim au premier soir et la boucle ne montre rien.
+
+### Le harnais, et ce qu'il a répondu
+
+Il fait ce que `C1` a rendu possible et que rien n'avait encore fait tourner : il pose
+les **deux** questions à la suite — payable, puis posable, puis on dépense. L'ordre
+compte, payer avant de savoir si ça tient sur le relief laisserait la ville plus pauvre
+sans rien de bâti. La sixième entrée de sa liste de construction est là pour être
+refusée bourse vide, ce qui n'est pas un refus de placement.
+
+Et comme celui de `C1`, il **cherche** son cas au lieu de le mettre en scène : il laisse
+tourner vingt soirs et dit lequel a cassé le premier, la famine ou la réserve pleine.
+
+Réponse sur l'équilibrage actuel : **famine au soir 6, réserve jamais pleine — 160/200
+au vingtième.** C'est un signal qu'aucune suite de tests ne peut donner, puisqu'elles
+travaillent sur des chiffres choisis et que la question porte justement sur ceux de
+`data/balance/`. Il dit qu'avec dix ouvriers pour six postes, c'est la nourriture qui
+étrangle bien avant le plafond. À `I3` de décider si c'est le bon dosage.
+
+Un défaut trouvé en lisant le rapport, et pas autrement : deux lignes voisines
+annonçaient `20/100` puis « capacité 200 ». La réserve ne prenait sa nouvelle capacité
+qu'à la résolution suivante, alors qu'un entrepôt doit compter dès qu'il est bâti. Le
+résolveur la repose de toute façon, ce qui rendait l'oubli parfaitement silencieux —
+donc à écrire là où le HUD de `E2` le fera aussi.
+
+### Ce qui reste
+
+Rien pour `E1`. Quatre choses volontairement laissées de côté :
+
+- **les modificateurs d'adjacence** — `C3`. Le résolveur documente la couture : ils
+  entreront comme un argument de plus, appliqués au rendement d'un slot juste avant le
+  multiplicateur de l'ouvrier.
+- **le HUD et le panneau de rapport** — `E2`, nommément. `capacity_for()` est publique
+  et pure exprès, pour qu'il affiche « 47 / 200 » sans rien résoudre.
+- **l'application de l'XP** — `W1`, qui consommera le journal de travail.
+- **les 3:1 du marché et le rayon de l'atelier** — du contenu, donc `I3`.
+
+`CombatForce` et `DamageReport` ne sont pas écrits : `F1` n'existe pas, et on n'invente
+pas une frontière que personne ne franchit. `BuildingSnapshot` ne porte pas de PV pour
+la même raison.
+
+### Prochain jalon
+
+**`E2`** — HUD des ressources et panneau de rapport de production — si l'on veut voir
+l'économie ; **`W1`** si l'on préfère fermer la boucle du domaine avant toute UI. Les
+deux sont débloqués et `W1` est le seul des deux qui rende le journal de travail utile
+à quelque chose. Il est aussi le dernier à pouvoir encore faire bouger `LaborForce` sans
+douleur.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'input
+ajoutée.
+
+- `F5` lance le **harnais Économie** : un rapport texte, aucune 3D. Il s'imprime aussi
+  sur la sortie standard, donc `godot --headless --quit --path .` suffit à le lire —
+  c'est la commande de vérification n°1. `HARNESS` revient à `&"city"` ou `&"terrain"`
+  en un mot dans `scenes/dev/dev_boot.gd`.
+- les `.tres` neufs — trois dans `data/commodities/`, `economy_balance.tres`, `farm` et
+  `warehouse` — naissent **sans `uid`**, comme à chaque jalon : **diff à committer, pas
+  à jeter**.
+- **les chiffres du bloc économie sont à relire.** Coûts, slots et rendements viennent du
+  tableau de `DESIGN.md` 4 ; les empreintes de la ferme et de l'entrepôt, elles, sont
+  inventées, comme les quatre autres depuis `C1`. Le boot refuse un bloc incohérent —
+  des slots sans rendement, un rendement sans slot, un coût nommant une ressource
+  inconnue — donc les corriger dans l'inspecteur est sans risque.
+
+---
+
+## 2026-08-24 — `C2` : fantôme de placement, pose et destruction
+
+**État : terminé.** Dix commits sur `feat/c2-placement-ghost`, tirée de
+`feat/c1-placement` : `master` n'a rien reçu, c'était la consigne. Boot sans erreur ni
+warning, tout `src/domain/` parse, 160 tests verts contre 145 à l'ouverture.
+
+Le jalon a été élargi en cours de route à la **rotation des bâtiments**, qui n'était
+pas au plan et que `DESIGN.md` ne prévoyait pas. Elle est traitée en fin d'entrée.
+
+Mais ces trois commandes ne prouvent presque rien ici, et c'est le fait marquant du
+jalon : `src/adapters/` n'est pas testé, le domaine n'a pas bougé d'une ligne, et
+**tout ce que `C2` apporte est à l'écran**. La capture n'est pas un supplément de
+confort, c'est le contrôle principal — elle a d'ailleurs trouvé le seul vrai bug.
+
+### Ce qui a été livré
+
+- `scenes/dev/dev_world.gd` — le plateau commun aux harnais : ciel, soleil, caméra,
+  relief, décorations, survol.
+- `scenes/dev/dev_shot.gd` — le vocabulaire de capture, partagé.
+- `src/adapters/city/building_renderer.gd` et `placement_ghost.gd`.
+- `BuildingData` gagne `color` et `height`, et les `.tres` avec.
+- `data/buildings/palisade.tres` — une empreinte en L.
+- `scenes/dev/city_harness.gd` réécrit : la scène remplace le rapport texte.
+- la **rotation** : `BuildingData.rotate_offset()`, l'orientation portée par
+  `PlacedBuilding`, traversant `validate()`, `place()` et le fantôme.
+- `CLAUDE.md`, `README.md`.
+
+### Le domaine n'a pas bougé, et c'est le résultat
+
+Pas une ligne de `src/domain/` n'a changé. `validate()` était déjà pure et appelable à
+chaque image, `place()` et `remove()` attendaient leurs clics, `PlacementResult`
+portait déjà les cellules et la hauteur auxquelles dessiner. `C1` avait fait son
+travail, et `C2` n'a été que de la traduction : un clic vers le domaine, une réponse
+vers l'écran.
+
+`TerrainMetrics` et `PickResult` ne sont **pas** montés dans `contracts/`. La question
+traînait depuis `T3` et le journal de `C1` la reposait pour ici : la réponse est non.
+Ce sont les *adapters* de Construction qui en ont besoin, et la règle de dépendance
+contraint le domaine, pas eux. Aucun système du domaine ne franchit cette frontière.
+
+### Le plateau partagé, et ce que sa vérification a appris
+
+Le harnais Construction avait besoin exactement de la scène que le harnais Terrain
+montait déjà — on ne pose pas un bâtiment sur un terrain qu'on ne voit pas. D'où
+`DevWorld`, plutôt que soixante lignes recopiées dont le soleil réglé à `T2` et tout
+son raisonnement.
+
+Pour prouver que l'extraction ne changeait rien, capture avant et capture après. La
+première comparaison a été **mal lue** : l'image « après » semblait franchement plus
+zoomée. Elle ne l'était pas.
+
+Le viewport garde la largeur de base du projet mais sa **hauteur suit le rapport de la
+fenêtre**, et le tout premier lancement n'avait pas obtenu la fenêtre qu'il demandait.
+Deux enseignements, consignés au README :
+
+- la capture imprime désormais une ligne `cadrage` — `camera.size` et taille du
+  viewport. Deux captures ne se comparent que si cette ligne est identique ;
+- **`cmp` sur les deux `.png` tranche là où l'oeil se trompe.** Vérification faite
+  ainsi, l'extraction rend des images *strictement identiques*, octet pour octet.
+
+C'est un outil que je n'avais pas et qui a resservi trois fois dans la journée.
+
+### Le bug que seule l'image a montré — la carte chauve
+
+Quatrième jalon d'affilée, quatrième bug de rendu invisible aux trois commandes.
+
+La première capture du harnais Construction montrait une carte **sans un seul arbre ni
+rocher**. Le relief était là, les bâtiments aussi, mais la végétation avait disparu.
+
+`TerrainRenderer.create()` se peuple lui-même ; `TerrainDecorRenderer.create_all()`
+**non** — elle construit une passe par terrain, vides, que seul `rebuild()` remplit.
+`DevWorld.create()` promettait dans son propre docstring un plateau « déjà peuplé » et
+mentait sur ce point. Le harnais Terrain masquait la faute depuis toujours en
+enchaînant sur son propre `show_grid()` juste après.
+
+Corrigé à la source : `create()` termine par `show_grid(grid)`, donc un seul chemin
+peuple le plateau et la promesse redevient vraie. Le harnais Terrain rebâtit une
+seconde fois, ce qui ne coûte rien et ne change rien — vérifié en capture, byte à byte.
+
+### Le soleil : un problème annoncé qui n'existe pas
+
+`CLAUDE.md` prévenait depuis `T3` que les bâtiments, étant des boîtes, se heurteraient
+au piège du prisme noir, et tranchait d'avance qu'il faudrait déplacer le soleil.
+
+**Ça n'est pas arrivé.** Les boîtes posées sur le relief gardent leurs quatre flancs
+parfaitement lisibles. C'était prévisible après coup : elles présentent à la lumière
+exactement les orientations des colonnes du terrain, qui se lisent bien depuis `T2`.
+Le piège du prisme venait de sa face *oblique*, pas du fait d'avoir des flancs
+verticaux.
+
+Le soleil n'a donc pas bougé, et `CLAUDE.md` est corrigé : une prédiction fausse laissée
+dans un document permanent se paie plus tard, quand quelqu'un « répare » un problème
+inexistant et casse la lecture de toute la carte au passage.
+
+### La palissade, entrée pour une raison précise
+
+Rien de ce qui tournait ne dessinait une empreinte **non rectangulaire** — or c'est la
+seule chose pour laquelle `C1` existait. Les tests couvraient le domaine, mais le
+renderer n'avait jamais tracé un L.
+
+`palisade.tres` comble ça : un angle de trois cellules, que la capture montre bien
+comme un L et non comme un rectangle. Le chemin data → domaine → rendu est vérifié de
+bout en bout. `DESIGN.md` 4 liste une palissade et n'en donne pas la forme ; en faire un
+angle reste une empreinte provisoire, comme les trois autres.
+
+### Décisions
+
+**Une boîte par cellule occupée, pas une par bâtiment.** Sur un L, un volume unique
+couvrirait le trou de l'enveloppe et mentirait sur la forme. Le rendu suit l'empreinte
+pour la même raison que la validation : `bounds_at()` est une enveloppe, pas un
+bâtiment.
+
+**Le fantôme ne décide rien.** `CellHighlight` annonçait à `T3` qu'elle ne coderait
+aucune validité et que la question appartiendrait à `C2` : elle y est, et la réponse
+vient toujours du domaine. Le fantôme reçoit un `PlacementResult` déjà calculé et le
+colore.
+
+**La validation a lieu une fois par image, et les deux consommateurs lisent le même
+résultat.** Le fantôme et la ligne de rapport ne revalident pas chacun de leur côté :
+une couleur qui contredirait sa propre légende serait un bug impossible à voir.
+
+**La hauteur du fantôme vient du survol, pas du résultat.** Un refus n'a pas de hauteur
+— `PlacementResult.height()` lève sur un placement refusé — et c'est précisément sur un
+refus qu'il faut voir le fantôme. Il se pose donc à la hauteur de la cellule survolée,
+qui est toujours connue.
+
+**Le fantôme dessine aussi les cellules hors carte.** Un bâtiment à moitié dans le vide
+se voit alors tel qu'il est, ce qui explique le refus mieux qu'une empreinte tronquée.
+Vérifié en capture au bord est de la carte.
+
+**Couleur et hauteur des bâtiments vivent dans `data/`.** Même raison que pour les
+terrains : un renderer qui commuterait sur un identifiant obligerait à toucher au
+GDScript à chaque ajout. La hauteur est en **fractions de tuile**, la leçon des
+décorations de `T3` : régler `tile_size` doit emporter les bâtiments avec la carte.
+
+**`DevShot` tient les drapeaux de capture.** Le README les documente comme une
+fonctionnalité du projet et non d'un harnais ; deux harnais qui les redéfiniraient
+chacun de leur côté finiraient par diverger sans que personne ne s'en aperçoive avant
+de taper la commande de l'un sur l'autre.
+
+### La rotation, ajoutée en cours de jalon
+
+Demandée après coup, et entrée par la porte normale : `DESIGN.md` 3.2 n'en disait rien,
+donc le design est passé en premier — c'est la même règle qui avait fait précéder les
+empreintes de forme libre à `C1`.
+
+**L'orientation appartient au placement, pas au bâtiment.** Rien dans `data/` ne la
+décrit : une même `BuildingData` se pose dans les quatre sens. Quatre crans, comme la
+caméra, et le même vocabulaire.
+
+**La rotation se fait autour de la cellule d'ancrage.** C'est la décision qui porte tout
+le reste. L'ancre est le décalage `(0, 0)`, et elle est invariante par rotation : une
+empreinte pivotée contient donc toujours son ancre, `missing_fields()` n'a rien à
+revérifier, et la forme pivote sous le curseur au lieu de sauter à côté. L'alternative
+— normaliser les décalages pour les garder positifs — aurait déplacé le bâtiment à
+chaque quart de tour.
+
+Le résultat mérite d'être noté : **pas une ligne du validateur ne parle de rotation.**
+Il reçoit une liste de cellules et ne sait pas d'où elle vient. Les deux index de la
+ville non plus. `BuildingRenderer` non plus — il lit `PlacedBuilding.cells()`, qui
+applique l'orientation en amont. Toute la fonctionnalité tient dans `rotate_offset()`
+et dans un paramètre passé de main en main.
+
+Les deux cas de test qui portent le plus posent la **même empreinte à la même ancre** et
+obtiennent un verdict différent une fois tournée : l'une échappe au bord de la carte,
+l'autre se range le long d'une marche au lieu de la traverser. Ce sont eux qui prouvent
+que les règles travaillent sur des cellules déjà pivotées.
+
+Côté harnais, `Tab` pivote — pas `R`, qui recadre la caméra depuis `T2`. Un vrai jeu du
+genre mettrait la rotation sur `R` et déplacerait le recadrage ; c'est une décision d'UI
+qui appartient à `D2`, pas au sélecteur de debug d'un harnais.
+
+`--shot-rotate` a été ajouté pour la même raison que `--shot-hover` existait : sans lui,
+aucune capture ne montrerait jamais un bâtiment pivoté, donc rien ne le vérifierait. Et
+la ville d'ouverture pose désormais chaque bâtiment dans une orientation différente —
+arbitraire et assumé, parce que le fantôme seul ne prouve rien sur `BuildingRenderer`.
+
+La capture a d'ailleurs montré tout de suite un comportement juste et pas évident : le
+Cœur accepté au centre de la carte devient `uneven_ground` une fois pivoté d'un quart de
+tour. Normal — il couvre alors quatre autres cellules, de l'autre côté de son ancre.
+
+### Ce qui reste
+
+Rien pour `C2`. Trois choses volontairement laissées de côté :
+
+- **l'adjacence et la prévisualisation du delta** — c'est `C3`, nommément.
+- **le coût à la pose** — `E1`, et la décision est déjà prise : il passera par
+  l'Économie ou les cartes, pas par le placement.
+- **la sélection par carte** — `D2`. Les touches 1 à 9 du harnais sont un sélecteur de
+  debug, pas une UI.
+
+### Prochain jalon
+
+`C3` — règles d'adjacence et prévisualisation du delta au survol. Le terrain est prêt :
+`BuildingData.neighbourhood_at()` attend son premier appelant depuis `C1`, la
+validation tourne déjà à chaque image sous le curseur, et le rapport a la place
+d'afficher un delta à côté de son verdict.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'input
+ajoutée — les clics sont lus en `InputEventMouseButton` brut.
+
+- `F5` lance le **harnais Construction** : la carte, quatre bâtiments déjà posés en
+  haut à droite — chacun dans une orientation différente —, le fantôme sous le curseur.
+  Clic gauche pose, clic droit détruit, 1 à 9 choisissent, **Tab pivote**. Q/E, molette,
+  WASD et R restent à la caméra. `HARNESS` revient à `&"terrain"` en un mot.
+- les quatre `.tres` de `data/buildings/` sont toujours **sans `uid`** — une passe
+  headless de l'éditeur ne leur en attribue pas, seule l'ouverture réelle le fait :
+  **diff à committer, pas à jeter**. Leurs empreintes, couleurs et hauteurs sont
+  provisoires et se corrigent sans risque dans l'inspecteur : le boot refuse toute
+  empreinte vide, sans ancre ou redondante, ainsi qu'une couleur ou une hauteur non
+  renseignée.
+
+---
+
+## 2026-08-24 — `C1` : la ville, les empreintes et les règles de placement
+
+**État : terminé.** Six commits, une couche chacun, sur `feat/c1-placement`. Les trois
+commandes de vérification passent : boot sans erreur ni warning, tout `src/domain/`
+parse, 145 tests verts contre 100 à l'ouverture.
+
+### Ce qui a été livré
+
+- `src/domain/contracts/placement_result.gd` — la réponse à « puis-je poser ici ? ».
+- `src/schema/building_data.gd` — identité, empreinte, et la géométrie qui en découle.
+- `src/domain/city/` — `city_state.gd`, `placement_validator.gd`, `placed_building.gd`.
+- `tests/domain/city/` — 16 cas de placement, 15 cas de rangement.
+- `tests/schema/building_data_test.gd` — 14 cas.
+- `data/buildings/` — trois `.tres`.
+- `GameDatabase` — `get_building()`, `list_building_ids()`, contrôle de complétude.
+- `scenes/dev/city_harness.gd`, et `HARNESS` basculé sur `&"city"`.
+- `DESIGN.md` 3.1 et 3.2.
+
+### Quatre points arbitrés avant d'écrire
+
+Le plan en posait quatre à l'humain. Les quatre réponses ont changé le jalon, et deux
+l'ont simplifié.
+
+**Le coût sort du placement.** `DESIGN.md` 3.2 se contredisait : sa ligne de contrat
+prend `CityState + BuildingData + ancre`, sans bourse, mais sa liste de validation
+disait « ressources suffisantes ». Même nature que la signature de `pick()` à `T3` — la
+contradiction était dans le document, pas dans le code. Tranché pour la ligne de
+contrat : « ai-je les 15 bois ? » ne regarde pas la carte, et c'est la couche qui
+orchestre la journée qui enchaînera les deux questions. `REASON_INSUFFICIENT_RESOURCES`
+rejoindra `PlacementResult` ce jour-là sans que le validateur ne bouge. 3.2 le dit
+maintenant explicitement.
+
+**Aucun prérequis dur d'adjacence.** « Requiert un gisement voisin » était dans la liste
+de validation ; il en sort. L'adjacence reste entièrement la couche de rendement de
+`C3`, et le placement ne regarde jamais le voisinage.
+
+**Mais la zone de recherche est écrite quand même**, à la demande de l'humain :
+`BuildingData.neighbourhood_at(anchor, radius)`. Elle n'a **aucun appelant** avant `C3`,
+et c'est consigné dans son propre docstring — écrire d'avance est exactement ce que ce
+projet évite, et une exception qui ne se dit pas devient une habitude. Ce qui la rend
+acceptable : c'est de la géométrie pure, elle se teste sans terrain ni ville, et le
+rayon y est un argument et non un champ de data — rien dans `data/buildings/` ne le
+porte.
+
+**Toutes les cellules à la même hauteur, pour tous les bâtiments.** Je proposais que
+chaque `.tres` déclare s'il exige du plat. La version de l'humain est plus simple : la
+règle est universelle, l'enum disparaît, le validateur tient en une passe de plus.
+
+### La planéité tranche un `OUVERT`, et `DESIGN.md` est passé en premier
+
+3.1 demandait « le relief joue-t-il sur le gameplay, et comment ? » et listait quatre
+pistes. Exiger du plat prend la piste *contrainte de construction* et élimine *purement
+décoratif* : le relief décide désormais d'où le village peut s'étendre, et c'est ce qui
+donne à un plateau sa valeur. Les deux autres — avantage défensif en hauteur, accès aux
+ressources selon l'altitude — restent entières, et le **terrassement** les rejoint :
+c'est précisément cette règle qui le rendrait intéressant.
+
+`DESIGN.md` est modifié dans le **premier** commit, et non dans celui du journal comme
+la procédure de session le voudrait. `CLAUDE.md` interdit d'écrire une feature avant que
+le design la porte, et les empreintes de forme libre n'y figuraient pas : la mise à jour
+devait donc précéder le code, pas le conclure.
+
+### Décisions
+
+**Une empreinte est une liste de décalages, pas un rectangle.** `Array[Vector2i]` depuis
+l'ancre : un L, un T ou une croix s'écrivent, et un rectangle n'est qu'un cas
+particulier — ce qui évite d'avoir deux façons de dire la même chose et deux chemins à
+valider. Ce que j'avais annoncé comme coûteux ne l'était pas : `TerrainQuery` expose
+déjà `in_bounds()`, `is_buildable()` et `height_at()` par cellule, donc une validation
+cellule par cellule se fait avec le contrat **tel quel**, sans y ajouter une seule
+méthode. Les helpers `Rect2i` de `T1` restent, simplement inutilisés par le placement.
+
+**`bounds_at()` ne valide jamais rien.** L'enveloppe d'un L couvre une cellule que le
+bâtiment n'occupe pas. Deux cas de test l'épinglent des deux côtés : de l'eau dans ce
+trou n'empêche pas la pose, et le trou reste posable ensuite. C'est ce couple qui prouve
+que tout travaille sur l'empreinte et non sur son enveloppe — autrement dit que les
+formes libres sont réelles et pas décoratives.
+
+**`PlacementResult` entre dans `contracts/` tout de suite**, contrairement à
+`PickResult` à `T3`. Non par changement de doctrine : la table de `CLAUDE.md` l'y liste
+déjà, quand elle ne listait pas `PickResult`. Sa raison est un `StringName` et non un
+`enum`, comme la convention le prescrit pour ce DTO précisément — un adapter la mappe
+sur un libellé sans rien importer du domaine.
+
+**`CityState.place()` est la seule porte mutante, et elle valide avant de muter.** Rien
+ne peut donc entrer dans la ville sans être passé par `PlacementValidator` : invariant
+tenu par la structure, pas consigne à respecter. `validate()` reste pure et appelable
+seule, ce dont le fantôme de `C2` a besoin — il l'appellera à chaque image sous le
+curseur, et la pose lui rend exactement le résultat qu'il affichait.
+
+**Quatre passes sur l'empreinte, pas une boucle.** En une seule, une empreinte dont une
+cellule est occupée et une autre sous l'eau rendrait la raison de celle qui vient en
+premier dans le `.tres` : la raison affichée dépendrait de l'ordre d'écriture de la
+data. En quatre passes, elle ne dépend que de l'ordre des règles. Deux cas de test font
+échouer deux règles à la fois pour le tenir.
+
+L'ordre des règles n'est pas libre non plus : les bornes d'abord, parce que
+`height_at()` exige une cellule dans la grille et lèverait sur une empreinte qui
+déborde. C'est une précondition du contrat Terrain, pas une préférence d'ergonomie.
+
+**`missing_fields()` contrôle l'empreinte au-delà de sa présence.** Une empreinte qui ne
+contient pas son ancre, ou qui nomme deux fois la même cellule, se charge sans erreur et
+ne casse qu'à la pose. Les deux remontent préfixées `footprint.`, comme `TerrainData`
+préfixe `decor.`, et le boot les refuse. En revanche une empreinte **en deux morceaux
+disjoints** est acceptée : elle se pose sans rien casser, et la refuser serait une règle
+de contenu déguisée en règle de schéma.
+
+**Le cycle `CityState` ↔ `PlacementValidator` passe.** L'un prend l'autre en paramètre,
+l'autre l'appelle dans un corps de fonction. Ce n'est pas le cycle qui avait mordu à
+`T3` entre `TerrainData` et `TerrainDecor` : celui-là portait sur une **constante**,
+résolue à la compilation. Types et corps de fonction se résolvent plus tard, et la
+commande 2 le confirme.
+
+**`data/buildings/` n'est pas la passe de contenu.** `DESIGN.md` 4 liste dix bâtiments
+et ne donne **aucune** colonne d'empreinte : les trois `.tres` posés ici ont des tailles
+inventées, que `I3` reprendra. Ils existent pour que `GameDatabase` ait une catégorie à
+indexer et à contrôler, et pour que le harnais tourne sur de vrais fichiers. Les trois
+sont rectangulaires, fidèles à un design qui ne nomme aucun bâtiment en L : inventer une
+forme aurait été trancher du contenu à la place de l'humain, et les tests couvrent les
+formes libres sans rien figer dans `data/`.
+
+### Le harnais cherche ses refus au lieu de les fabriquer
+
+C'est la seule chose non prévue au plan. Plutôt que de coder en dur une cellule d'eau et
+une marche, le harnais balaye la carte à la recherche d'une ancre qui produit
+**exactement** la raison visée, et le dit quand il n'en trouve pas.
+
+Sur le seed 1234, les quatre y sont. C'est ce que les suites de tests ne peuvent pas
+montrer : elles travaillent sur des grilles de six cases faites à la main, où chaque
+règle est déclenchée par construction. Ici, une règle qui cesserait de se déclencher sur
+du terrain réellement généré remonterait toute seule — et une carte trop lisse pour la
+déclencher se signalerait, au lieu de passer pour un succès.
+
+C'est le pendant texte de la sonde caméra de `T3` : quelques lignes dans un harnais, à
+l'endroit exact où ce genre d'échafaudage a sa place.
+
+### Ce qui reste
+
+Rien pour `C1`. Deux choses volontairement laissées de côté :
+
+- **les PV, le coût, les slots, le rendement.** Ils viendront avec `E1`, `C3` et `F1`,
+  comme `BalanceData` gagne un bloc quand un système atterrit. Un champ ajouté plus tard
+  oblige à rouvrir les `.tres` ; un champ ajouté d'avance oblige à deviner sa forme, ce
+  qui coûte plus cher.
+- **`CitySnapshot`.** La table de `CLAUDE.md` le donne à l'Économie et au Combat, dont
+  aucun n'existe. Même raisonnement qu'à `T2` et `T3` : on n'invente pas une frontière
+  que personne ne franchit. Il arrive à `E1`.
+
+`TerrainMetrics` et `PickResult` sont restés dans `domain/terrain/`. Le journal de `T3`
+posait la question pour `C1` ; la réponse est non — sans rendu, Construction ne touche
+ni au monde ni aux rayons. Elle se repose à `C2`, qui est justement le jalon où le
+fantôme aura besoin des deux.
+
+### Prochain jalon
+
+`C2` — fantôme de placement, pose et destruction dans la scène de dev. Tout ce dont il a
+besoin est en place : `validate()` est pure et appelable à chaque image, un
+`PlacementResult` rend déjà les cellules et la hauteur auxquelles dessiner, et
+`CityState.remove()` attend son clic droit.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'input
+ajoutée.
+
+Deux points de suite :
+
+- `F5` lance maintenant le **harnais Construction**, un rapport texte sur fond noir :
+  `HARNESS` vaut `&"city"` dans `scenes/dev/dev_boot.gd`. Le remettre à `&"terrain"`
+  rend la carte en relief, la souris, Q et E, la molette.
+- les trois `.tres` de `data/buildings/` naissent **sans `uid`**. Une passe headless de
+  l'éditeur ne leur en attribue pas — vérifié cette fois-ci —, seule l'ouverture réelle
+  le fait : **diff à committer, pas à jeter**, comme à `I0`, `T1`, `T2` et `T3`. Leurs
+  empreintes sont provisoires, et les corriger dans l'inspecteur est sans risque : le
+  boot refuse toute empreinte devenue vide, sans ancre, ou redondante.
+
+---
+
 ## 2026-08-24 — `T3` : picking DDA, surbrillance et décorations
 
 **État : terminé.** Quatre commits, une couche chacun, sur `feat/t3-cell-picking`. Les

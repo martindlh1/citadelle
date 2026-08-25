@@ -1,0 +1,236 @@
+class_name BuildingDataTest
+extends GdUnitTestSuite
+## Le schéma d'un bâtiment : la géométrie de son empreinte, et son filet de complétude.
+##
+## Comme terrain_data_test.gd, aucune empreinte de data/ n'est figée ici — les tailles
+## des dix bâtiments de DESIGN.md 4 bougeront à la passe de contenu. Ce qui est
+## asserté, c'est la géométrie et le mécanisme qui refuse une empreinte inexploitable.
+##
+## Le L sert de forme de travail presque partout : sur un rectangle, cells_at() et
+## bounds_at() rendraient la même chose et aucun des deux ne serait vraiment testé.
+
+const BUILDING_ROOT := "res://data/buildings"
+
+func test_a_blank_building_reports_all_its_required_fields() -> void:
+	assert_array(BuildingData.new().missing_fields()) \
+		.contains(["id", "color", "height", "footprint"])
+
+## La sentinelle de couleur est recopiée de TerrainData, comme TerrainDecor la recopie
+## déjà. Ce cas est ce qui empêche les copies de dériver les unes des autres.
+func test_the_unset_colour_sentinels_agree() -> void:
+	assert_bool(BuildingData.UNSET_COLOR == TerrainData.UNSET_COLOR) \
+		.override_failure_message("les sentinelles ont divergé : %s contre %s"
+			% [BuildingData.UNSET_COLOR, TerrainData.UNSET_COLOR]) \
+		.is_true()
+
+## Une hauteur nulle écraserait la boîte sur le sol, et Godot n'écrit pas un 0.0 dans
+## un .tres : « oublié » et « à plat » y seraient indiscernables.
+func test_a_zero_height_is_reported() -> void:
+	var building := _building(_l_shape())
+	building.height = 0.0
+	assert_array(building.missing_fields()).contains(["height"])
+
+func test_a_filled_building_reports_nothing() -> void:
+	assert_array(_building(_l_shape()).missing_fields()).is_empty()
+
+## Une empreinte absente se signale seule. Ajouter qu'il lui manque aussi son ancre
+## serait du bruit sur un champ dont on sait déjà qu'il n'est pas là.
+func test_an_empty_footprint_does_not_also_report_its_anchor() -> void:
+	assert_array(BuildingData.new().missing_fields()).not_contains(["footprint.anchor"])
+
+## L'ancre doit appartenir à l'empreinte : sans elle, CityState.anchor_at() renverrait
+## vers une cellule que le bâtiment n'occupe pas.
+func test_a_footprint_that_misses_its_anchor_is_reported() -> void:
+	var offsets: Array[Vector2i] = [Vector2i(1, 0), Vector2i(1, 1)]
+	assert_array(_building(offsets).missing_fields()).contains(["footprint.anchor"])
+
+## Une cellule nommée deux fois se poserait sans erreur et ferait mentir cells().
+func test_a_footprint_that_names_a_cell_twice_is_reported() -> void:
+	var offsets: Array[Vector2i] = [Vector2i.ZERO, Vector2i(1, 0), Vector2i.ZERO]
+	assert_array(_building(offsets).missing_fields()).contains(["footprint.duplicate"])
+
+## Une empreinte en deux morceaux disjoints est bizarre, mais se pose sans rien casser.
+## La refuser serait une règle de contenu déguisée en règle de schéma.
+func test_a_disjoint_footprint_is_accepted() -> void:
+	var offsets: Array[Vector2i] = [Vector2i.ZERO, Vector2i(5, 5)]
+	assert_array(_building(offsets).missing_fields()).is_empty()
+
+func test_cells_at_translates_the_footprint() -> void:
+	var cells := _building(_l_shape()).cells_at(Vector2i(10, 4))
+	assert_array(cells).contains_exactly([Vector2i(10, 4), Vector2i(11, 4), Vector2i(10, 5)])
+
+## L'ordre du .tres est conservé tel quel : tout ce qui itère sur les cellules d'un
+## bâtiment en dépend pour rester déterministe d'un run à l'autre.
+func test_cells_at_keeps_the_footprint_order() -> void:
+	var reversed: Array[Vector2i] = [Vector2i(0, 1), Vector2i(1, 0), Vector2i.ZERO]
+	var cells := _building(reversed).cells_at(Vector2i.ZERO)
+	assert_array(cells).contains_exactly([Vector2i(0, 1), Vector2i(1, 0), Vector2i.ZERO])
+
+## La grille va +x à droite et +y vers le fond : un quart de tour horaire vu de dessus
+## envoie donc la droite vers le fond.
+func test_a_quarter_turn_sends_right_to_front() -> void:
+	assert_vector(BuildingData.rotate_offset(Vector2i(1, 0), 1)).is_equal(Vector2i(0, 1))
+	assert_vector(BuildingData.rotate_offset(Vector2i(0, 1), 1)).is_equal(Vector2i(-1, 0))
+
+## L'ancre est invariante par rotation. C'est ce qui garantit qu'une empreinte pivotée
+## contient toujours son ancre, sans que missing_fields() ait à le revérifier.
+func test_the_anchor_is_invariant_under_rotation() -> void:
+	for turns in 4:
+		assert_vector(BuildingData.rotate_offset(Vector2i.ZERO, turns)).is_equal(Vector2i.ZERO)
+
+func test_four_quarter_turns_return_to_the_start() -> void:
+	var offset := Vector2i(2, -3)
+	assert_vector(BuildingData.rotate_offset(offset, 4)).is_equal(offset)
+
+## Les crans sont repliés dans [0, 3] : un appelant qui les accumule sans jamais les
+## replier — comme CameraRig — n'a pas à s'en occuper.
+func test_turns_beyond_a_full_circle_wrap() -> void:
+	var offset := Vector2i(1, 0)
+	assert_vector(BuildingData.rotate_offset(offset, 5)) \
+		.is_equal(BuildingData.rotate_offset(offset, 1))
+	assert_vector(BuildingData.rotate_offset(offset, -1)) \
+		.is_equal(BuildingData.rotate_offset(offset, 3))
+
+## Un L pivoté reste un L, ancré au même endroit, mais tourné.
+func test_cells_at_rotates_the_footprint_around_the_anchor() -> void:
+	var cells := _building(_l_shape()).cells_at(Vector2i(5, 5), 1)
+	assert_array(cells).contains_exactly([Vector2i(5, 5), Vector2i(5, 6), Vector2i(4, 5)])
+
+## Une empreinte symétrique rend les quatre orientations identiques, sans cas
+## particulier à écrire nulle part.
+func test_a_single_cell_is_the_same_in_every_orientation() -> void:
+	var single: Array[Vector2i] = [Vector2i.ZERO]
+	var building := _building(single)
+	for turns in 4:
+		assert_array(building.cells_at(Vector2i(3, 3), turns)).contains_exactly([Vector2i(3, 3)])
+
+## L'enveloppe suit la rotation : sur un L pivoté d'un quart de tour, elle recule
+## derrière l'ancre.
+func test_bounds_at_follows_the_rotation() -> void:
+	assert_that(_building(_l_shape()).bounds_at(Vector2i(5, 5), 1)) \
+		.is_equal(Rect2i(4, 5, 2, 2))
+
+func test_neighbourhood_follows_the_rotation() -> void:
+	var building := _building(_l_shape())
+	assert_that(building.neighbourhood_at(Vector2i(5, 5), 1, 1)) \
+		.is_equal(building.bounds_at(Vector2i(5, 5), 1).grow(1))
+
+func test_a_single_cell_footprint_bounds_to_one_cell() -> void:
+	var single: Array[Vector2i] = [Vector2i.ZERO]
+	assert_that(_building(single).bounds_at(Vector2i(3, 7))).is_equal(Rect2i(3, 7, 1, 1))
+
+## L'enveloppe d'un L couvre la quatrième cellule, que le bâtiment n'occupe pas.
+## C'est exactement pourquoi elle ne sert pas à valider un placement.
+func test_bounds_at_encloses_the_cell_the_l_does_not_occupy() -> void:
+	assert_that(_building(_l_shape()).bounds_at(Vector2i(2, 2))).is_equal(Rect2i(2, 2, 2, 2))
+
+## Une empreinte qui s'étend derrière son ancre : l'enveloppe doit reculer avec elle.
+## Un calcul parti de l'ancre au lieu du minimum raterait ce cas.
+func test_bounds_at_handles_offsets_behind_the_anchor() -> void:
+	var offsets: Array[Vector2i] = [Vector2i.ZERO, Vector2i(-1, -2)]
+	assert_that(_building(offsets).bounds_at(Vector2i(5, 5))).is_equal(Rect2i(4, 3, 2, 3))
+
+func test_neighbourhood_grows_the_bounds_on_all_four_sides() -> void:
+	var single: Array[Vector2i] = [Vector2i.ZERO]
+	assert_that(_building(single).neighbourhood_at(Vector2i(4, 4), 1)) \
+		.is_equal(Rect2i(3, 3, 3, 3))
+
+## Rayon nul : la zone est l'enveloppe elle-même. C'est ce qui rendra la fonction sûre
+## à appeler sans cas particulier chez l'appelant, à C3.
+func test_a_zero_radius_neighbourhood_is_the_bounds() -> void:
+	var building := _building(_l_shape())
+	assert_that(building.neighbourhood_at(Vector2i(2, 2), 0)) \
+		.is_equal(building.bounds_at(Vector2i(2, 2)))
+
+## Le format lui-même : une empreinte écrite dans un .tres revient bien en
+## Array[Vector2i] exploitable, et data/buildings/ passerait le contrôle de boot.
+##
+## Ce cas est le seul à toucher data/, et il n'y fige aucune taille — seulement le
+## fait qu'au moins un bâtiment existe et qu'aucun n'est inexploitable.
+func test_the_buildings_of_data_are_exploitable() -> void:
+	var seen: Array[String] = []
+	for file in DirAccess.get_files_at(BUILDING_ROOT):
+		if file.get_extension() != "tres":
+			continue
+		var building := load("%s/%s" % [BUILDING_ROOT, file]) as BuildingData
+		assert_object(building) \
+			.override_failure_message("%s n'est pas un BuildingData" % file) \
+			.is_not_null()
+		seen.append(file.get_basename())
+		assert_array(building.missing_fields()) \
+			.override_failure_message("bâtiment inexploitable dans %s" % file) \
+			.is_empty()
+	assert_array(seen) \
+		.override_failure_message("data/buildings/ ne contient aucun bâtiment") \
+		.is_not_empty()
+
+## Le point de doctrine du bloc économie. Zéro slot, un coût vide et une réserve nulle
+## sont trois valeurs légitimes du tableau de DESIGN.md 4 — la palissade n'a pas de
+## poste, la cabane de bûcheron est gratuite. Aucune ne peut donc être réclamée, et un
+## bâtiment qui n'en renseigne aucune est complet.
+func test_a_building_without_any_economy_block_is_complete() -> void:
+	assert_array(_building(_l_shape()).missing_fields()).is_empty()
+
+## Ce qui remplace le filet habituel : la cohérence entre ces champs. Des slots sans
+## rendement ne produiraient rien, et ça ne casserait qu'au premier soir.
+func test_slots_without_a_yield_are_reported() -> void:
+	var building := _building(_l_shape())
+	building.slots = 2
+	assert_array(building.missing_fields()).contains(["yield_per_slot"])
+
+## Sans famille, un poste ne sait ni quel multiplicateur appliquer ni quelle piste
+## créditer en XP.
+func test_slots_without_a_family_are_reported() -> void:
+	var building := _producer()
+	building.skill_family = &""
+	assert_array(building.missing_fields()).contains(["skill_family"])
+
+## L'inverse se rattrape aussi : un rendement que nul poste ne verse jamais.
+func test_a_yield_without_slots_is_reported() -> void:
+	var building := _producer()
+	building.slots = 0
+	assert_array(building.missing_fields()).contains(["slots"])
+
+func test_a_coherent_economy_block_reports_nothing() -> void:
+	assert_array(_producer().missing_fields()).is_empty()
+
+## Une ligne de coût à zéro ne veut rien dire : on l'omet. L'écrire est une faute de
+## contenu, pas une gratuité.
+func test_a_null_cost_line_is_reported() -> void:
+	var building := _building(_l_shape())
+	var cost: Dictionary[StringName, int] = {}
+	cost[&"wood"] = 0
+	building.cost = cost
+	assert_array(building.missing_fields()).contains(["cost.wood"])
+
+func test_a_negative_yield_line_is_reported() -> void:
+	var building := _producer()
+	var per_slot: Dictionary[StringName, int] = {}
+	per_slot[&"wood"] = -2
+	building.yield_per_slot = per_slot
+	assert_array(building.missing_fields()).contains(["yield_per_slot.wood"])
+
+## Un producteur cohérent : deux postes, un rendement, une famille.
+func _producer() -> BuildingData:
+	var building := _building(_l_shape())
+	building.slots = 2
+	var per_slot: Dictionary[StringName, int] = {}
+	per_slot[&"wood"] = 2
+	building.yield_per_slot = per_slot
+	building.skill_family = &"harvest"
+	return building
+
+## Un L : l'ancre, la cellule à sa droite, la cellule en dessous. Rendu neuf à chaque
+## appel plutôt que gardé en constante — un tableau partagé entre cas finirait par
+## être muté par l'un d'eux.
+func _l_shape() -> Array[Vector2i]:
+	var offsets: Array[Vector2i] = [Vector2i.ZERO, Vector2i(1, 0), Vector2i(0, 1)]
+	return offsets
+
+func _building(offsets: Array[Vector2i]) -> BuildingData:
+	var building := BuildingData.new()
+	building.id = &"test_hut"
+	building.color = Color(0.5, 0.4, 0.3)
+	building.height = 0.6
+	building.footprint = offsets
+	return building

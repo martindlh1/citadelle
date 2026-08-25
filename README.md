@@ -46,28 +46,45 @@ dossier. Le harnais à lancer se choisit dans la constante `HARNESS` de
 ## Capturer un rendu depuis un terminal
 
 Un harnais qui affiche quelque chose ne se vérifie ni au parsing ni aux tests : il
-faut le regarder. Le harnais Terrain accepte donc une capture en ligne de commande,
-qui rend une image puis quitte.
+faut le regarder. Les harnais graphiques acceptent donc une capture en ligne de
+commande, qui rend une image puis quitte.
+
+C'est le harnais désigné par `HARNESS` qui répond. Les drapeaux sont les mêmes pour
+tous — ils vivent dans `scenes/dev/dev_shot.gd`, en un seul endroit, pour que la même
+commande marche partout.
 
 ```bash
 "$GODOT_BIN" --path . --resolution 1280x720 -- --shot /tmp/rendu.png --shot-turns 1 --shot-hover 16,16
 ```
 
-Les arguments après `--` sont ceux du jeu et non du moteur. Les deux derniers sont
-optionnels : `--shot-turns` est le nombre de quarts de tour appliqués à la caméra avant
-la capture, `--shot-hover` la cellule à mettre en surbrillance, en `x,y`. À défaut, la
-capture désigne le centre de la carte — une capture qui ne montre pas la surbrillance
-ne prouve rien à son sujet, et souris à `(0, 0)` le survol réel tomberait hors carte.
+Les arguments après `--` sont ceux du jeu et non du moteur. Seul `--shot` est
+obligatoire ; les autres sont optionnels :
+
+| Drapeau | Effet |
+|---|---|
+| `--shot chemin.png` | rend une image puis quitte |
+| `--shot-hover x,y` | cellule à désigner. À défaut, le centre de la carte |
+| `--shot-turns n` | quarts de tour appliqués à la **caméra** |
+| `--shot-rotate n` | quarts de tour appliqués au **bâtiment** à poser *(harnais Construction)* |
+
+`--shot-hover` a une valeur par défaut plutôt que rien, parce qu'une capture qui ne
+montre pas la surbrillance ne prouve rien à son sujet, et que souris à `(0, 0)` le
+survol réel tomberait hors carte. `--shot-rotate` existe pour la même raison : sans
+lui, aucune capture ne montrerait jamais un bâtiment pivoté.
 
 **Écrire l'image hors du projet.** Une capture déposée dans l'arborescence est
 importée par le prochain scan de l'éditeur, qui lui colle un `.png.import` à ranger
 ensuite. Un chemin absolu hors de `res://` évite le ménage.
 
-Chaque capture imprime aussi une sonde : elle reprojette la cellule désignée vers
-l'écran, retire un rayon depuis cette position comme le ferait la souris, et dit si les
-deux tombent sur la même cellule. C'est le seul contrôle du raccord entre la caméra
-orthogonale et le `CellPicker` — les tests unitaires tirent des rayons fabriqués à la
-main, et les trois commandes de vérification ne regardent pas l'écran.
+La capture du harnais Terrain imprime aussi une sonde : elle reprojette la cellule
+désignée vers l'écran, retire un rayon depuis cette position comme le ferait la souris,
+et dit si les deux tombent sur la même cellule. C'est le seul contrôle du raccord entre
+la caméra orthogonale et le `CellPicker` — les tests unitaires tirent des rayons
+fabriqués à la main, et les trois commandes de vérification ne regardent pas l'écran.
+
+Celle du harnais Construction imprime à la place la ligne de survol : la cellule visée,
+son terrain, et le verdict du domaine sur une pose à cet endroit. C'est la légende de
+l'image — le fantôme y est vert ou rouge, cette ligne dit pourquoi.
 
 **Les coordonnées de la sonde ne sont pas des pixels de l'image.** `project.godot` est
 en `stretch/mode="canvas_items"` : le viewport garde la résolution de base du projet
@@ -78,3 +95,30 @@ convertir fait apparaître des décalages qui n'existent pas.
 
 C'est aussi ce qui rend une passe d'équilibrage visuelle tenable — comparer deux
 valeurs de `step_height` revient à éditer un `.tres` et relancer deux fois.
+
+**Deux captures ne se comparent que si leur ligne `cadrage` est identique.** Elle
+donne le `camera.size` et la taille du viewport, et c'est le viewport qui décide de
+tout : il garde la largeur de base du projet mais sa **hauteur suit le rapport de la
+fenêtre**, donc `--resolution 1024x600` ne cadre pas comme `1280x720`. Le premier
+lancement après un démarrage à froid n'obtient d'ailleurs pas toujours la fenêtre
+qu'il a demandée. Une capture qui paraît « plus zoomée » qu'une autre est presque
+toujours ça, et non le rendu qui a changé — au moindre doute, `cmp` sur les deux
+`.png` tranche là où l'oeil se trompe.
+
+## Les harnais qui n'affichent rien
+
+Tous les harnais ne dessinent pas. Le harnais **Économie** est un rapport texte : il
+imprime la construction, l'affectation et le tableau des soirs sur la **sortie
+standard** en plus de l'écran, donc
+
+```bash
+"$GODOT_BIN" --headless --quit --path .
+```
+
+suffit à le lire, sans capture ni fenêtre. C'est la même commande que la première
+vérification, ce qui est voulu — un rapport qu'on ne voit qu'en lançant le jeu finit
+par ne plus être lu du tout.
+
+Ce rapport se termine sur un verdict d'équilibrage que les tests ne peuvent pas
+donner, puisqu'ils travaillent sur des chiffres choisis : avec les valeurs de
+`data/balance/`, qui casse en premier — la famine ou la réserve pleine.
