@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="BuildingData" format=3]
+
+[ext_resource type="Script" path="res://src/schema/building_data.gd" id="1_building_data"]
+
+[resource]
+script = ExtResource("1_building_data")
+id = &"barracks"
+color = Color(0.48, 0.3, 0.28, 1)
+height = 0.9
+footprint = Array[Vector2i]([Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)])
+cost = Dictionary[StringName, int]({
+&"wood": 30,
+&"stone": 15
+})
