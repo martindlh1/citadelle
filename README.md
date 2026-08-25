@@ -107,9 +107,9 @@ toujours ça, et non le rendu qui a changé — au moindre doute, `cmp` sur les 
 
 ## Les harnais qui n'affichent rien
 
-Tous les harnais ne dessinent pas. Le harnais **Économie** est un rapport texte : il
-imprime la construction, l'affectation et le tableau des soirs sur la **sortie
-standard** en plus de l'écran, donc
+Tous les harnais ne dessinent pas. Les harnais **Économie** et **Effectifs** sont des
+rapports texte : ils impriment leurs tableaux sur la **sortie standard** en plus de
+l'écran, donc
 
 ```bash
 "$GODOT_BIN" --headless --quit --path .
@@ -126,3 +126,11 @@ donner, puisqu'ils travaillent sur des chiffres choisis : avec les valeurs de
 Il tient aussi une **file de construction** depuis `E1b` : ce que la bourse refuse à
 l'ouverture y reste, et le harnais en retente la tête un soir à la fois. La colonne de
 droite dit donc aussi le soir où chaque bâtiment différé devient enfin payable.
+
+Le harnais **Effectifs**, arrivé à `W1`, est le premier à composer **deux systèmes du
+domaine** : chaque soir, l'Économie résout la production, les Effectifs distribuent
+l'XP, et la main-d'œuvre est reprojetée avant le soir suivant — ce que
+`RunOrchestrator` fera à `I1`. Sa table montre la récolte à côté du multiplicateur qui
+vient de la produire, et son verdict répond à trois questions que les tests ne peuvent
+pas poser : au bout de combien de soirs un ouvrier devient bon, ce que la spécialisation
+rapporte une fois la troncature passée, et ce qu'une absence coûte.
