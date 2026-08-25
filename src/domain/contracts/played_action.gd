@@ -38,6 +38,15 @@ enum Kind {
 	BUILDING,
 }
 
+## Le verbe ne va nulle part : c'est le cas de tous sauf un.
+const DIRECTION_NONE := 0
+
+## *Terraformer* monte la case d'un cran.
+const DIRECTION_UP := 1
+
+## *Terraformer* la descend d'un cran.
+const DIRECTION_DOWN := -1
+
 ## Identifiant qu'aucune action posée ne partage. C'est la clé sous laquelle
 ## `Assignment` lui attache des ouvriers.
 var _id: int
@@ -56,24 +65,48 @@ var _kind: Kind
 ## Ouvriers que l'action accepte.
 var _capacity: int
 
+## Sens du terrassement, ou DIRECTION_NONE.
+##
+## Un `int` et non un `enum`, à l'inverse de `Kind`, et le choix est délibéré : il entre
+## dans une arithmétique de hauteur — le résolveur écrit `h + direction` —, alors qu'un
+## `enum` obligerait à le traduire en chiffre à chaque usage. Les trois valeurs sont
+## nommées juste au-dessus, ce que la convention réclame vraiment.
+var _direction := DIRECTION_NONE
+
 ## Action posée sous cet identifiant, par cette carte, sur cette cible.
 ##
 ## `capacity` est **figée à la pose**, comme l'avancement de chantier que
 ## `BuildingSnapshot` transporte figé. Elle est calculée par le ciblage, qui est le seul
 ## endroit où la question se pose : la recalculer à la résolution ouvrirait la porte à ce
 ## que l'écran promette trois postes et que le soir n'en serve que deux.
+##
+## `direction` est du même bois, et c'est ce que I1 ajoute. `DESIGN.md` 4.2 donne à
+## *Terraformer* deux sens et `data/cards/` n'en porte qu'une carte : le sens est donc un
+## choix **fait à la pose**, au même titre que l'orientation d'un bâtiment appartient au
+## placement et non à la `BuildingData`. Un défaut la rend invisible aux trois verbes qui
+## ne vont nulle part.
 static func create(id: int, card: StringName, target: Vector2i, kind: Kind,
-		capacity: int) -> PlayedAction:
+		capacity: int, direction := DIRECTION_NONE) -> PlayedAction:
 	assert(id > 0, "action posée sans identifiant : %d" % id)
 	assert(not card.is_empty(), "action posée sans carte")
 	assert(capacity >= 0, "action posée à capacité négative : %d" % capacity)
+	assert(is_known_direction(direction), "sens de terrassement inconnu : %d" % direction)
 	var action := PlayedAction.new()
 	action._id = id
 	action._card = card
 	action._target = target
 	action._kind = kind
 	action._capacity = capacity
+	action._direction = direction
 	return action
+
+## Ce chiffre est-il l'un des trois sens ?
+##
+## Publique parce que le ciblage pose la même question avant d'accepter une pose, et que
+## recopier la comparaison là-bas ferait deux listes à tenir d'accord.
+static func is_known_direction(direction: int) -> bool:
+	return direction == DIRECTION_NONE or direction == DIRECTION_UP \
+		or direction == DIRECTION_DOWN
 
 ## Identifiant stable pour la durée de la phase. C'est ce que l'`Assignment` nomme.
 func id() -> int:
@@ -105,3 +138,15 @@ func is_on_building() -> bool:
 ## une action peut parfaitement rester vide. C'est le plafond que le ciblage a promis.
 func capacity() -> int:
 	return _capacity
+
+## Sens du terrassement : DIRECTION_UP, DIRECTION_DOWN, ou DIRECTION_NONE pour tout
+## verbe qui ne déplace pas de terre.
+##
+## Il s'ajoute à la hauteur de la cellule tel quel, ce qui est la raison d'être des trois
+## valeurs choisies.
+func direction() -> int:
+	return _direction
+
+## L'action déplace-t-elle de la terre ?
+func moves_ground() -> bool:
+	return _direction != DIRECTION_NONE

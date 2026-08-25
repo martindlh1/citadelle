@@ -56,6 +56,33 @@ const REASON_OCCUPIED := &"occupied"
 ## qui décident où une action à cru peut se jouer.
 const REASON_WRONG_TAG := &"wrong_tag"
 
+## Le terrain de la cible ne se terrasse pas.
+##
+## `DESIGN.md` 3.5 gardait la question ouverte — « l'eau et le rocher se terrassent-ils ? »
+## —, et `I1` la referme sur les terrains **constructibles**. La raison tient au fait que
+## terrasser déplace la **hauteur** et non le `TerrainData` : monter une case d'eau la
+## laisserait eau, donc toujours inconstructible, pour le prix d'une carte et d'un
+## ouvrier. Le jour où un verbe voudra changer le sol lui-même, ce sera un *Défricher* et
+## non ce verbe-ci.
+##
+## Homonyme de `PlacementResult.REASON_NOT_BUILDABLE`, et c'est voulu : les deux disent
+## la même chose de la même cellule.
+const REASON_NOT_BUILDABLE := &"not_buildable"
+
+## Le terrassement sortirait des bornes de relief.
+##
+## Une case au plancher ne descend plus, une case au plafond ne monte plus. Les deux
+## bornes vivent dans `data/balance/`, séparées de celles de la génération : celles-là
+## décrivent la carte qu'on reçoit, celles-ci jusqu'où on a le droit de la pousser.
+const REASON_HEIGHT_LIMIT := &"height_limit"
+
+## Le verbe déplace de la terre et aucun sens ne lui a été donné.
+##
+## Un refus plutôt qu'un `assert` : « aucun sens choisi » est un état d'écran parfaitement
+## normal — la carte est en main, le curseur promène sa cible, et le joueur n'a pas encore
+## dit s'il montait ou descendait.
+const REASON_NO_DIRECTION := &"no_direction"
+
 ## Cette carte est **déjà posée** sur cette cible.
 ##
 ## Une carte ouvre les postes de sa cible une fois. Une seconde du même nom au même
@@ -72,6 +99,7 @@ var _reason: StringName = REASON_NONE
 var _kind: PlayedAction.Kind = PlayedAction.Kind.BARE
 var _target: Vector2i
 var _capacity: int
+var _direction := PlayedAction.DIRECTION_NONE
 
 ## Ciblage accepté : l'action se poserait de cette façon, sur cette cellule, et
 ## accepterait tant d'ouvriers.
@@ -80,14 +108,22 @@ var _capacity: int
 ## peut tenir est indiscernable d'un refus pour le joueur, et la laisser passer
 ## produirait une action posée que rien ne peut jamais servir — le genre d'état qui ne
 ## casse pas mais qui ment.
-static func accepted(kind: PlayedAction.Kind, target: Vector2i,
-		capacity: int) -> TargetResult:
+##
+## Le sens du terrassement traverse pour la même raison que la capacité : c'est celui que
+## la validation vient d'accepter, et le faire recopier par l'appelant au moment de poser
+## ouvrirait la porte à ce que l'écran ait allumé les cases où l'on peut descendre pendant
+## que la pose, elle, monte.
+static func accepted(kind: PlayedAction.Kind, target: Vector2i, capacity: int,
+		direction := PlayedAction.DIRECTION_NONE) -> TargetResult:
 	assert(capacity > 0, "ciblage accepté sans aucun poste : %d" % capacity)
+	assert(PlayedAction.is_known_direction(direction),
+		"ciblage accepté sur un sens inconnu : %d" % direction)
 	var result := TargetResult.new()
 	result._ok = true
 	result._kind = kind
 	result._target = target
 	result._capacity = capacity
+	result._direction = direction
 	return result
 
 ## Ciblage refusé pour cette raison, qui est l'une des constantes ci-dessus.
@@ -120,3 +156,9 @@ func target() -> Vector2i:
 func capacity() -> int:
 	assert(_ok, "capacité demandée à un ciblage refusé")
 	return _capacity
+
+## Sens que l'action porterait — DIRECTION_NONE pour tout verbe qui ne déplace pas de
+## terre. Précondition : is_ok().
+func direction() -> int:
+	assert(_ok, "sens demandé à un ciblage refusé")
+	return _direction
