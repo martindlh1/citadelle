@@ -95,7 +95,11 @@ Trois raisons de le vouloir :
 
 Un chantier est donc un **état du bâtiment posé**, pas un type de bâtiment à part : `CityState` en garde l'avancement, et `CitySnapshot` le dit à qui le consomme. L'Économie ignore un bâtiment inachevé ; le Combat, lui, peut très bien le voir.
 
-**`OUVERT`** — que rend un chantier détruit ou annulé ? Rien, une partie du coût, tout ? Et un chantier peut-il être abandonné volontairement pour récupérer la case ?
+*(Écrit à `C4`.)* Cette dernière phrase est devenue une ligne de contrat plutôt qu'une consigne : `CitySnapshot` expose **deux lectures** — `buildings()` rend tout, chantiers compris, et `completed()` ne rend que les finis. Trois consommateurs posent exactement la seconde question — les postes de production, la réserve que les entrepôts relèvent, les places que les habitations ajoutent —, et le Combat posera la première. Laisser chacun recopier son filtre l'aurait fait oublier au quatrième, et l'oubli aurait été silencieux : un entrepôt en chantier qui relève quand même la réserve ne casse rien, il ment.
+
+**`OUVERT`** — que rend un chantier détruit ou annulé ? Rien, une partie du coût, tout ? Et un chantier peut-il être abandonné volontairement pour récupérer la case ? `C4` n'y a pas touché : détruire un chantier libère ses cellules et ne rend rien, ce qui est l'état par défaut et non une réponse.
+
+**`OUVERT`** — quelle piste de compétence l'action *Construire* crédite-t-elle ? Aucune des trois familles de 3.4 — Récolte, Artisanat, Combat — ne la couvre. La question est apparue à `C4`, qui ne la tranche pas : elle appartient à `D2`, où *Construire* deviendra une carte jouée par un ouvrier nommé, et elle a trois issues — une quatrième famille, un rattachement à l'Artisanat, ou de l'XP de niveau seule, ce que 3.4 rend déjà possible.
 
 #### Adjacence
 
@@ -283,7 +287,11 @@ La **palissade** est entrée par la pratique et non par le design : `C2` l'a cr�
 
 Les bonus d'adjacence ne sont pas dans cette table : ils viennent avec `C3`, qui décidera de leur forme avant de les chiffrer.
 
-**Ce que `data/` porte, et ce qu'il ne porte pas encore.** *(Constaté à `E1b`.)* Un champ arrive avec le système qui le lit : la colonne **Chantier** est écrite ici mais vit dans `data/` à `C4`, **Déf.** et **PV** à `F1`, **Débloque** à `D1`. Les places de roster de l'habitation y sont entrées à `W1`, ce qui a sorti ce bâtiment de la coquille vide où `E1b` l'avait laissé. La conséquence à ne pas confondre avec un oubli : **cinq bâtiments portent « 1 slot » dans ce tableau et n'ont pourtant aucun bloc `production`** — tour de guet, caserne, marché, atelier, camp d'exploration. Leur poste n'est pas un poste de production ; il héberge une défense, un échange ou une action débloquée, et la nature qui le décrira n'existe pas encore. Leur écrire un `slots = 1` que rien ne lit ferait mentir la data et détruirait la garantie que `E1b` vient d'acheter — un bloc qui existe produit.
+**Ce que `data/` porte, et ce qu'il ne porte pas encore.** *(Constaté à `E1b`.)* Un champ arrive avec le système qui le lit : la colonne **Chantier** y est entrée à `C4`, **Déf.** et **PV** viendront à `F1`, **Débloque** à `D1`.
+
+Le « — » du Cœur dans la colonne Chantier est un **zéro**, comme son « posé au départ » dans la colonne Coût est un coût vide. C'est ce qui lui évite un chemin de pose particulier : un bâtiment qui ne réclame aucune action est achevé dès qu'il est posé, sans que rien n'ait à connaître le cas. Le prix assumé de ce choix est qu'un `build_actions` oublié dans un `.tres` vaut 0 et fait sauter le chantier en silence ; un cas de test exige donc qu'au moins un bâtiment de `data/` en déclare un, ce qui rattrape la disparition du format entier. *(Tranché à `C4`.)*
+
+Les places de roster de l'habitation y sont entrées à `W1`, ce qui a sorti ce bâtiment de la coquille vide où `E1b` l'avait laissé. La conséquence à ne pas confondre avec un oubli : **cinq bâtiments portent « 1 slot » dans ce tableau et n'ont pourtant aucun bloc `production`** — tour de guet, caserne, marché, atelier, camp d'exploration. Leur poste n'est pas un poste de production ; il héberge une défense, un échange ou une action débloquée, et la nature qui le décrira n'existe pas encore. Leur écrire un `slots = 1` que rien ne lit ferait mentir la data et détruirait la garantie que `E1b` vient d'acheter — un bloc qui existe produit.
 
 ### 4.2 Actions
 
@@ -342,7 +350,7 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 ### Construction — `C`
 - **C1** ✅ — `CityState`, `PlacementValidator`, empreintes, tests.
 - **C2** ✅ — Fantôme de placement, pose et destruction, rotation.
-- **C4** — **Chantiers** : bâtiment posé non fini, avancement, `CitySnapshot` qui le porte, rendu distinct.
+- **C4** ✅ — **Chantiers** : bâtiment posé non fini, avancement porté par `CityState`, `CitySnapshot` qui le dit en deux lectures — tout, et les seuls achevés —, rendu distinct, colonne **Chantier** de 4.1 entrée dans `data/`. L'action *Construire* elle-même est une carte, donc `D1` et `D2` : `C4` écrit la porte qu'elle visera, et le harnais y frappe au clavier en attendant.
 - **C3** — Règles d'adjacence + prévisualisation du delta au survol.
 
 ### Économie — `E`
@@ -381,6 +389,6 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 - **X4** — Powers : le troisième pool se remplit *(3.5)*.
 - **X5** — Ce qu'un palier de **niveau d'ouvrier** offre : le choix de compétence *(3.4)*. `W1` écrit l'accumulateur et les paliers, qui se gagnent et se lisent ; ce qu'ils débloquent est du contenu et de l'UI, et se décide devant un roster qui a vraiment vécu quinze jours.
 
-**Ordre suivant** — `C4`, puis `D1` et `D2`, puis `I1`. `E1b` est passé avant `W1` parce qu'il touchait les `.tres` de bâtiments et que leur nombre a doublé ; `W1` a suivi parce qu'il était le dernier moment où `LaborForce` pouvait bouger sans douleur — elle n'a finalement pas bougé — et parce qu'il est le seul jalon qui rende le journal de travail de `E1` utile à quelque chose.
+**Ordre suivant** — `D1` et `D2`, puis `I1`. `E1b` est passé avant `W1` parce qu'il touchait les `.tres` de bâtiments et que leur nombre a doublé ; `W1` a suivi parce qu'il était le dernier moment où `LaborForce` pouvait bouger sans douleur — elle n'a finalement pas bougé — et parce qu'il est le seul jalon qui rende le journal de travail de `E1` utile à quelque chose. `C4` est venu ensuite parce qu'il rouvrait ces mêmes `.tres` une dernière fois avant que les cartes n'arrivent, et parce que `D2` a besoin d'une cible pour *Construire* : sans chantier, cette carte n'aurait rien à avancer.
 
 Le jeu devient jouable à `I2`. Tout ce qui suit est de l'enrichissement.

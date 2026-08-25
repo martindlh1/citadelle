@@ -4,6 +4,219 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-25 — `C4` : le chantier, ses deux lectures, et un contrôle par l'image
+
+**État : terminé.** Cinq commits sur `feat/c4-construction-sites`, tirée de
+`feat/w1-workforce` — `master` n'a toujours pas reçu `W1`, la chaîne empilée continue.
+Les trois commandes passent : boot sans erreur ni warning, tout `src/domain/` parse,
+**324 tests verts contre 304** à l'ouverture.
+
+La branche a de nouveau été créée **à l'orientation**, avant la première ligne. Trois
+jalons d'affilée.
+
+### Ce qui a été livré
+
+- `BuildingData.build_actions`, et la colonne **Chantier** de `DESIGN.md` 4.1 écrite
+  dans les treize `.tres`.
+- `BuildingSnapshot` — `progress()`, `is_complete()`, `remaining()` ; `CitySnapshot` —
+  `completed()` à côté de `buildings()`.
+- `PlacedBuilding` — l'avancement et `advance()` ; `CityState.advance(anchor)`.
+- `ProductionResolver` et `Roster.capacity_for()` — les trois endroits qui devaient
+  cesser de compter un inachevé.
+- `tests/` — quatorze cas neufs répartis sur quatre suites.
+- `BuildingRenderer` — le rendu distinct ; `city_harness.gd` — `Espace`, l'état sous le
+  curseur, l'étalement des avancements.
+- `DESIGN.md` 3.2, 4.1 et 8.
+
+### Deux arbitrages avant d'écrire
+
+**Le « — » du Cœur est un zéro**, et non un champ réclamé au boot. L'argument qui a
+tranché n'est pas le confort mais la **cohérence de ligne** : ce même Cœur porte déjà
+« posé au départ » dans la colonne Coût, et `data/` le représente par un coût vide que
+le schéma accepte sans broncher. Représenter « — » par un zéro est le même geste sur la
+même ligne du tableau. Le bénéfice se voit à ce qui n'a pas été écrit : `is_complete()`
+étant `progress >= build_actions`, le Cœur est achevé à la pose et **aucun chemin
+particulier n'existe** pour lui — ni dans `place()`, ni dans le harnais, ni demain dans
+`RunOrchestrator`.
+
+Le prix est réel et a été payé, pas ignoré : un `build_actions` oublié vaut 0 et fait
+sauter le chantier en silence. Un cas de test charge tout `data/` et exige qu'au moins un
+bâtiment en déclare un — le filet que `production_block_test.gd` tend déjà sous les blocs
+de production, et qui rattrape la disparition du **format entier** sinon rien. C'est un
+filet à mailles larges, et c'est dit comme tel.
+
+**Les harnais Économie et Effectifs achèvent à la pose.** Sans intervention ils
+devenaient muets : leurs bâtiments seraient restés des chantiers pour toujours, faute de
+carte *Construire* à leur jeter dessus. Chez l'Économie ça vidait le rapport ; chez les
+Effectifs ça cascadait — pas de poste, pas de ligne de travail, pas d'XP, deux tableaux
+et un verdict à zéro.
+
+L'alternative — un cran par soir — est la version **intéressante**, et elle répondrait à
+une vraie question : ce que le délai de chantier coûte à l'économie. Elle a été écartée
+pour une raison de méthode et non de goût : les chiffres d'un harnais sont des **repères
+écrits au journal**, et déplacer ceux de `E1b` et `W1` depuis un jalon dont le sujet est
+la Construction aurait rendu la prochaine dérive inattribuable. Vérifié après coup plutôt
+que supposé — la famine tombe toujours au soir 6, la mine se paie toujours au soir 8, la
+réserve finit toujours à 189/200 ; côté Effectifs, la nourriture bouge toujours au soir
+20 et Elric revient toujours avec 24 postes et 96 XP. Aucun repère n'a bougé.
+
+Elle a un meilleur moment, et il est nommé : **`I1`**, où l'orchestrateur séquence une
+vraie journée et où le délai est *joué* au lieu d'être simulé par un harnais qui ferait
+semblant d'avoir des cartes.
+
+### La décision qui porte le jalon : deux lectures plutôt qu'un filtre recopié
+
+Trois consommateurs devaient cesser de compter un bâtiment inachevé — les postes de
+production, la réserve que les entrepôts relèvent, les places que les habitations
+ajoutent. Et un quatrième, le Combat, doit au contraire les **voir** : `DESIGN.md` 3.2
+veut qu'un chantier détruit la veille de la vague soit une vraie perte.
+
+Trois clauses `if not is_complete()` recopiées auraient marché, et auraient été oubliées
+à la quatrième. Le pire est que **l'oubli aurait été silencieux** : un entrepôt en
+chantier qui relève quand même la réserve ne casse rien, il ment — et un mensonge de ce
+genre ne se découvre qu'en équilibrage, six jalons plus loin.
+
+`CitySnapshot` porte donc `completed()` à côté de `buildings()`. Une implémentation, du
+côté du DTO qui sait déjà tout ce qu'il faut pour répondre, et deux questions qui ont
+chacune leur consommateur — ce qui est précisément la condition que le projet s'impose
+avant d'ouvrir une porte.
+
+### Ce que la capture a trouvé, et ce qu'elle a innocenté
+
+Cinquième jalon d'affilée où l'image dit quelque chose qu'aucune des trois commandes ne
+pouvait dire. Deux fois, et les deux comptent.
+
+**Un bug à moi.** Le premier étalement donnait à chaque bâtiment un nombre de crans égal
+à son rang dans le catalogue, calqué sur ce que `C2` fait des orientations. Sauf que les
+orientations bouclent à 4 et que les chantiers de `DESIGN.md` 4.1 plafonnent à **3** :
+tout ce qui vient après le quatrième rang était achevé d'office, et la ville d'ouverture
+ne montrait que **2 chantiers sur 13**. Corrigé en prenant les crans modulo ce que chaque
+bâtiment réclame — 9 chantiers sur 13, et toute la gamme sous une seule capture. Aucun
+test n'aurait signalé ça : le code était correct, c'est la mise en scène qui ne montrait
+rien.
+
+**Un bug qui n'est pas à moi.** La même capture montre une **trame en damier** sur le
+dessus des boîtes, là où l'ombre d'un bâtiment haut tombe sur un bâtiment bas. La
+tentation était de l'attribuer aux boîtes minces que `C4` introduit. Contrôle fait plutôt
+que supposé : une capture avec `SITE_BASE_RATIO` forcé à `1.0` — donc au rendu exact de
+`C2`, toutes les boîtes à pleine hauteur — **montre exactement la même trame**. C'est un
+défaut de filtrage d'ombre de la lumière de `DevWorld`, que `C4` a seulement rendu plus
+visible en posant des boîtes basses à côté d'une tour. Consigné, pas corrigé : c'est du
+travail Terrain, et `CLAUDE.md` interdit depuis `C2` de « réparer » un problème qu'on n'a
+pas d'abord constaté chez soi.
+
+Le stratagème du contrôle mérite d'être retenu : neutraliser **son propre** paramètre et
+recapturer répond en trente secondes à « est-ce moi ? », là où un `git stash` a fait
+perdre deux minutes et failli emporter le travail — la remise au propre rebasculait
+`HARNESS` sur `&"workforce"`, un harnais sans `--shot` ni `quit()`, qui a bloqué jusqu'au
+délai d'expiration.
+
+### Décisions
+
+**L'avancement vit sur `PlacedBuilding`, pas dans un troisième index.** `CityState` tient
+deux index qui disent la même vérité — ce qui existe, quelle cellule renvoie à quoi. Un
+avancement rangé à côté d'eux serait un état séparé du bâtiment qu'il décrit, à
+resynchroniser à chaque pose et à chaque retrait. Le docstring qui promettait un
+`PlacedBuilding` immuable est corrigé plutôt que contourné : **son placement est figé,
+son avancement ne l'est pas**, et c'est exactement ce que `DESIGN.md` 3.2 demande en
+disant qu'un chantier est un *état* du bâtiment posé.
+
+**`advance()` rend un `bool`, pas un DTO `{ok, reason}`.** Profil de `remove()` et non de
+`place()`. La convention réserve le DTO aux erreurs récupérables, et un refus de
+placement en est une vraie — le fantôme interroge le validateur à chaque image et la
+plupart des réponses sont des refus. Ici les deux seuls refus possibles — rien à cette
+ancre, chantier déjà fini — se posent avant l'appel, et un booléen suffit à dire lequel
+s'est produit quand même.
+
+**`advance()` n'est pas un verrou, et le docstring le dit.** `place()` est une porte
+exclusive : rien n'entre dans la ville sans être passé par le validateur, et c'est tenu
+par la structure. `advance()` ne peut pas l'être — le renderer tient une liste de
+`PlacedBuilding` depuis `C2`, et fermer ça demanderait de ne plus jamais en laisser
+sortir un. Écrire « porte documentée » plutôt que « seule porte » coûte une phrase et
+évite qu'on croie à une garantie qui n'existe pas.
+
+**L'achèvement se teste dans `_work_lines()`, avant le bloc de production.** Même endroit
+unique que `E1b` avait choisi pour `produces()` : toute ligne de travail en sort, donc
+tout ce qui en consomme une sait que le bâtiment produit **et** qu'il est fini. L'ordre
+des deux clauses n'est pas indifférent — un ouvrier envoyé sur une ferme en chantier
+chôme parce qu'elle n'est pas finie, pas parce qu'elle ne produirait pas. La distinction
+ne se lit nulle part aujourd'hui ; elle se lira le jour où le rapport dira pourquoi.
+
+**Hauteur et couleur sont pilotées par le même nombre.** Un chantier monte et reprend sa
+couleur ensemble. Réglés séparément, les deux signaux auraient fini par se contredire —
+une boîte presque haute encore grise. La teinte de fondation et le plancher de hauteur
+sont des constantes d'adapter et non de `data/` : ce que `data/` décide reste ce qu'un
+bâtiment **fini** vaut, l'écart qu'un chantier montre est de l'affichage. `PlacementGhost`
+tient ses deux teintes exactement là pour la même raison.
+
+**Le plancher de hauteur est non nul, et c'est le seul des trois chiffres qui compte.** À
+zéro, un chantier fraîchement posé serait une boîte d'épaisseur nulle, donc invisible, et
+on ne verrait pas qu'on vient de payer une case. Il faut qu'il se voie *pour* se lire
+comme inachevé.
+
+**Pas de drapeau `--shot-build`.** `--shot-rotate` existait parce que rien d'autre ne
+pivotait un bâtiment posé ; ici l'étalement des avancements met déjà chantiers et
+bâtiments finis sous les yeux d'une seule capture. Un drapeau qui ne montrerait rien de
+neuf est une option de plus à documenter et à maintenir.
+
+**Le nom `build_actions`, et pas `turns`.** `turns` désigne déjà les quarts de tour d'une
+orientation, partout dans le système. La collision aurait été silencieuse et
+catastrophique.
+
+### Ce qui reste
+
+Rien pour `C4`. Cinq choses volontairement laissées de côté :
+
+- **la carte *Construire* et l'affectation typée par action** — `D1` et `D2`. Inventer
+  aujourd'hui un verbe dans `Assignment` serait deviner la forme du Deck : c'est la règle
+  qui a sorti `CombatForce` de `W1`.
+- **ce que rend un chantier détruit** — `OUVERT` de 3.2, laissé entier. Détruire libère
+  les cellules et ne rend rien, ce qui est l'état par défaut et non une réponse.
+- **le Combat qui voit les chantiers** — `F1`. `buildings()` lui garde la porte ouverte,
+  et c'est tout ce que `C4` lui devait.
+- **l'adjacence** — `C3`, inchangé.
+- **le délai de chantier dans les harnais Économie et Effectifs** — `I1`, argumenté
+  ci-dessus.
+
+Et deux constats à porter ailleurs :
+
+- **une question de design neuve, inscrite en `OUVERT` dans 3.2** : quelle piste l'action
+  *Construire* crédite-t-elle ? Aucune des trois familles ne la couvre. Elle appartient à
+  `D2`, et elle a trois issues — une quatrième famille, un rattachement à l'Artisanat, ou
+  de l'XP de niveau seule, ce que les deux axes de `W1` rendent déjà possible.
+- **la trame d'ombre sur le dessus des boîtes** — travail Terrain, antérieure à `C4`,
+  prouvée telle par capture de contrôle.
+
+Les deux reports de `W1` tiennent toujours : la troncature du rendement à `I3`, et la
+mise en commun des rapports texte des harnais, toujours sans jalon attitré — `_make_label()`
+en est maintenant à cinq exemplaires.
+
+### Prochain jalon
+
+**`D1`** — le `Deck`, la `Hand`, les trois pools, défausse, remélange, draft. Puis `D2`,
+qui donnera enfin à *Construire* une carte et un ouvrier, et qui trouvera le chantier
+déjà là à viser. `I1` ensuite.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'input
+ajoutée — `Espace` est lu en `InputEventKey` brut comme le reste.
+
+- `F5` lance le **harnais Construction** : la carte, treize bâtiments posés en haut à
+  droite dont neuf en chantier à des stades différents, le fantôme sous le curseur. Clic
+  gauche pose, clic droit détruit, **Espace bâtit un cran**, 1 à 9 choisissent, Tab
+  pivote. Q/E, molette, WASD et R restent à la caméra. `HARNESS` revient à `&"economy"`,
+  `&"workforce"` ou `&"terrain"` en un mot dans `scenes/dev/dev_boot.gd`.
+- **les treize chiffres de chantier sont à relire.** Ils viennent du tableau de
+  `DESIGN.md` 4.1, donc ce sont des hypothèses au même titre que les coûts — et le Cœur
+  n'en porte volontairement aucun. Le boot ne peut pas refuser un zéro, puisque c'est une
+  valeur légitime : c'est le seul champ de `BuildingData` où une faute de saisie passe
+  sans bruit, et c'est la raison de le relire une fois.
+- rien de neuf dans `data/` : aucun `.tres` créé, donc **aucun `uid` manquant** cette
+  fois-ci — pour la première fois depuis `T1`.
+
+---
+
 ## 2026-08-25 — `W1` : l'ouvrier, ses deux axes, et la boucle refermée sur `E1`
 
 **État : terminé.** Six commits sur `feat/w1-workforce`, tirée de **`master`** — la
