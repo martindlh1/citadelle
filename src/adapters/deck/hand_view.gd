@@ -44,6 +44,22 @@ const POOL_GAP := 26
 ## Épaisseur du cadre de la carte tenue.
 const SELECTED_BORDER := 3
 
+## De combien une carte survolée se soulève, en pixels.
+##
+## L'encombrement de la carte ne change pas pour autant : la marge perdue en haut est
+## rendue en bas. Une rangée qui grandirait au survol repousserait ses voisines, et la
+## main entière danserait sous la souris.
+const HOVER_LIFT := 5
+
+## Éclaircissement du fond d'une carte survolée.
+const HOVER_LIGHTEN := 0.16
+
+## Liseré d'une carte survolée. Fin et froid, là où la carte **tenue** porte un cadre
+## épais et doré : la présélection doit se distinguer de la sélection d'un coup d'œil,
+## sans quoi elle ajoute de la confusion plutôt que de l'information.
+const HOVER_BORDER := 2
+const HOVER_COLOR := Color(0.80, 0.86, 0.94, 0.85)
+
 ## Teintes de fond, par pool. Un pool absent de la table retombe sur DEFAULT_TINT, ce qui
 ## laisse les powers entrer à X4 sans rien casser ici.
 const POOL_TINT: Dictionary[StringName, Color] = {
@@ -78,7 +94,9 @@ static func create(catalogue: CardCatalogue) -> HandView:
 	view.add_theme_constant_override("separation", POOL_GAP)
 	view.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	view.alignment = BoxContainer.ALIGNMENT_CENTER
-	view.offset_top = -(CARD_HEIGHT + 2 * CARD_GAP)
+	# HOVER_LIFT est compris dans la bande : c'est la course que les cartes ont au-dessus
+	# d'elles pour se soulever, et l'oublier ferait rogner le haut de la carte survolée.
+	view.offset_top = -(CARD_HEIGHT + HOVER_LIFT + 2 * CARD_GAP)
 	view.offset_bottom = -CARD_GAP
 	# Les clics traversent : le curseur de cellule pioche sous la souris à chaque image,
 	# et une main qui les avalerait rendrait le bas de la carte injouable.
@@ -115,31 +133,44 @@ func show_hand(hand: Hand, held: int) -> void:
 			slot += 1
 		add_child(row)
 
-## Un panneau de carte : le libellé, son rang au clavier, et un cadre s'il est tenu.
+## Une carte : le libellé, son rang au clavier, un cadre si elle est tenue, et un liseré
+## si la souris la survole.
 ##
-## Seul le panneau arrête la souris ; la vue, les rangées et les libellés la laissent
-## passer. C'est ce qui permet de cliquer le sol **entre** deux cartes et sous la main,
-## au lieu qu'une barre invisible avale le bas de la carte.
+## C'est l'**enveloppe** qui arrête la souris, pas le panneau qu'elle contient. La vue, les
+## rangées et les libellés la laissent passer, ce qui permet de cliquer le sol **entre**
+## deux cartes et sous la main, au lieu qu'une barre invisible avale le bas de l'écran.
 ##
-## Et c'est aussi ce qui évite qu'un clic sur une carte joue au passage la case survolée :
-## un Control qui traite l'événement le consomme, donc l'_unhandled_input du harnais ne le
+## L'enveloppe plutôt que le panneau, et ce n'est pas indifférent : le panneau se soulève
+## au survol, si bien qu'un curseur posé sur son bord bas se retrouverait dehors dès qu'il
+## monte, ressortirait, le ferait redescendre — et la carte clignoterait sous la souris.
+## L'enveloppe, elle, ne bouge jamais.
+##
+## C'est aussi ce qui évite qu'un clic sur une carte joue au passage la case survolée : un
+## Control qui traite l'événement le consomme, donc l'_unhandled_input du harnais ne le
 ## voit jamais. Le routage est tenu par la structure, pas par un test dans le harnais.
 func _make_card(card: StringName, pool: StringName, slot: int,
-		selected: bool) -> PanelContainer:
+		selected: bool) -> MarginContainer:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT)
-	panel.mouse_filter = Control.MOUSE_FILTER_STOP
-	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	panel.tooltip_text = _label_of(card)
-	panel.gui_input.connect(_on_card_input.bind(slot))
-	panel.add_theme_stylebox_override("panel", _make_style(pool, selected))
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_theme_stylebox_override("panel", _make_style(pool, selected, false))
 	var column := VBoxContainer.new()
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
 	column.add_child(_make_line("%d" % (slot + 1), INDEX_FONT_SIZE, INDEX_COLOR))
 	column.add_child(_make_line(_label_of(card), LABEL_FONT_SIZE, LABEL_COLOR))
 	panel.add_child(column)
-	return panel
+
+	var wrapper := MarginContainer.new()
+	wrapper.mouse_filter = Control.MOUSE_FILTER_STOP
+	wrapper.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	wrapper.tooltip_text = _label_of(card)
+	wrapper.add_child(panel)
+	_lift(wrapper, false)
+	wrapper.gui_input.connect(_on_card_input.bind(slot))
+	wrapper.mouse_entered.connect(_on_card_hover.bind(wrapper, panel, pool, selected, true))
+	wrapper.mouse_exited.connect(_on_card_hover.bind(wrapper, panel, pool, selected, false))
+	return wrapper
 
 ## Un clic gauche sur une carte la signale. Les autres boutons passent leur chemin —
 ## le clic droit appartient au retrait d'une action, sur la carte du monde.
@@ -152,15 +183,43 @@ func _on_card_input(event: InputEvent, slot: int) -> void:
 	accept_event()
 	card_picked.emit(slot)
 
-func _make_style(pool: StringName, selected: bool) -> StyleBoxFlat:
+## La souris entre sur une carte, ou la quitte.
+##
+## `selected` est figé à la construction et non relu : la vue entière est reconstruite à
+## chaque changement de sélection, donc une carte survolée ne peut pas changer d'état sous
+## la souris sans que ce nœud-ci disparaisse avec.
+func _on_card_hover(wrapper: MarginContainer, panel: PanelContainer, pool: StringName,
+		selected: bool, hovered: bool) -> void:
+	panel.add_theme_stylebox_override("panel", _make_style(pool, selected, hovered))
+	_lift(wrapper, hovered)
+
+## Soulève la carte dans son enveloppe, à encombrement constant.
+func _lift(wrapper: MarginContainer, hovered: bool) -> void:
+	var above := 0 if hovered else HOVER_LIFT
+	wrapper.add_theme_constant_override("margin_top", above)
+	wrapper.add_theme_constant_override("margin_bottom", HOVER_LIFT - above)
+
+## Le fond d'une carte selon son pool, ce qu'on tient et ce qu'on survole.
+##
+## La sélection l'emporte sur le survol quand les deux tombent sur la même carte : garder
+## le liseré de présélection par-dessus la carte déjà tenue effacerait la seule
+## information qui compte. Le fond reste éclairci, ce qui suffit à dire « la souris est
+## bien là ».
+##
+## La marge de contenu ne dépend d'aucun des deux : un cadre qui pousserait le texte
+## ferait sauter le libellé d'un pixel au passage de la souris.
+func _make_style(pool: StringName, selected: bool, hovered: bool) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
-	style.bg_color = POOL_TINT.get(pool, DEFAULT_TINT)
+	var tint: Color = POOL_TINT.get(pool, DEFAULT_TINT)
+	style.bg_color = tint.lightened(HOVER_LIGHTEN) if hovered else tint
 	style.set_corner_radius_all(4)
 	style.set_content_margin_all(6)
-	if not selected:
-		return style
-	style.set_border_width_all(SELECTED_BORDER)
-	style.border_color = SELECTED_COLOR
+	if selected:
+		style.set_border_width_all(SELECTED_BORDER)
+		style.border_color = SELECTED_COLOR
+	elif hovered:
+		style.set_border_width_all(HOVER_BORDER)
+		style.border_color = HOVER_COLOR
 	return style
 
 func _make_line(text: String, size: int, color: Color) -> Label:
