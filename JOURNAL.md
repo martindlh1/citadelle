@@ -4,6 +4,157 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-25 — `E1b` : le bloc de production, le minerai, et les douze bâtiments
+
+**État : terminé.** Six commits sur `feat/e1b-production-block`, tirée de
+`feat/e1-economy` — la chaîne habituelle, `master` n'a toujours rien reçu. Les trois
+commandes passent : boot sans erreur ni warning, tout `src/domain/` parse, **247 tests
+verts contre 241** à l'ouverture.
+
+La leçon de `E1` a été appliquée sans qu'on ait à la réapprendre : **la branche a été
+créée à l'orientation**, avant la première ligne écrite.
+
+### Ce qui a été livré
+
+- `src/schema/production_block.gd` — la classe neuve, et le seul vrai sujet du jalon.
+- `BuildingData` — perd `slots`, `yield_per_slot` et `skill_family`, gagne
+  `production` et `produces()`.
+- `ProductionResolver` — lit le bloc, et pose une meilleure question qu'avant.
+- `GameDatabase` — le contrôle croisé traverse le bloc et nomme le chemin.
+- `data/commodities/ore.tres`, et **sept bâtiments neufs** : mine, habitation, tour de
+  guet, caserne, marché, atelier, camp d'exploration. Les six anciens réécrits.
+- `tests/schema/production_block_test.gd`, et la couture dans les deux suites voisines.
+- `scenes/dev/economy_harness.gd` — la file d'attente de construction.
+- `DESIGN.md` 4.1.
+
+### Ce que le bloc achète, et ça se lit à ce qui a disparu
+
+`E1` avait consigné une entorse assumée : « la doctrine du zéro ne s'applique pas au
+bloc économie ». À plat sur `BuildingData`, `slots = 0` était une valeur parfaitement
+légitime — la palissade n'a pas de poste. Un champ non renseigné y cessait donc d'être
+détectable, et il avait fallu le remplacer par un contrôle de cohérence **entre** les
+trois champs.
+
+L'entorse est levée, et sans avoir été traitée. Un bloc qui existe produit : ses trois
+champs se réclament maintenant sans condition, comme partout ailleurs dans le projet.
+Le gain ne se voit pas dans le code ajouté mais dans celui qui a disparu —
+`BuildingData._economy_fields()` a perdu ses trois clauses croisées et ne fait plus que
+déléguer sous un préfixe.
+
+**Le cas de test qui porte le jalon est celui des slots à zéro**, précisément parce que
+`E1` ne pouvait pas l'écrire.
+
+### Trois arbitrages, dont un qui change le contenu
+
+**Les cinq bâtiments à slot muet entrent sans bloc.** Tour de guet, caserne, marché,
+atelier et camp d'exploration portent « 1 slot » dans le tableau de `DESIGN.md` 4.1, et
+aucun ne produit de ressource : leur poste héberge une défense (`F1`), un échange
+(`I3`) ou une action débloquée (`X1`, `X2`, `X3`). Leur écrire un `slots = 1` que rien
+ne lit aurait fait mentir la data **et** détruit la garantie qu'on venait d'acheter, en
+rouvrant la possibilité d'un bloc qui ne produit rien. C'est exactement le cas que
+`DESIGN.md` 3.3 anticipait en écrivant « le jour où un bâtiment produit autrement, le
+bloc devient une classe de base » : ce jour n'est pas aujourd'hui, parce que ces slots
+ne produisent pas autrement — ils ne produisent pas.
+
+**La palissade entre au tableau 4.1.** Elle existait dans `data/` depuis `C2` sans y
+figurer, ce qui faisait diverger le design de son contenu. Elle est la seule empreinte
+non rectangulaire du projet, donc le seul cas qui exerce vraiment la rotation du
+fantôme et le validateur. L'atelier lui donne depuis ce jalon un second L.
+
+**Les colonnes Chantier, Déf., PV et Débloque restent dehors.** Un champ arrive avec le
+système qui le lit — `C4`, `F1`, `D1` —, et les places de roster de l'habitation avec
+`W1`. Conséquence à consigner pour ne pas la relire comme un oubli : **l'habitation
+entre en coquille vide**, sans rien que son coût, et c'est correct.
+
+### Le harnais a gagné une file, et il a répondu autre chose
+
+La mine coûte 25 bois et 10 pierre. Aucune bourse d'ouverture ne les a : ajouter la
+mine à la liste de construction du harnais l'aurait fait refuser au premier jour, et le
+minerai serait entré au catalogue sans qu'aucun soir n'en produise — une quatrième
+ressource déclarative, ce qui est exactement ce que le jalon ne voulait pas.
+
+Ce qu'un bâtiment impayable devient est donc devenu une question, et la réponse est une
+**file** : ce que la bourse refuse à l'ouverture y entre, et le harnais en retente la
+tête, une par soir. Elle ne se réordonne jamais — un bâtiment cher qui se ferait doubler
+par un moins cher derrière lui ferait répondre le harnais à une question qu'on ne lui
+pose pas. L'affectation se refait à chaque soir en conséquence : sans ça, les postes
+d'un bâtiment apparu en cours de route seraient restés vides.
+
+Il dit maintenant ce qu'il ne pouvait pas dire : **la mine se paie au soir 8, la
+seconde ferme au soir 10, et c'est cette ferme qui met fin à la famine.** La première
+famine reste au soir 6 — les chiffres de `data/balance/` n'ont pas bougé —, mais la
+réserve finit à **189/200 au vingtième soir contre 160 à `E1`** : le plafond commun est
+beaucoup plus près de mordre qu'il ne le paraissait. À `I3` de trancher.
+
+C'est le troisième harnais d'affilée à répondre quelque chose qu'aucune suite de tests
+ne pouvait donner. Le motif se confirme : ils travaillent sur les chiffres de `data/`,
+là où les tests travaillent sur des chiffres choisis.
+
+### Décisions
+
+**Le bloc s'écrit en `sub_resource`, pas en fichier séparé.** Un bloc appartient à son
+bâtiment et n'a aucune identité au catalogue ; `TerrainDecor` sur un terrain est le même
+motif, déjà éprouvé depuis `T3`. Un cas de test charge tous les `.tres` de `data/` et
+exige qu'au moins un en porte un typé — sans cette dernière exigence, il passerait par
+vacuité le jour où le format se casserait partout.
+
+**`produces()` plutôt qu'un `production != null` recopié.** La nullité est la façon dont
+`E1b` dit « ne produit pas » ; le jour où le bloc devient une classe de base, la question
+restera posée au même endroit. Trois appelants s'en servent déjà.
+
+**L'existence du bloc se teste dans `_work_lines()` et nulle part ailleurs.** Toute ligne
+de travail en sort, donc tout ce qui en consomme une sait que le bâtiment produit —
+`_harvest()` lit le bloc sans garde, et son docstring dit pourquoi.
+
+**Le contrôle croisé nomme le chemin complet.** Vérifié en cassant une clé exprès :
+`ressource inconnue « oer » dans data/buildings/mine.tres → production.yield_per_slot`.
+Sans le préfixe, un `yield_per_slot` nu ne dirait plus d'où il vient le jour où
+`BuildingData` portera plusieurs blocs.
+
+**Le terrain `filon` n'est pas écrit.** `TerrainGenBalance` porte cinq emplacements de
+terrain en dur ; en ajouter un est du travail Terrain, et une `.tres` que rien ne génère
+serait de la data morte. La mine produit du minerai sans en avoir besoin — aucun
+prérequis de tag n'existe au placement depuis `C1`. Ça redeviendra nécessaire à `D2`,
+quand *Récolter* à cru voudra une case `ore`.
+
+**`economy_harness.gd.uid` manquait depuis `E1`.** Tous les autres scripts de
+`scenes/dev/` ont le leur suivi ; le scan éditeur de ce jalon l'a révélé. Corrigé dans
+son propre commit, parce que ce n'est pas du contenu de `E1b`.
+
+### Ce qui reste
+
+Rien pour `E1b`. Les mêmes reports qu'à `E1`, plus deux :
+
+- **les modificateurs d'adjacence** — `C3`. Le bloc est l'endroit naturel où les mettre
+  le jour venu, ce qui n'était pas vrai des champs à plat.
+- **le HUD et le panneau de rapport** — `E2`.
+- **l'XP** — `W1`, qui consommera le journal de travail.
+- **les 3:1 du marché, le rayon de l'atelier, les chiffres de 4.1** — `I3`.
+- **les slots des cinq bâtiments muets** — chacun avec son système.
+
+### Prochain jalon
+
+**`W1`.** Il est le dernier moment où `LaborForce` peut bouger sans douleur, et le seul
+qui rende utile le journal de travail écrit à `E1`. `C4` — les chantiers — vient
+ensuite, et rouvrira les treize `.tres` pour y écrire la colonne Chantier.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché.
+
+- `F5` lance toujours le **harnais Économie** : un rapport texte, aucune 3D, lisible
+  par `godot --headless --quit --path .`.
+- les `.tres` neufs — `ore` et les sept bâtiments — naissent **sans `uid`**, comme à
+  chaque jalon : **diff à committer, pas à jeter**.
+- **les chiffres et les formes des sept bâtiments neufs sont à relire.** Les coûts
+  viennent du tableau de `DESIGN.md` 4.1 ; **les empreintes, les couleurs et les
+  hauteurs sont inventées**, comme toutes les autres depuis `C1`. Le boot refuse un bloc
+  incomplet ou un coût nommant une ressource inconnue, donc les corriger dans
+  l'inspecteur est sans risque. La tour de guet est volontairement haute (1.6) et
+  l'atelier volontairement en L.
+
+---
+
 ## 2026-08-24 — `E1` : la réserve, la résolution du soir, l'upkeep et la famine
 
 **État : terminé.** Sept commits sur `feat/e1-economy`, tirée de
