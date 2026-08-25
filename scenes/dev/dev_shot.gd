@@ -29,6 +29,14 @@ const SHOT_HOVER_FLAG := "--shot-hover"
 ## concernent pas.
 const SHOT_ROTATE_FLAG := "--shot-rotate"
 
+## Soirs à résoudre avant de capturer. Lu par les harnais qui savent résoudre ; les
+## autres l'ignorent, comme ils ignorent déjà les drapeaux qui ne les concernent pas.
+##
+## Il existe parce qu'un rapport de fin de soirée est du texte fabriqué à la main, donc
+## exactement le genre de code que ni le parsing ni les tests ne regardent : sans lui, le
+## chemin de résolution d'un harnais ne serait jamais emprunté par un contrôle.
+const SHOT_EVENINGS_FLAG := "--shot-evenings"
+
 ## Images laissées passer avant de capturer. La première ne porte encore ni le tampon
 ## d'instances téléversé ni la lumière, et rendrait un cadre vide.
 const WARMUP_FRAMES := 3

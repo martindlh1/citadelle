@@ -56,6 +56,17 @@ const REASON_OCCUPIED := &"occupied"
 ## qui décident où une action à cru peut se jouer.
 const REASON_WRONG_TAG := &"wrong_tag"
 
+## Cette carte est **déjà posée** sur cette cible.
+##
+## Une carte ouvre les postes de sa cible une fois. Une seconde du même nom au même
+## endroit les rouvrirait, et trois ouvriers produiraient dans une cabane qui n'a que
+## deux postes — la carte cesserait d'être une permission pour devenir un multiplicateur.
+##
+## Deux cartes **différentes** sur une même cellule restent parfaitement acceptées :
+## *Récolter* et *Chasser* sur une même forêt sont deux métiers sur une même terre, et
+## c'est précisément ce que D2 a rendu représentable en donnant une identité aux actions.
+const REASON_ALREADY_POSTED := &"already_posted"
+
 var _ok: bool
 var _reason: StringName = REASON_NONE
 var _kind: PlayedAction.Kind = PlayedAction.Kind.BARE

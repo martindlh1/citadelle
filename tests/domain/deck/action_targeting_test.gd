@@ -41,10 +41,15 @@ var _terrain: TerrainQuery
 var _city: CitySnapshot
 var _balance: ActionBalance
 
+## Ce qui est déjà posé. Vide dans presque tous les cas : le ciblage y répond sans rien
+## savoir de ce qui l'a précédé, sauf pour la règle du doublon en fin de fichier.
+var _plan: ActionPlan
+
 func before_test() -> void:
 	_terrain = _make_terrain()
 	_city = _make_city()
 	_balance = _make_balance()
+	_plan = ActionPlan.empty()
 
 # --- Récolter -----------------------------------------------------------------------
 
@@ -89,7 +94,7 @@ func test_harvest_is_refused_on_an_unfinished_site() -> void:
 func test_a_building_wins_over_the_tag_beneath_it() -> void:
 	var city := _city_with_a_hut_on(FOREST)
 	var result := ActionTargeting.validate(ActionTargeting.CARD_HARVEST, FOREST,
-		_terrain, city, _balance)
+		_terrain, city, _plan, _balance)
 	assert_int(result.kind()).is_equal(PlayedAction.Kind.BUILDING)
 
 # --- Chasser ------------------------------------------------------------------------
@@ -151,6 +156,36 @@ func test_a_footprint_cell_targets_the_anchor_it_belongs_to() -> void:
 	_assert_refused(ActionTargeting.CARD_TERRAFORM, HUT_TAIL,
 		TargetResult.REASON_OCCUPIED)
 
+## Une carte ouvre les postes de sa cible **une fois**.
+##
+## Sans cette règle, deux *Récolter* sur une cabane à deux postes en ouvriraient quatre,
+## et trois ouvriers produiraient dans un bâtiment qui n'en tient que deux : la carte
+## cesserait d'être une permission pour devenir un multiplicateur. Le cas a été trouvé en
+## capture, pas au clavier — le harnais avait posé exactement ce doublon.
+func test_the_same_card_cannot_be_posted_twice_on_one_target() -> void:
+	_plan = _plan_of(ActionTargeting.CARD_HARVEST, HUT)
+	_assert_refused(ActionTargeting.CARD_HARVEST, HUT,
+		TargetResult.REASON_ALREADY_POSTED)
+
+## Le doublon se juge sur la cible **canonique** : deux clics sur deux coins d'une même
+## cabane sont deux fois la même pose.
+func test_the_duplicate_rule_follows_the_anchor_not_the_cell_clicked() -> void:
+	_plan = _plan_of(ActionTargeting.CARD_HARVEST, HUT)
+	_assert_refused(ActionTargeting.CARD_HARVEST, HUT_TAIL,
+		TargetResult.REASON_ALREADY_POSTED)
+
+## Le revers, et c'est lui qui dit que la règle porte sur la carte et non sur la cellule.
+## Deux métiers sur une même terre restent deux actions distinctes — le cas même pour
+## lequel D2 a donné une identité aux actions.
+func test_two_different_cards_may_share_a_target() -> void:
+	_plan = _plan_of(ActionTargeting.CARD_HARVEST, FOREST)
+	assert_bool(_validate(ActionTargeting.CARD_HUNT, FOREST).is_ok()).is_true()
+
+## La même carte ailleurs n'a rien à voir avec celle qui est posée ici.
+func test_the_same_card_may_be_posted_on_another_target() -> void:
+	_plan = _plan_of(ActionTargeting.CARD_HARVEST, FOREST)
+	assert_bool(_validate(ActionTargeting.CARD_HARVEST, STONE).is_ok()).is_true()
+
 ## Le curseur sort de la carte en permanence, et les quatre verbes doivent y répondre
 ## plutôt que d'y casser. Même convention que TerrainQuery.is_buildable().
 func test_every_verb_refuses_a_target_outside_the_map() -> void:
@@ -186,8 +221,14 @@ func test_every_action_card_in_data_has_a_targeting_rule() -> void:
 		.override_failure_message("aucune carte d'action dans data/cards/") \
 		.is_greater(0)
 
+## Un plan qui ne tient que cette carte, posée là. La nature et la capacité n'entrent pas
+## dans la règle du doublon, seuls la carte et la cible comptent.
+func _plan_of(card: StringName, target: Vector2i) -> ActionPlan:
+	return ActionPlan.create([
+		PlayedAction.create(1, card, target, PlayedAction.Kind.BARE, 1)])
+
 func _validate(card: StringName, target: Vector2i) -> TargetResult:
-	return ActionTargeting.validate(card, target, _terrain, _city, _balance)
+	return ActionTargeting.validate(card, target, _terrain, _city, _plan, _balance)
 
 func _assert_refused(card: StringName, target: Vector2i, reason: StringName) -> void:
 	var result := _validate(card, target)

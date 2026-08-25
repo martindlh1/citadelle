@@ -64,6 +64,21 @@ func test_two_actions_can_aim_at_the_same_cell() -> void:
 	assert_int(_board.count()).is_equal(2)
 	assert_int(_board.at_cell(FOREST).size()).is_equal(2)
 
+## Son revers, et il vient de la même règle : deux fois la **même** carte au même endroit
+## rouvriraient des postes déjà ouverts. Le board le refuse parce que le ciblage le
+## refuse, et n'a aucune règle à lui.
+func test_the_same_card_cannot_be_posted_twice_on_one_cell() -> void:
+	_post(ActionTargeting.CARD_HARVEST, FOREST)
+	assert_object(_post(ActionTargeting.CARD_HARVEST, FOREST)).is_null()
+	assert_int(_board.count()).is_equal(1)
+
+## Et la place se libère avec le retrait : une carte reposée après coup n'est plus un
+## doublon.
+func test_withdrawing_frees_the_target_for_the_same_card_again() -> void:
+	var first := _post(ActionTargeting.CARD_HARVEST, FOREST)
+	_board.withdraw(first.id())
+	assert_object(_post(ActionTargeting.CARD_HARVEST, FOREST)).is_not_null()
+
 func test_at_cell_finds_nothing_where_nothing_is_posted() -> void:
 	_post(ActionTargeting.CARD_HARVEST, FOREST)
 	assert_array(_board.at_cell(OTHER)).is_empty()

@@ -51,14 +51,25 @@ static func handles(card: StringName) -> bool:
 ## l'empreinte. C'est le chemin d'un clic, et le faire ici évite que deux clics sur la
 ## même ferme posent deux actions qui se croient différentes.
 static func validate(card: StringName, target: Vector2i, terrain: TerrainQuery,
-		city: CitySnapshot, balance: ActionBalance) -> TargetResult:
+		city: CitySnapshot, plan: ActionPlan, balance: ActionBalance) -> TargetResult:
 	assert(terrain != null, "ciblage sans terrain")
 	assert(city != null, "ciblage sans ville")
+	assert(plan != null, "ciblage sans plan d'actions")
 	assert(balance != null, "ciblage sans équilibrage")
 	if not handles(card):
 		return TargetResult.refused(TargetResult.REASON_UNKNOWN_CARD)
 	if not terrain.in_bounds(target):
 		return TargetResult.refused(TargetResult.REASON_OUT_OF_BOUNDS)
+	var verdict := _place_of(card, target, terrain, city, balance)
+	if not verdict.is_ok():
+		return verdict
+	if _already_posted(card, verdict.target(), plan):
+		return TargetResult.refused(TargetResult.REASON_ALREADY_POSTED)
+	return verdict
+
+## Où ce verbe se joue, avant de regarder ce qui est déjà posé.
+static func _place_of(card: StringName, target: Vector2i, terrain: TerrainQuery,
+		city: CitySnapshot, balance: ActionBalance) -> TargetResult:
 	match card:
 		CARD_HARVEST:
 			return _harvest(target, terrain, city, balance)
@@ -69,6 +80,27 @@ static func validate(card: StringName, target: Vector2i, terrain: TerrainQuery,
 		CARD_TERRAFORM:
 			return _terraform(target, city, balance)
 	return TargetResult.refused(TargetResult.REASON_UNKNOWN_CARD)
+
+## Cette carte est-elle déjà posée sur cette cible ?
+##
+## La comparaison se fait sur la cible **canonique**, celle que le verbe vient de rendre,
+## et non sur la cellule désignée : deux clics sur deux coins d'une même ferme sont deux
+## fois la même pose, et les laisser passer rouvrirait ses postes.
+##
+## La règle porte sur la carte et non sur la cible seule, ce qui est tout le contraire
+## d'interdire deux actions par cellule — *Récolter* et *Chasser* sur une même forêt
+## restent acceptées, et c'est le cas pour lequel D2 a donné une identité aux actions.
+##
+## Sa limite est connue et vaut d'être écrite : elle ne protège que d'un doublon **du même
+## nom**. Le jour où *Fabriquer* visera un atelier qui tient déjà une autre carte à
+## postes, il faudra comparer ce que chacune réclame plutôt que leurs noms. Aucune carte
+## du MVP n'ouvre ce cas — *Récolter* est la seule à tenir un poste de production.
+static func _already_posted(card: StringName, target: Vector2i,
+		plan: ActionPlan) -> bool:
+	for action in plan.actions():
+		if action.card() == card and action.target() == target:
+			return true
+	return false
 
 ## *Récolter* : dans un poste de production, ou à cru sur une case au bon tag.
 ##

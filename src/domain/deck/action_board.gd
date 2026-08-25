@@ -54,7 +54,7 @@ var _next_id := NO_ACTION + 1
 ## l'action vient de recevoir — sans lui il ne pourrait pas y affecter un ouvrier.
 func post(card: StringName, target: Vector2i, terrain: TerrainQuery, city: CitySnapshot,
 		balance: ActionBalance) -> PlayedAction:
-	var result := ActionTargeting.validate(card, target, terrain, city, balance)
+	var result := ActionTargeting.validate(card, target, terrain, city, to_plan(), balance)
 	if not result.is_ok():
 		return null
 	var action := PlayedAction.create(_next_id, card, result.target(), result.kind(),
