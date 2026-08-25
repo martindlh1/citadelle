@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="RunBalance" format=3]
+
+[ext_resource type="Script" path="res://src/schema/run_balance.gd" id="1_run_balance"]
+[ext_resource type="Script" path="res://src/schema/phase_def.gd" id="2_phase_def"]
+
+[sub_resource type="Resource" id="Resource_phase_day"]
+script = ExtResource("2_phase_def")
+id = &"day"
+label = "Journée"
+allows = Array[StringName]([&"play", &"assign"])
+resolves = false
+
+[sub_resource type="Resource" id="Resource_phase_evening"]
+script = ExtResource("2_phase_def")
+id = &"evening"
+label = "Soir"
+allows = Array[StringName]([])
+resolves = true
+
+[resource]
+script = ExtResource("1_run_balance")
+phases = Array[PhaseDef]([SubResource("Resource_phase_day"), SubResource("Resource_phase_evening")])
+days = 15

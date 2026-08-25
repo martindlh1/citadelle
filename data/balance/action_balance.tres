@@ -7,6 +7,9 @@ script = ExtResource("1_action_balance")
 bare_capacity = 1
 bare_yield = 1
 bare_skill_family = &"harvest"
+site_skill_family = &"construction"
+terraform_floor = 0
+terraform_ceiling = 6
 slot_cards = Array[StringName]([&"harvest"])
 bare_sources = Dictionary[StringName, Dictionary]({
 &"harvest": {

@@ -1,7 +1,11 @@
 class_name ActionBalance
 extends Resource
-## Réglages des actions jouées à cru : ce qu'une case nue accepte, ce qu'elle rend, et
-## quels tags de terrain autorisent quel verbe.
+## Réglages des actions : ce qu'une case nue accepte et rend, quels tags de terrain
+## autorisent quel verbe, et jusqu'où les verbes de chantier déplacent la terre.
+##
+## *(Le fichier ne portait que le versant « à cru » jusqu'à `I1`, qui lui a ajouté ce que
+## *Construire* et *Terraformer* consomment. C'est le même endroit pour la même raison :
+## les chiffres d'une action se règlent ici, sa nature reste du code.)*
 ##
 ## `DESIGN.md` 3.5 pose la règle qui donne aux bâtiments leur raison d'être sans les
 ## rendre obligatoires : une action jouée **à cru**, sur une case nue dont le tag
@@ -79,9 +83,43 @@ extends Resource
 ## chantier, et de *Terraformer*, qui ne se joue pas dans un bâtiment du tout.
 @export var slot_cards: Array[StringName]
 
+## Famille de compétence que créditent les verbes de **chantier** — *Construire* et
+## *Terraformer*.
+##
+## `DESIGN.md` 3.2 gardait la question ouverte depuis `C4` : aucune des trois familles de
+## 3.4 ne couvrait *Construire*, et les trois issues étaient une quatrième famille, un
+## rattachement à l'Artisanat, ou de l'XP de niveau seule. `I1` referme sur la quatrième
+## famille, parce que c'est la seule qui fasse de bâtir un métier — et la liste des
+## familles n'est close nulle part dans le code, ce qui rend son ajout gratuit.
+##
+## Un champ unique et non une table par carte, exactement comme `bare_skill_family` : les
+## deux verbes de chantier remuent la même terre. Le jour où l'un voudra sa propre piste,
+## `bare_sources` a déjà montré la forme qui accueille ça.
+@export var site_skill_family: StringName
+
+## Hauteur la plus basse qu'un terrassement peut atteindre.
+##
+## Séparée de `terrain_gen.min_height`, et il faut dire pourquoi les deux existent :
+## celle-là décrit la carte qu'on **reçoit**, celle-ci jusqu'où on a le droit de la
+## **pousser**. Les confondre interdirait de creuser sous le point le plus bas de la
+## génération, ce qui est pourtant le geste évident quand on veut un plateau.
+##
+## La doctrine du zéro ne mord pas ici : un plancher à 0 est une valeur parfaitement
+## légitime, donc indiscernable d'un champ effacé. Le filet est la cohérence des deux
+## bornes, contrôlée dans missing_fields() — même geste que `EconomyBalance`, qui
+## confronte son stock d'ouverture à sa capacité plutôt que de guetter un zéro.
+@export_range(-32, 32, 1) var terraform_floor: int
+
+## Hauteur la plus haute qu'un terrassement peut atteindre.
+@export_range(-32, 32, 1) var terraform_ceiling: int
+
 ## Cette carte tient-elle un poste de production dans un bâtiment ?
 func works_a_slot(card: StringName) -> bool:
 	return slot_cards.has(card)
+
+## Cette hauteur est-elle terrassable ?
+func in_terraform_range(height: int) -> bool:
+	return height >= terraform_floor and height <= terraform_ceiling
 
 ## Cette carte se joue-t-elle à cru ?
 ##
@@ -111,6 +149,10 @@ func missing_fields() -> PackedStringArray:
 		missing.append("bare_yield")
 	if bare_skill_family.is_empty():
 		missing.append("bare_skill_family")
+	if site_skill_family.is_empty():
+		missing.append("site_skill_family")
+	if terraform_ceiling <= terraform_floor:
+		missing.append("terraform_ceiling")
 	if slot_cards.is_empty():
 		missing.append("slot_cards")
 	for card in slot_cards:

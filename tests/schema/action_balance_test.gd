@@ -18,11 +18,12 @@ const BALANCE_PATH := "res://data/balance/action_balance.tres"
 const HARVEST := &"harvest"
 const HUNT := &"hunt"
 const FOREST := &"forest"
+const CONSTRUCTION := &"construction"
 
 func test_a_blank_block_reports_everything() -> void:
 	assert_array(ActionBalance.new().missing_fields()) \
-		.contains(["bare_capacity", "bare_yield", "bare_skill_family", "slot_cards",
-			"bare_sources"])
+		.contains(["bare_capacity", "bare_yield", "bare_skill_family",
+			"site_skill_family", "terraform_ceiling", "slot_cards", "bare_sources"])
 
 func test_a_complete_block_reports_nothing() -> void:
 	assert_array(_filled().missing_fields()).is_empty()
@@ -44,6 +45,38 @@ func test_a_missing_family_is_reported() -> void:
 
 ## Aucune carte ne tiendrait de poste, donc aucun bâtiment ne produirait jamais rien.
 ## C'est une panne totale et silencieuse, ce qui est exactement ce que le boot rattrape.
+## La piste des chantiers, quatrième famille tranchée à I1. Sans elle, un ouvrier qui
+## bâtit gagnerait de l'XP dans une piste sans nom.
+func test_a_missing_site_family_is_reported() -> void:
+	var balance := _filled()
+	balance.site_skill_family = &""
+	assert_array(balance.missing_fields()).contains(["site_skill_family"])
+
+## Les bornes du terrassement ne se contrôlent pas par un zéro : un plancher à 0 est une
+## valeur légitime, donc indiscernable d'un champ effacé. C'est leur cohérence qui les
+## rattrape — et deux bornes effacées valent 0 et 0, donc un plafond qui ne dépasse pas
+## son plancher, ce que ce cas voit.
+func test_terraform_bounds_in_the_wrong_order_are_reported() -> void:
+	var balance := _filled()
+	balance.terraform_floor = 4
+	balance.terraform_ceiling = 2
+	assert_array(balance.missing_fields()).contains(["terraform_ceiling"])
+
+func test_two_erased_terraform_bounds_are_reported() -> void:
+	var balance := _filled()
+	balance.terraform_floor = 0
+	balance.terraform_ceiling = 0
+	assert_array(balance.missing_fields()).contains(["terraform_ceiling"])
+
+## La question que le ciblage pose avant d'accepter un terrassement : les deux bornes
+## sont incluses, une case au plancher se monte encore et ne se descend plus.
+func test_the_terraform_range_includes_both_bounds() -> void:
+	var balance := _filled()
+	assert_bool(balance.in_terraform_range(0)).is_true()
+	assert_bool(balance.in_terraform_range(6)).is_true()
+	assert_bool(balance.in_terraform_range(-1)).is_false()
+	assert_bool(balance.in_terraform_range(7)).is_false()
+
 func test_an_empty_slot_card_list_is_reported() -> void:
 	var balance := _filled()
 	balance.slot_cards = []
@@ -118,6 +151,9 @@ func _filled() -> ActionBalance:
 	balance.bare_capacity = 1
 	balance.bare_yield = 1
 	balance.bare_skill_family = HARVEST
+	balance.site_skill_family = CONSTRUCTION
+	balance.terraform_floor = 0
+	balance.terraform_ceiling = 6
 	var slots: Array[StringName] = [HARVEST]
 	balance.slot_cards = slots
 	var sources: Dictionary[StringName, Dictionary] = {}
