@@ -6,9 +6,9 @@ extends Resource
 ## argument et ne lit jamais GameDatabase, comme pour TerrainData.
 ##
 ## C1 n'y mettait que ce que le placement consomme ; E1 y ajoute l'économie — coût,
-## réserve, et la production à plat —, E1b sort cette dernière dans un bloc nullable, et
-## W1 les places de roster. Avancement de chantier, défense, PV et bonus d'adjacence
-## arriveront avec leur système — C4, C3, F1 — de la même façon que BalanceData gagne un
+## réserve, et la production à plat —, E1b sort cette dernière dans un bloc nullable, W1
+## les places de roster, et C4 le coût de chantier. Défense, PV et bonus d'adjacence
+## arriveront avec leur système — C3, F1 — de la même façon que BalanceData gagne un
 ## bloc quand un système atterrit. Un champ ajouté plus tard oblige à rouvrir les .tres ;
 ## un champ ajouté d'avance oblige à deviner sa forme, ce qui coûte plus cher.
 ##
@@ -64,6 +64,28 @@ const QUARTER_TURNS := 4
 ## entière, bâtiments compris, et non laisser des maisons à leur ancienne taille au
 ## milieu de cellules qui ont changé.
 @export_range(0.0, 4.0, 0.05) var height: float
+
+## Combien d'actions *Construire* il faut lui jeter dessus pour l'achever.
+##
+## C'est la colonne **Chantier** de DESIGN.md 4.1. Poser une carte de bâtiment ouvre un
+## chantier et non un bâtiment : il occupe ses cellules et paie son coût tout de suite,
+## mais ne produit rien et n'offre aucun slot avant d'avoir reçu ce nombre de crans.
+##
+## **0 est une valeur légitime** et veut dire « achevé à la pose ». La doctrine du zéro
+## ne s'applique donc pas ici, exactement comme pour storage_bonus et roster_places
+## juste en dessous — mais pour une raison qui lui est propre : le Cœur porte « — »
+## dans cette colonne, comme il porte « posé au départ » dans celle du coût, et c'est
+## déjà un cost vide qui représente la seconde. Représenter la première par un zéro est
+## le même geste sur la même ligne du tableau.
+##
+## Le prix de ce choix est connu : un build_actions oublié dans un .tres vaut 0 et fait
+## sauter le chantier en silence. Il est racheté par un cas de test qui charge tout
+## data/ et exige qu'au moins un bâtiment en déclare un — le motif de
+## production_block_test.gd, qui refuse de passer par vacuité.
+##
+## Le champ ne s'appelle pas `turns` : ce nom désigne déjà les quarts de tour d'une
+## orientation, partout dans le système.
+@export_range(0, 10, 1) var build_actions: int
 
 ## Ce qu'il coûte à poser, par ressource.
 ##
@@ -193,8 +215,11 @@ func missing_fields() -> PackedStringArray:
 		missing.append("color")
 	if height <= 0.0:
 		missing.append("height")
-	# Hors du bloc économie : les places de roster sont un chiffre des Effectifs, et
-	# les ranger avec le coût et la réserve ferait mentir le nom de cette fonction.
+	# Hors du bloc économie : le chantier est un chiffre de la Construction et les
+	# places de roster un chiffre des Effectifs. Les ranger avec le coût et la réserve
+	# ferait mentir le nom de cette fonction.
+	if build_actions < 0:
+		missing.append("build_actions")
 	if roster_places < 0:
 		missing.append("roster_places")
 	missing.append_array(_economy_fields())

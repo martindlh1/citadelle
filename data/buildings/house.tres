@@ -7,6 +7,7 @@ script = ExtResource("1_building_data")
 id = &"house"
 color = Color(0.78, 0.68, 0.52, 1)
 height = 0.75
+build_actions = 2
 footprint = Array[Vector2i]([Vector2i(0, 0)])
 cost = Dictionary[StringName, int]({
 &"wood": 20
