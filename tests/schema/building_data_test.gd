@@ -208,6 +208,26 @@ func test_a_null_cost_line_is_reported() -> void:
 	building.cost = cost
 	assert_array(building.missing_fields()).contains(["cost.wood"])
 
+## Les places de roster suivent la doctrine de storage_bonus et non celle du zéro :
+## douze bâtiments sur treize ne logent personne, et les réclamer refuserait de démarrer
+## sur des données correctes.
+func test_a_building_that_houses_nobody_is_complete() -> void:
+	var building := _building(_l_shape())
+	assert_int(building.roster_places).is_equal(0)
+	assert_array(building.missing_fields()).is_empty()
+
+func test_a_house_carries_its_places() -> void:
+	var building := _building(_l_shape())
+	building.roster_places = 2
+	assert_array(building.missing_fields()).is_empty()
+
+## Elles remontent sous leur propre nom et non sous un préfixe économique : c'est un
+## chiffre des Effectifs, et les ranger avec le coût ferait mentir le rapport.
+func test_negative_places_are_reported_under_their_own_name() -> void:
+	var building := _building(_l_shape())
+	building.roster_places = -1
+	assert_array(building.missing_fields()).contains(["roster_places"])
+
 ## Un producteur cohérent : deux postes, un rendement, une famille.
 func _producer() -> BuildingData:
 	var building := _building(_l_shape())

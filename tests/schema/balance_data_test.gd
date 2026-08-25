@@ -55,6 +55,21 @@ func test_the_upkeep_names_a_resource() -> void:
 	var economy := (load(BALANCE_PATH) as BalanceData).economy
 	assert_str(String(economy.upkeep_resource)).is_not_empty()
 
+func test_balance_carries_a_workforce_block() -> void:
+	var balance := load(BALANCE_PATH) as BalanceData
+	assert_object(balance.workforce).is_not_null()
+	assert_object(balance.workforce).is_instanceof(WorkforceBalance)
+
+## Les deux axes de DESIGN.md 3.4 se règlent séparément, ce qui n'a de sens que si les
+## deux jeux de réglages existent. Un bloc qui n'aurait que la moitié des seuils
+## chargerait sans erreur et figerait un axe au palier 0 en silence.
+func test_both_progression_axes_are_configured() -> void:
+	var workforce := (load(BALANCE_PATH) as BalanceData).workforce
+	assert_int(workforce.skill_xp_per_level).is_greater(0)
+	assert_int(workforce.max_skill_level).is_greater(0)
+	assert_int(workforce.worker_xp_per_level).is_greater(0)
+	assert_int(workforce.max_worker_level).is_greater(0)
+
 func test_balance_carries_a_camera_block() -> void:
 	var balance := load(BALANCE_PATH) as BalanceData
 	assert_object(balance.camera).is_not_null()
