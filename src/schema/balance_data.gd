@@ -25,6 +25,9 @@ extends Resource
 ## Cartes : deck de départ, tailles de main par pool, largeur d'un draft.
 @export var deck: DeckBalance
 
+## Actions à cru : capacité d'une case nue, rendement, tags qui autorisent un verbe.
+@export var actions: ActionBalance
+
 ## Champs non renseignés de tous les blocs, préfixés du nom de leur bloc.
 ## Vide = équilibrage exploitable. Vérifié au boot par GameDatabase.
 ##
@@ -64,4 +67,9 @@ func missing_fields() -> PackedStringArray:
 	else:
 		for field in deck.missing_fields():
 			missing.append("deck.%s" % field)
+	if actions == null:
+		missing.append("actions")
+	else:
+		for field in actions.missing_fields():
+			missing.append("actions.%s" % field)
 	return missing

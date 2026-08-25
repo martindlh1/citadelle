@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ActionBalance" format=3]
+
+[ext_resource type="Script" path="res://src/schema/action_balance.gd" id="1_action_balance"]
+
+[resource]
+script = ExtResource("1_action_balance")
+bare_capacity = 1
+bare_yield = 1
+bare_skill_family = &"harvest"
+bare_sources = Dictionary[StringName, Dictionary]({
+&"harvest": {
+&"forest": &"wood",
+&"stone": &"stone",
+&"ore": &"ore"
+},
+&"hunt": {
+&"forest": &"food"
+}
+})

@@ -183,6 +183,11 @@ func _assert_resources_are_known() -> void:
 			"balance/economy_balance.tres → upkeep_resource")
 		for resource in balance.economy.starting_stock:
 			_assert_known(known, resource, "balance/economy_balance.tres → starting_stock")
+	if balance != null and balance.actions != null:
+		for card in balance.actions.bare_sources:
+			for resource in balance.actions.sources_for(card).values():
+				_assert_known(known, resource,
+					"balance/action_balance.tres → bare_sources.%s" % card)
 	for id in list_building_ids():
 		var building := get_building(id)
 		if building == null:
