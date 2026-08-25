@@ -22,6 +22,9 @@ extends Resource
 ## Effectifs : places du roster, valeur d'une soirée, courbes de paliers.
 @export var workforce: WorkforceBalance
 
+## Cartes : deck de départ, tailles de main par pool, largeur d'un draft.
+@export var deck: DeckBalance
+
 ## Champs non renseignés de tous les blocs, préfixés du nom de leur bloc.
 ## Vide = équilibrage exploitable. Vérifié au boot par GameDatabase.
 ##
@@ -56,4 +59,9 @@ func missing_fields() -> PackedStringArray:
 	else:
 		for field in workforce.missing_fields():
 			missing.append("workforce.%s" % field)
+	if deck == null:
+		missing.append("deck")
+	else:
+		for field in deck.missing_fields():
+			missing.append("deck.%s" % field)
 	return missing
