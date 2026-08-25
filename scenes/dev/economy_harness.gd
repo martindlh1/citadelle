@@ -26,14 +26,24 @@ const EVENINGS := 20
 ## tout le monde, et c'est ce qu'il faut voir.
 const ROSTER := 10
 
-## Ce que le harnais tente de bâtir, dans cet ordre. Le dernier est en trop — il sert
-## à montrer un refus pour cause de bourse vide, qui n'est pas un refus de placement.
+## Ce que le harnais tente de bâtir, dans cet ordre.
+##
+## Les deux derniers sont hors de portée à l'ouverture, chacun pour une raison
+## différente, et c'est voulu. La **mine** demande 10 pierre que la carte ne donne pas
+## au premier jour : il faut que la carrière les produise. La seconde **ferme** ne
+## demande que du bois, mais la bourse est vide — un refus qui n'est pas un refus de
+## placement. Les deux entrent dans la file et se posent quand l'économie le permet.
 const BUILD_ORDER: Array[StringName] = [
-	&"warehouse", &"farm", &"quarry", &"lumberjack_hut", &"palisade", &"farm",
+	&"warehouse", &"farm", &"quarry", &"lumberjack_hut", &"palisade", &"mine", &"farm",
 ]
 
 ## Rendu quand aucune cellule ne convient.
 const NO_CELL := Vector2i(-1, -1)
+
+## Largeur de la colonne « produit », en caractères. Assez pour les quatre ressources
+## du catalogue à trois chiffres chacune : en dessous, la colonne déborde et tout le
+## tableau se décale à partir du soir où la mine entre en service.
+const PRODUCED_WIDTH := 46
 
 const REPORT_MARGIN := 16.0
 const REPORT_FONT_SIZE := 13
@@ -44,6 +54,9 @@ var _city: CityState
 var _ledger: Ledger
 var _economy: EconomyBalance
 var _lines := PackedStringArray()
+
+## Ce que la bourse a refusé à l'ouverture, dans l'ordre. Se vide un soir à la fois.
+var _deferred: Array[StringName] = []
 
 func _ready() -> void:
 	var balance := GameDatabase.get_balance()
@@ -98,14 +111,40 @@ func _build(data: BuildingData) -> String:
 	if anchor == NO_CELL:
 		return "aucune ancre ne l'accepte sur cette carte"
 	if not _ledger.can_afford(data.cost):
-		return "posable en %s, mais impayable : %s" % [anchor, _bundle_text(data.cost)]
-	var result := _city.place(_terrain, data, anchor)
-	if not result.is_ok():
-		return "refus inattendu en %s : %s" % [anchor, result.reason()]
-	_ledger.spend(data.cost)
+		_deferred.append(data.id)
+		return "posable en %s, impayable : %s — mis en file" % [anchor, _bundle_text(data.cost)]
+	if not _place(data, anchor):
+		return "refus inattendu en %s" % anchor
 	if data.cost.is_empty():
 		return "posé en %s, gratuit" % anchor
 	return "posé en %s pour %s" % [anchor, _bundle_text(data.cost)]
+
+## Pose et dépense, la bourse ayant déjà répondu oui. Partagée entre la construction
+## d'ouverture et la file, pour que les deux paient exactement de la même façon.
+func _place(data: BuildingData, anchor: Vector2i) -> bool:
+	if not _city.place(_terrain, data, anchor).is_ok():
+		return false
+	_ledger.spend(data.cost)
+	return true
+
+## Tente la tête de file, et rend l'identifiant posé ou &"" si rien ne bouge.
+##
+## Un seul par soir : ce qu'on veut lire, c'est le soir où chaque chose devient
+## payable, pas une ville qui apparaît d'un coup. La file ne se réordonne jamais —
+## un bâtiment cher ne doit pas se faire doubler par un moins cher derrière lui,
+## sinon le harnais répondrait à une question qu'on ne lui pose pas.
+func _drain_queue() -> StringName:
+	if _deferred.is_empty():
+		return &""
+	var id: StringName = _deferred[0]
+	var data := GameDatabase.get_building(id)
+	if data == null or not _ledger.can_afford(data.cost):
+		return &""
+	var anchor := _first_valid_anchor(data)
+	if anchor == NO_CELL or not _place(data, anchor):
+		return &""
+	_deferred.remove_at(0)
+	return id
 
 ## Première ancre que le domaine accepte, balayée dans un ordre fixe.
 ##
@@ -122,7 +161,7 @@ func _first_valid_anchor(data: BuildingData) -> Vector2i:
 
 func _report_workforce() -> void:
 	var assign := _assignment()
-	_lines.append("Effectifs : %d ouvriers, %d affectés, %d oisifs"
+	_lines.append("Effectifs : %d ouvriers, %d affectés au départ, %d oisifs"
 		% [ROSTER, assign.size(), ROSTER - assign.size()])
 	_lines.append("  l'upkeep tombe sur les %d, oisifs compris — %d nourriture par soir"
 		% [ROSTER, ROSTER * _economy.upkeep_per_worker])
@@ -134,30 +173,41 @@ func _assignment() -> Assignment:
 	var table: Dictionary[StringName, Vector2i] = {}
 	var hired := 0
 	for building in _city.buildings():
-		for _slot in building.data().slots:
+		var data := building.data()
+		if not data.produces():
+			continue
+		for _slot in data.production.slots:
 			if hired >= ROSTER:
 				break
 			table[_worker(hired)] = building.anchor()
 			hired += 1
 	return Assignment.create(table)
 
+## L'affectation se refait à chaque soir, et non une fois pour toutes : la file peut
+## poser un bâtiment en cours de route, et ses postes seraient restés vides.
 func _report_evenings() -> void:
-	var assign := _assignment()
 	var labor := _labor()
 	var first_famine := 0
 	var first_full := 0
-	_lines.append("soir  produit                              réserve    upkeep  mangé  à jeun")
+	_lines.append("soir  %-*s réserve    upkeep  mangé  à jeun"
+		% [PRODUCED_WIDTH, "produit"])
 	for evening in range(1, EVENINGS + 1):
-		var report := ProductionResolver.resolve(_city.to_snapshot(), assign, labor,
+		var raised := _drain_queue()
+		var report := ProductionResolver.resolve(_city.to_snapshot(), _assignment(), labor,
 			_ledger, _economy)
 		if first_famine == 0 and report.is_famine():
 			first_famine = evening
 		if first_full == 0 and _ledger.is_full():
 			first_full = evening
-		_lines.append("%4d  %-36s %4d/%-4d %6d %6d %6d%s"
-			% [evening, _bundle_text(report.produced()), _ledger.total(),
+		var notes := PackedStringArray()
+		if not raised.is_empty():
+			notes.append("← %s posé" % raised)
+		if evening == first_famine:
+			notes.append("← famine")
+		_lines.append(("%4d  %-*s %4d/%-4d %6d %6d %6d   %s"
+			% [evening, PRODUCED_WIDTH, _bundle_text(report.produced()), _ledger.total(),
 				_ledger.capacity(), report.upkeep(), report.consumed(), report.unfed(),
-				"   ← famine" if evening == first_famine else ""])
+				", ".join(notes)]).rstrip(" "))
 	_lines.append("")
 	_lines.append(_verdict(first_famine, first_full))
 

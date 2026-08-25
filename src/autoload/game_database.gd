@@ -156,8 +156,11 @@ func _assert_resources_are_known() -> void:
 			continue
 		for resource in building.cost:
 			_assert_known(known, resource, "buildings/%s.tres → cost" % id)
-		for resource in building.yield_per_slot:
-			_assert_known(known, resource, "buildings/%s.tres → yield_per_slot" % id)
+		if not building.produces():
+			continue
+		for resource in building.production.yield_per_slot:
+			_assert_known(known, resource,
+				"buildings/%s.tres → production.yield_per_slot" % id)
 
 ## Cette ressource figure-t-elle au catalogue ?
 func _assert_known(known: Array[StringName], resource: StringName, where: String) -> void:
