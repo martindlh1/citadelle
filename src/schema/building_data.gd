@@ -5,11 +5,17 @@ extends Resource
 ## Les .tres vivent dans data/buildings/, un par bâtiment. Le domaine les reçoit en
 ## argument et ne lit jamais GameDatabase, comme pour TerrainData.
 ##
-## C1 n'y mettait que ce que le placement consomme ; E1 y ajoute le bloc économie —
-## coût, slots, rendement, famille, réserve. Défense, PV et bonus d'adjacence
-## arriveront avec leur système — C3, F1 — de la même façon que BalanceData gagne un
-## bloc quand un système atterrit. Un champ ajouté plus tard oblige à rouvrir les
-## .tres ; un champ ajouté d'avance oblige à deviner sa forme, ce qui coûte plus cher.
+## C1 n'y mettait que ce que le placement consomme ; E1 y ajoute l'économie — coût,
+## réserve, et la production à plat —, et E1b sort cette dernière dans un bloc
+## nullable. Avancement de chantier, défense, PV et bonus d'adjacence arriveront avec
+## leur système — C4, C3, F1 — de la même façon que BalanceData gagne un bloc quand un
+## système atterrit. Un champ ajouté plus tard oblige à rouvrir les .tres ; un champ
+## ajouté d'avance oblige à deviner sa forme, ce qui coûte plus cher.
+##
+## Ajouter un **bâtiment** doit rester une édition de data/. Ajouter une **nature** de
+## bâtiment est légitimement une modification de code — mais dans src/domain/, jamais
+## ici : une Resource qui porterait une méthode de résolution serait du domaine
+## déguisé. Voir DESIGN.md 3.3.
 ##
 ## Aucun @export ne porte de défaut, pour la raison exposée dans terrain_balance.gd.
 
@@ -66,18 +72,20 @@ const QUARTER_TURNS := 4
 ## les deux questions. Tranché à C1, voir DESIGN.md 3.2.
 @export var cost: Dictionary[StringName, int]
 
-## Nombre de postes de travail. 0 pour un bâtiment qui ne produit rien — palissade,
-## entrepôt, habitation.
-@export_range(0, 8, 1) var slots: int
-
-## Ce qu'un slot occupé rapporte en un soir, avant le multiplicateur de l'ouvrier.
-@export var yield_per_slot: Dictionary[StringName, int]
-
-## Famille de compétence que ses postes emploient.
+## Ce qu'il produit, ou **null** s'il ne produit pas.
 ##
-## C'est elle qui décide quel multiplicateur de l'ouvrier s'applique au rendement, et
-## quelle piste l'XP créditera en retour. Un bâtiment sans slot n'en a pas besoin.
-@export var skill_family: StringName
+## Nullable, et c'est tout l'intérêt : l'entrepôt et l'habitation n'ont pas « zéro
+## slot », ils n'ont pas de bloc. Les trois champs de production — postes, rendement,
+## famille — vivent ou meurent ensemble, ce qui rend la cohérence structurelle au lieu
+## de vérifiée. Tranché avant E1b, voir DESIGN.md 3.3 et le docstring de
+## ProductionBlock.
+##
+## Cinq bâtiments de DESIGN.md 4.1 — tour de guet, caserne, marché, atelier, camp
+## d'exploration — portent un slot dans le tableau et arrivent pourtant sans bloc. Ce
+## n'est pas un oubli : leur poste n'est pas un poste de production, il héberge une
+## défense, un échange ou une action débloquée, et le système qui le lira n'existe pas
+## encore — F1, I3, X1, X2, X3. Leur bloc viendra avec lui, et de la bonne nature.
+@export var production: ProductionBlock
 
 ## Ce qu'il ajoute à la réserve commune. 0 pour tout ce qui n'est pas un entrepôt.
 ##
@@ -150,6 +158,14 @@ func neighbourhood_at(anchor: Vector2i, radius: int, turns: int = 0) -> Rect2i:
 	assert(radius >= 0, "rayon de voisinage négatif : %d" % radius)
 	return bounds_at(anchor, turns).grow(radius)
 
+## Ce bâtiment tient-il des postes de production ?
+##
+## Une méthode plutôt qu'un `production != null` recopié partout : la nullité est la
+## façon dont E1b représente « ne produit pas », et le jour où le bloc devient une
+## classe de base, cette question restera posée au même endroit.
+func produces() -> bool:
+	return production != null
+
 ## Champs non renseignés ou incohérents. Vide = bâtiment exploitable.
 ## Vérifié au boot par GameDatabase, comme les terrains et l'équilibrage.
 ##
@@ -177,36 +193,31 @@ func missing_fields() -> PackedStringArray:
 
 ## Incohérences du bloc économie.
 ##
-## Ici la doctrine « non renseigné vaut 0, donc détectable » **ne s'applique pas** : 0
-## slot, un coût vide et un storage_bonus nul sont tous des valeurs légitimes du
-## tableau de DESIGN.md 4 — la palissade n'a pas de poste, la cabane de bûcheron est
-## gratuite. Aucun de ces champs ne peut donc être réclamé comme absent, et prétendre
-## le contraire refuserait de démarrer sur des données correctes.
+## Ici la doctrine « non renseigné vaut 0, donc détectable » **ne s'applique pas** : un
+## coût vide et un storage_bonus nul sont deux valeurs légitimes du tableau de
+## DESIGN.md 4.1 — la cabane de bûcheron est gratuite, presque rien ne stocke. Les
+## réclamer refuserait de démarrer sur des données correctes.
 ##
-## Ce qui la remplace est un contrôle de cohérence **entre** ces champs, qui lui est
-## réel : des slots sans rendement ne produiraient rien, un rendement sans slot ne
-## serait jamais versé, et un poste sans famille ne saurait ni quel multiplicateur
-## appliquer ni quelle piste créditer. Les trois se chargent sans erreur et ne cassent
-## qu'au premier soir de production.
+## Ce que E1 devait ajouter ici et qui n'y est plus : le contrôle de cohérence entre
+## slots, rendement et famille. La doctrine du zéro s'applique de nouveau à ces
+## trois-là depuis qu'ils ont quitté ce fichier, et ProductionBlock les réclame
+## simplement — un bloc qui existe produit. C'est le gain du jalon, et il se lit à ce
+## que cette fonction a perdu.
 ##
-## Les clés de cost et yield_per_slot ne sont pas contrôlées ici : une Resource de
-## schéma ne lit jamais l'index. C'est GameDatabase qui les confronte au catalogue.
+## Les clés de cost ne sont pas contrôlées ici, ni celles du rendement dans le bloc :
+## une Resource de schéma ne lit jamais l'index. C'est GameDatabase qui les confronte
+## au catalogue.
 func _economy_fields() -> PackedStringArray:
 	var missing := PackedStringArray()
-	if slots > 0 and yield_per_slot.is_empty():
-		missing.append("yield_per_slot")
-	if slots > 0 and skill_family.is_empty():
-		missing.append("skill_family")
-	if slots == 0 and not yield_per_slot.is_empty():
-		missing.append("slots")
 	if storage_bonus < 0:
 		missing.append("storage_bonus")
 	for resource in cost:
 		if cost[resource] <= 0:
 			missing.append("cost.%s" % resource)
-	for resource in yield_per_slot:
-		if yield_per_slot[resource] <= 0:
-			missing.append("yield_per_slot.%s" % resource)
+	if production == null:
+		return missing
+	for field in production.missing_fields():
+		missing.append("production.%s" % field)
 	return missing
 
 ## L'empreinte nomme-t-elle deux fois la même cellule ?

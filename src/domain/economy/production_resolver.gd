@@ -65,7 +65,11 @@ static func resolve(city: CitySnapshot, assign: Assignment, labor: LaborForce,
 ## Les slots se remplissent dans l'ordre de l'affectation : sur un bâtiment
 ## sur-affecté, les premiers arrivés travaillent et les autres chôment. Trois cas
 ## ne produisent aucune ligne et se retrouvent donc oisifs — une ancre qui ne porte
-## plus rien, un bâtiment sans poste, et un slot déjà pris.
+## plus rien, un bâtiment sans bloc de production, et un slot déjà pris.
+##
+## C'est ici, et nulle part ailleurs, que se teste l'existence du bloc : toute ligne
+## de travail en sort, donc tout ce qui consomme une ligne sait que le bâtiment
+## produit. Un entrepôt reste un bâtiment parfaitement valide où personne ne travaille.
 ##
 ## Un ouvrier que l'affectation nomme mais que la main-d'œuvre ne connaît pas est
 ## ignoré sans un mot, et ne compte même pas comme oisif : une affectation peut avoir
@@ -78,15 +82,16 @@ static func _work_lines(city: CitySnapshot, assign: Assignment,
 		if building == null:
 			continue
 		var data := building.data()
-		if data.slots <= 0:
+		if not data.produces():
 			continue
+		var production := data.production
 		var filled := 0
 		for worker in assign.workers_at(anchor):
-			if filled >= data.slots:
+			if filled >= production.slots:
 				break
 			if not labor.has(worker):
 				continue
-			lines.append(WorkLine.create(worker, anchor, data.skill_family))
+			lines.append(WorkLine.create(worker, anchor, production.skill_family))
 			filled += 1
 	return lines
 
@@ -96,14 +101,17 @@ static func _work_lines(city: CitySnapshot, assign: Assignment,
 ## data promet, et un multiplicateur sous 1.0 se paie vraiment. Un rendement tombé à
 ## zéro laisse quand même sa ligne de travail — l'ouvrier a occupé le poste et mérite
 ## son XP, il a juste mal produit.
+##
+## Le bloc de production est lu sans garde : une ligne de travail n'existe que pour un
+## bâtiment qui produit, _work_lines() s'en est déjà assuré.
 static func _harvest(city: CitySnapshot, work: Array[WorkLine],
 		labor: LaborForce) -> Dictionary[StringName, int]:
 	var produced: Dictionary[StringName, int] = {}
 	for line in work:
-		var data := city.at_anchor(line.anchor()).data()
+		var production := city.at_anchor(line.anchor()).data().production
 		var efficiency := labor.efficiency(line.worker(), line.family())
-		for resource in data.yield_per_slot:
-			var gained := floori(data.yield_per_slot[resource] * efficiency)
+		for resource in production.yield_per_slot:
+			var gained := floori(production.yield_per_slot[resource] * efficiency)
 			if gained > 0:
 				var running: int = produced.get(resource, 0)
 				produced[resource] = running + gained
@@ -112,8 +120,8 @@ static func _harvest(city: CitySnapshot, work: Array[WorkLine],
 ## Le roster moins ceux qui ont travaillé, dans l'ordre du roster.
 ##
 ## Se déduire du roster plutôt que se collecter au fil des refus couvre d'un coup les
-## quatre façons de ne rien produire — non affecté, ancre vide, bâtiment sans poste,
-## slot déjà pris — sans qu'aucune ait à être énumérée ici.
+## quatre façons de ne rien produire — non affecté, ancre vide, bâtiment sans bloc de
+## production, slot déjà pris — sans qu'aucune ait à être énumérée ici.
 static func _idle(labor: LaborForce, work: Array[WorkLine]) -> Array[StringName]:
 	var worked: Dictionary[StringName, bool] = {}
 	for line in work:

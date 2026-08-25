@@ -122,3 +122,7 @@ par ne plus être lu du tout.
 Ce rapport se termine sur un verdict d'équilibrage que les tests ne peuvent pas
 donner, puisqu'ils travaillent sur des chiffres choisis : avec les valeurs de
 `data/balance/`, qui casse en premier — la famine ou la réserve pleine.
+
+Il tient aussi une **file de construction** depuis `E1b` : ce que la bourse refuse à
+l'ouverture y reste, et le harnais en retente la tête un soir à la fois. La colonne de
+droite dit donc aussi le soir où chaque bâtiment différé devient enfin payable.

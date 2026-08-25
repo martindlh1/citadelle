@@ -121,7 +121,7 @@ Conséquence directe, et c'est le prix de ce choix : une récolte qui déborde d
 
 #### Ce qu'un bâtiment déclare produire
 
-*(Tranché avant `E1b`.)* Un bâtiment ne porte pas de champs de production en vrac. Il porte un **bloc `production` nullable** : ou bien il produit, et le bloc dit tout — slots, famille de compétence, rendement —, ou bien il ne produit pas et le bloc est absent. L'entrepôt et l'habitation n'ont pas « zéro slot », ils n'ont **pas de bloc**.
+*(Tranché avant `E1b`, écrit à `E1b`.)* Un bâtiment ne porte pas de champs de production en vrac. Il porte un **bloc `production` nullable** : ou bien il produit, et le bloc dit tout — slots, famille de compétence, rendement —, ou bien il ne produit pas et le bloc est absent. L'entrepôt et l'habitation n'ont pas « zéro slot », ils n'ont **pas de bloc**.
 
 Deux bénéfices immédiats. La cohérence devient **structurelle** au lieu d'être vérifiée : il n'est plus possible d'écrire des slots sans rendement, ou un poste sans famille, parce que les trois vivent ou meurent ensemble. Et le jour où un bâtiment produit *autrement* — au voisinage, à l'événement, au palier —, le bloc devient une classe de base et le résolveur commute sur son type.
 
@@ -247,13 +247,18 @@ Chiffres à prendre comme point de départ d'équilibrage, pas comme cible. La c
 | Mine | 25 bois, 10 pierre | 3 | 2 slots, +2 minerai — Récolte | 0 | 8 | — |
 | Habitation | 20 bois | 2 | +2 places de roster | 0 | 5 | — |
 | Entrepôt | 20 bois | 2 | +100 de réserve | 0 | 6 | — |
+| Palissade | 5 bois | 1 | — | 3 | 4 | — |
 | Tour de guet | 15 bois, 10 pierre | 3 | 1 slot, +8 déf. si occupée | 8 | 10 | — |
 | Caserne | 30 bois, 15 pierre | 3 | 1 slot | 0 | 10 | *S'entraîner* |
 | Marché | 30 bois, 10 minerai | 3 | 1 slot, 2 échanges 3:1 | 0 | 6 | — |
 | Atelier | 25 bois, 15 minerai | 3 | 1 slot | 0 | 8 | *Fabriquer* |
 | Camp d'exploration | 20 bois, 10 minerai | 2 | 1 slot | 0 | 6 | *Explorer* |
 
+La **palissade** est entrée par la pratique et non par le design : `C2` l'a créée pour son empreinte en L, la seule forme non rectangulaire du projet, donc le seul cas qui exerce vraiment la rotation du fantôme et le validateur. Elle est inscrite ici à `E1b` pour que ce tableau redise ce que `data/` contient. Une défense de départ bon marché y a sa place de toute façon.
+
 Les bonus d'adjacence ne sont pas dans cette table : ils viennent avec `C3`, qui décidera de leur forme avant de les chiffrer.
+
+**Ce que `data/` porte, et ce qu'il ne porte pas encore.** *(Constaté à `E1b`.)* Un champ arrive avec le système qui le lit : la colonne **Chantier** est écrite ici mais vit dans `data/` à `C4`, **Déf.** et **PV** à `F1`, **Débloque** à `D1`, et les places de roster de l'habitation à `W1`. La conséquence à ne pas confondre avec un oubli : **cinq bâtiments portent « 1 slot » dans ce tableau et n'ont pourtant aucun bloc `production`** — tour de guet, caserne, marché, atelier, camp d'exploration. Leur poste n'est pas un poste de production ; il héberge une défense, un échange ou une action débloquée, et la nature qui le décrira n'existe pas encore. Leur écrire un `slots = 1` que rien ne lit ferait mentir la data et détruirait la garantie que `E1b` vient d'acheter — un bloc qui existe produit.
 
 ### 4.2 Actions
 
@@ -317,7 +322,7 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 
 ### Économie — `E`
 - **E1** ✅ — `Ledger` en réserve commune, `ProductionResolver`, upkeep, famine, tests.
-- **E1b** — Le bloc **`production` nullable** sorti de `BuildingData`, quatrième ressource, contenu de 4.1. Petit, et il déblaie avant que douze bâtiments écrivent l'ancien format.
+- **E1b** ✅ — Le bloc **`production` nullable** sorti de `BuildingData`, quatrième ressource, contenu de 4.1. Petit, et il a déblayé avant que douze bâtiments écrivent l'ancien format.
 - **E2** — HUD des ressources, panneau de rapport de production.
 
 ### Effectifs — `W`
@@ -349,6 +354,6 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 - **X3** — Entraînement : caserne et *S'entraîner* *(3.4)*.
 - **X4** — Powers : le troisième pool se remplit *(3.5)*.
 
-**Ordre suivant** — `E1b`, puis `W1`, puis `C4`, puis `D1` et `D2`, puis `I1`. `E1b` d'abord parce qu'il touche les `.tres` de bâtiments et que leur nombre va tripler ; `W1` ensuite parce qu'il est le dernier moment où `LaborForce` peut bouger sans douleur.
+**Ordre suivant** — `W1`, puis `C4`, puis `D1` et `D2`, puis `I1`. `E1b` est passé le premier parce qu'il touchait les `.tres` de bâtiments et que leur nombre a doublé ; `W1` vient maintenant parce qu'il est le dernier moment où `LaborForce` peut bouger sans douleur, et parce qu'il est le seul jalon qui rende le journal de travail de `E1` utile à quelque chose.
 
 Le jeu devient jouable à `I2`. Tout ce qui suit est de l'enrichissement.

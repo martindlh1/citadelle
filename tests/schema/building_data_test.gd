@@ -3,8 +3,11 @@ extends GdUnitTestSuite
 ## Le schéma d'un bâtiment : la géométrie de son empreinte, et son filet de complétude.
 ##
 ## Comme terrain_data_test.gd, aucune empreinte de data/ n'est figée ici — les tailles
-## des dix bâtiments de DESIGN.md 4 bougeront à la passe de contenu. Ce qui est
-## asserté, c'est la géométrie et le mécanisme qui refuse une empreinte inexploitable.
+## des bâtiments de DESIGN.md 4.1 bougeront à la passe de contenu. Ce qui est asserté,
+## c'est la géométrie et le mécanisme qui refuse une empreinte inexploitable.
+##
+## Le bloc de production a son propre fichier depuis E1b. Ce qui en reste ici est la
+## couture : l'absence de bloc, et le préfixe sous lequel ce qui lui manque remonte.
 ##
 ## Le L sert de forme de travail presque partout : sur un rectangle, cells_at() et
 ## bounds_at() rendraient la même chose et aucun des deux ne serait vraiment testé.
@@ -164,35 +167,37 @@ func test_the_buildings_of_data_are_exploitable() -> void:
 		.override_failure_message("data/buildings/ ne contient aucun bâtiment") \
 		.is_not_empty()
 
-## Le point de doctrine du bloc économie. Zéro slot, un coût vide et une réserve nulle
-## sont trois valeurs légitimes du tableau de DESIGN.md 4 — la palissade n'a pas de
-## poste, la cabane de bûcheron est gratuite. Aucune ne peut donc être réclamée, et un
-## bâtiment qui n'en renseigne aucune est complet.
+## Le point de doctrine du bloc économie, et il porte le jalon. Un coût vide et une
+## réserve nulle sont deux valeurs légitimes du tableau de DESIGN.md 4.1 — la cabane de
+## bûcheron est gratuite, presque rien ne stocke. Et **l'absence de bloc de production
+## en est une troisième** : l'entrepôt n'a pas zéro slot, il n'a pas de bloc. Un
+## bâtiment qui ne renseigne rien de tout ça est complet.
 func test_a_building_without_any_economy_block_is_complete() -> void:
-	assert_array(_building(_l_shape()).missing_fields()).is_empty()
-
-## Ce qui remplace le filet habituel : la cohérence entre ces champs. Des slots sans
-## rendement ne produiraient rien, et ça ne casserait qu'au premier soir.
-func test_slots_without_a_yield_are_reported() -> void:
 	var building := _building(_l_shape())
-	building.slots = 2
-	assert_array(building.missing_fields()).contains(["yield_per_slot"])
+	assert_bool(building.produces()).is_false()
+	assert_array(building.missing_fields()).is_empty()
 
-## Sans famille, un poste ne sait ni quel multiplicateur appliquer ni quelle piste
-## créditer en XP.
-func test_slots_without_a_family_are_reported() -> void:
+func test_a_building_with_a_coherent_block_reports_nothing() -> void:
 	var building := _producer()
-	building.skill_family = &""
-	assert_array(building.missing_fields()).contains(["skill_family"])
+	assert_bool(building.produces()).is_true()
+	assert_array(building.missing_fields()).is_empty()
 
-## L'inverse se rattrape aussi : un rendement que nul poste ne verse jamais.
-func test_a_yield_without_slots_is_reported() -> void:
+## Ce que E1 vérifiait ici est parti dans ProductionBlock, et il n'en reste que la
+## couture : ce qui manque au bloc remonte préfixé, comme TerrainData préfixe
+## « decor. ». Sans le préfixe, un « slots » nu dans le rapport de boot ne dirait pas
+## d'où il vient le jour où BuildingData portera plusieurs blocs.
+func test_an_incomplete_block_is_reported_under_its_prefix() -> void:
 	var building := _producer()
-	building.slots = 0
-	assert_array(building.missing_fields()).contains(["slots"])
+	building.production.skill_family = &""
+	assert_array(building.missing_fields()).contains(["production.skill_family"])
 
-func test_a_coherent_economy_block_reports_nothing() -> void:
-	assert_array(_producer().missing_fields()).is_empty()
+## Et le préfixe descend jusqu'aux lignes de rendement, qui portent déjà un point.
+func test_a_bad_yield_line_keeps_both_levels_of_prefix() -> void:
+	var building := _producer()
+	var per_slot: Dictionary[StringName, int] = {}
+	per_slot[&"wood"] = -2
+	building.production.yield_per_slot = per_slot
+	assert_array(building.missing_fields()).contains(["production.yield_per_slot.wood"])
 
 ## Une ligne de coût à zéro ne veut rien dire : on l'omet. L'écrire est une faute de
 ## contenu, pas une gratuité.
@@ -203,21 +208,16 @@ func test_a_null_cost_line_is_reported() -> void:
 	building.cost = cost
 	assert_array(building.missing_fields()).contains(["cost.wood"])
 
-func test_a_negative_yield_line_is_reported() -> void:
-	var building := _producer()
-	var per_slot: Dictionary[StringName, int] = {}
-	per_slot[&"wood"] = -2
-	building.yield_per_slot = per_slot
-	assert_array(building.missing_fields()).contains(["yield_per_slot.wood"])
-
 ## Un producteur cohérent : deux postes, un rendement, une famille.
 func _producer() -> BuildingData:
 	var building := _building(_l_shape())
-	building.slots = 2
+	var block := ProductionBlock.new()
+	block.slots = 2
 	var per_slot: Dictionary[StringName, int] = {}
 	per_slot[&"wood"] = 2
-	building.yield_per_slot = per_slot
-	building.skill_family = &"harvest"
+	block.yield_per_slot = per_slot
+	block.skill_family = &"harvest"
+	building.production = block
 	return building
 
 ## Un L : l'ancre, la cellule à sa droite, la cellule en dessous. Rendu neuf à chaque

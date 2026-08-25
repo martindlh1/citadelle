@@ -5,9 +5,9 @@ extends GdUnitTestSuite
 ## Ville de travail, trois bâtiments fabriqués à la main :
 ##   - une cabane à 2 slots qui rend 2 bois, en (1, 1) ;
 ##   - une ferme à 2 slots qui rend 3 nourriture, en (5, 5) ;
-##   - un entrepôt sans slot qui ajoute 100 de réserve, en (8, 8).
+##   - un entrepôt **sans bloc de production** qui ajoute 100 de réserve, en (8, 8).
 ##
-## Rien ne vient de data/ : les rendements des dix bâtiments de DESIGN.md 4 bougeront à
+## Rien ne vient de data/ : les rendements des bâtiments de DESIGN.md 4.1 bougeront à
 ## la passe de contenu, et un test qui les figerait serait cassé en permanence.
 ##
 ## Les deux cas qui portent le plus sont la sur-affectation — trois ouvriers pour deux
@@ -67,7 +67,11 @@ func test_a_worker_sent_to_an_empty_anchor_stays_idle() -> void:
 	assert_dict(report.produced()).is_empty()
 	assert_array(report.idle()).contains_exactly([&"ana"])
 
-func test_a_worker_sent_to_a_building_without_slots_stays_idle() -> void:
+## Un entrepôt est un bâtiment parfaitement valide où personne ne travaille : il n'a
+## pas zéro poste, il n'a pas de bloc de production. L'ouvrier envoyé là chôme sans
+## qu'aucun refus ne soit prononcé.
+func test_a_worker_sent_to_a_building_without_a_production_block_stays_idle() -> void:
+	assert_bool(_store.produces()).is_false()
 	var report := _resolve(_city, _assign([&"ana", STORE]), _crew([&"ana"]),
 		Ledger.create(100))
 	assert_array(report.idle()).contains_exactly([&"ana"])
@@ -206,19 +210,25 @@ func _resolve(city: CitySnapshot, assign: Assignment, labor: LaborForce,
 		ledger: Ledger) -> ProductionReport:
 	return ProductionResolver.resolve(city, assign, labor, ledger, _balance)
 
+## Un bâtiment de travail. `slots` à 0 le laisse **sans bloc de production**, ce qui
+## est la façon dont E1b dit « ne produit pas » : un entrepôt n'a pas zéro poste, il
+## n'en a pas du tout.
 func _make_building(id: StringName, slots: int,
 		per_slot: Dictionary) -> BuildingData:
 	var data := BuildingData.new()
 	data.id = id
 	var cells: Array[Vector2i] = [Vector2i.ZERO]
 	data.footprint = cells
-	data.slots = slots
+	if slots <= 0:
+		return data
+	var block := ProductionBlock.new()
+	block.slots = slots
 	var per: Dictionary[StringName, int] = {}
 	for resource in per_slot:
 		per[resource] = per_slot[resource]
-	data.yield_per_slot = per
-	if slots > 0:
-		data.skill_family = HARVEST
+	block.yield_per_slot = per
+	block.skill_family = HARVEST
+	data.production = block
 	return data
 
 ## Ville depuis une liste plate — [données, ancre, données, ancre].
