@@ -123,7 +123,8 @@ func test_an_unknown_identifier_reads_as_nothing() -> void:
 ## identiques jouées dans un ordre différent ne doivent pas rendre autre chose.
 func test_the_plan_keeps_the_order_the_actions_were_posted_in() -> void:
 	var first := _post(ActionTargeting.CARD_HARVEST, FOREST)
-	var second := _post(ActionTargeting.CARD_TERRAFORM, PLAIN)
+	var second := _post(ActionTargeting.CARD_TERRAFORM, PLAIN,
+		PlayedAction.DIRECTION_UP)
 	var third := _post(ActionTargeting.CARD_HUNT, FOREST)
 	var posted := _board.to_plan().actions()
 	assert_int(posted[0].id()).is_equal(first.id())
@@ -158,8 +159,9 @@ func test_the_capacity_of_a_slot_action_comes_from_the_building() -> void:
 	var action := _post(ActionTargeting.CARD_HARVEST, Vector2i(5, 5))
 	assert_int(action.capacity()).is_equal(2)
 
-func _post(card: StringName, target: Vector2i) -> PlayedAction:
-	return _board.post(card, target, _terrain, _city, _balance)
+func _post(card: StringName, target: Vector2i,
+		direction := PlayedAction.DIRECTION_NONE) -> PlayedAction:
+	return _board.post(card, target, _terrain, _city, _balance, direction)
 
 func _make_terrain() -> TerrainQuery:
 	var plain := TerrainData.new()
@@ -195,6 +197,9 @@ func _make_balance() -> ActionBalance:
 	balance.bare_capacity = BARE_CAPACITY
 	balance.bare_yield = 1
 	balance.bare_skill_family = &"harvest"
+	balance.site_skill_family = &"construction"
+	balance.terraform_floor = -1
+	balance.terraform_ceiling = 1
 	var sources: Dictionary[StringName, Dictionary] = {}
 	sources[ActionTargeting.CARD_HARVEST] = {&"forest": &"wood"}
 	sources[ActionTargeting.CARD_HUNT] = {&"forest": &"food"}

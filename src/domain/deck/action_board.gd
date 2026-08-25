@@ -52,13 +52,18 @@ var _next_id := NO_ACTION + 1
 ## presque toujours déjà le verdict sous la main, parce que la surbrillance des cibles le
 ## calcule à chaque image. Ce qui lui manque au moment du clic, c'est l'identifiant que
 ## l'action vient de recevoir — sans lui il ne pourrait pas y affecter un ouvrier.
+## Le sens ne concerne que les verbes qui déplacent de la terre, et son défaut le rend
+## invisible aux autres. Celui qui est enregistré est celui que le ciblage a accepté, et
+## non celui qu'on a demandé : c'est la même règle que pour la cible.
 func post(card: StringName, target: Vector2i, terrain: TerrainQuery, city: CitySnapshot,
-		balance: ActionBalance) -> PlayedAction:
-	var result := ActionTargeting.validate(card, target, terrain, city, to_plan(), balance)
+		balance: ActionBalance,
+		direction := PlayedAction.DIRECTION_NONE) -> PlayedAction:
+	var result := ActionTargeting.validate(card, target, terrain, city, to_plan(), balance,
+		direction)
 	if not result.is_ok():
 		return null
 	var action := PlayedAction.create(_next_id, card, result.target(), result.kind(),
-		result.capacity())
+		result.capacity(), result.direction())
 	_actions[action.id()] = action
 	_next_id += 1
 	return action

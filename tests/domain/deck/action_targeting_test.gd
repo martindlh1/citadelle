@@ -11,7 +11,8 @@ extends GdUnitTestSuite
 ## Relief de travail, 8 × 8 :
 ##   - de la plaine partout, sans aucun tag ;
 ##   - une forêt en (2, 2) — récoltable et chassable ;
-##   - un gisement en (3, 3) — récoltable, pas chassable.
+##   - un gisement en (3, 3) — récoltable, pas chassable ;
+##   - de l'eau en (4, 4) — inconstructible, donc interdite au terrassement.
 ##
 ## Ville de travail :
 ##   - une cabane à 2 postes, achevée, ancrée en (5, 5), empreinte 2 × 1 ;
@@ -26,6 +27,7 @@ const CARD_ROOT := "res://data/cards"
 const PLAIN := Vector2i(1, 1)
 const FOREST := Vector2i(2, 2)
 const STONE := Vector2i(3, 3)
+const WATER := Vector2i(4, 4)
 const HUT := Vector2i(5, 5)
 const HUT_TAIL := Vector2i(6, 5)
 const STORE := Vector2i(0, 5)
@@ -37,6 +39,18 @@ const HUT_SLOTS := 2
 const SITE_ACTIONS := 3
 const SITE_PROGRESS := 1
 
+## Le relief de travail est plat à 0. Les bornes l'encadrent des deux côtés, pour que
+## monter et descendre soient tous les deux possibles ailleurs qu'à une extrémité.
+const FLOOR := -1
+const CEILING := 1
+
+const UP := PlayedAction.DIRECTION_UP
+const DOWN := PlayedAction.DIRECTION_DOWN
+
+## Gardée à côté de la query, parce que les cas de bornes ont besoin de déplacer une
+## hauteur. La query est une vue, pas une copie : la modifier se lit à travers elle.
+var _grid: HeightGrid
+
 var _terrain: TerrainQuery
 var _city: CitySnapshot
 var _balance: ActionBalance
@@ -46,7 +60,8 @@ var _balance: ActionBalance
 var _plan: ActionPlan
 
 func before_test() -> void:
-	_terrain = _make_terrain()
+	_grid = _make_grid()
+	_terrain = _grid.to_query()
 	_city = _make_city()
 	_balance = _make_balance()
 	_plan = ActionPlan.empty()
@@ -133,16 +148,52 @@ func test_build_is_refused_on_bare_ground() -> void:
 
 # --- Terraformer --------------------------------------------------------------------
 
-## Aucun tag n'est exigé : DESIGN.md 4.2 dit « monte ou descend une case d'un cran »
-## sans restreindre le terrain.
-func test_terraform_lands_on_any_free_cell() -> void:
-	var result := _validate(ActionTargeting.CARD_TERRAFORM, PLAIN)
+## Aucun **tag** n'est exigé — DESIGN.md 4.2 dit « monte ou descend une case d'un cran »
+## sans nommer de tag —, mais le terrain doit être constructible et le sens choisi. Les
+## deux ont été tranchés à I1, qui est le jalon qui exécute le verbe.
+func test_terraform_lands_on_a_free_buildable_cell_in_a_chosen_direction() -> void:
+	var result := _validate(ActionTargeting.CARD_TERRAFORM, PLAIN, UP)
 	assert_bool(result.is_ok()).is_true()
 	assert_int(result.kind()).is_equal(PlayedAction.Kind.BARE)
 	assert_int(result.capacity()).is_equal(BARE_CAPACITY)
+	assert_int(result.direction()).is_equal(UP)
+
+## Le sens traverse la validation jusqu'au résultat plutôt que d'être recopié par
+## l'appelant : sans ça, l'écran pourrait allumer les cases où l'on peut descendre et la
+## pose, elle, monter.
+func test_terraform_carries_the_direction_it_was_validated_with() -> void:
+	assert_int(_validate(ActionTargeting.CARD_TERRAFORM, PLAIN, DOWN).direction()) \
+		.is_equal(DOWN)
 
 func test_terraform_is_refused_under_a_building() -> void:
-	_assert_refused(ActionTargeting.CARD_TERRAFORM, HUT, TargetResult.REASON_OCCUPIED)
+	_assert_refused(ActionTargeting.CARD_TERRAFORM, HUT, TargetResult.REASON_OCCUPIED, UP)
+
+## L'eau et le rocher ne se terrassent pas. La raison est mécanique : terrasser déplace
+## la hauteur et non le TerrainData, donc monter une case d'eau la laisserait eau —
+## inconstructible, toujours tagguée — pour le prix d'une carte et d'un ouvrier.
+func test_terraform_is_refused_on_unbuildable_ground() -> void:
+	_assert_refused(ActionTargeting.CARD_TERRAFORM, WATER,
+		TargetResult.REASON_NOT_BUILDABLE, UP)
+
+## Une carte en main et pas encore de sens choisi est un état d'écran normal, donc un
+## refus et non un assert.
+func test_terraform_is_refused_without_a_direction() -> void:
+	_assert_refused(ActionTargeting.CARD_TERRAFORM, PLAIN,
+		TargetResult.REASON_NO_DIRECTION)
+
+## Les bornes se lisent sur la hauteur d'**arrivée**. Le relief de travail est à 0 et le
+## plancher à -1 : une case y descend une fois, et la seconde fois est refusée.
+func test_terraform_is_refused_past_the_floor() -> void:
+	_grid.set_height(PLAIN, FLOOR)
+	_assert_refused(ActionTargeting.CARD_TERRAFORM, PLAIN,
+		TargetResult.REASON_HEIGHT_LIMIT, DOWN)
+	assert_bool(_validate(ActionTargeting.CARD_TERRAFORM, PLAIN, UP).is_ok()).is_true()
+
+func test_terraform_is_refused_past_the_ceiling() -> void:
+	_grid.set_height(PLAIN, CEILING)
+	_assert_refused(ActionTargeting.CARD_TERRAFORM, PLAIN,
+		TargetResult.REASON_HEIGHT_LIMIT, UP)
+	assert_bool(_validate(ActionTargeting.CARD_TERRAFORM, PLAIN, DOWN).is_ok()).is_true()
 
 # --- Les règles communes ------------------------------------------------------------
 
@@ -227,28 +278,33 @@ func _plan_of(card: StringName, target: Vector2i) -> ActionPlan:
 	return ActionPlan.create([
 		PlayedAction.create(1, card, target, PlayedAction.Kind.BARE, 1)])
 
-func _validate(card: StringName, target: Vector2i) -> TargetResult:
-	return ActionTargeting.validate(card, target, _terrain, _city, _plan, _balance)
+func _validate(card: StringName, target: Vector2i,
+		direction := PlayedAction.DIRECTION_NONE) -> TargetResult:
+	return ActionTargeting.validate(card, target, _terrain, _city, _plan, _balance,
+		direction)
 
-func _assert_refused(card: StringName, target: Vector2i, reason: StringName) -> void:
-	var result := _validate(card, target)
+func _assert_refused(card: StringName, target: Vector2i, reason: StringName,
+		direction := PlayedAction.DIRECTION_NONE) -> void:
+	var result := _validate(card, target, direction)
 	assert_bool(result.is_ok()) \
 		.override_failure_message("« %s » accepté en %s alors qu'on attend « %s »"
 			% [card, target, reason]) \
 		.is_false()
 	assert_str(result.reason()).is_equal(reason)
 
-## De la plaine partout, une forêt et un gisement posés à la main.
-func _make_terrain() -> TerrainQuery:
+## De la plaine partout, une forêt, un gisement et une nappe d'eau posés à la main.
+func _make_grid() -> HeightGrid:
 	var grid := HeightGrid.create(Vector2i(8, 8), 0, _tagged(&"plain", []))
 	grid.set_terrain(FOREST, _tagged(&"forest", [&"forest"]))
 	grid.set_terrain(STONE, _tagged(&"stone", [&"stone"]))
-	return grid.to_query()
+	grid.set_terrain(WATER, _tagged(&"water", [&"water"], TerrainData.Build.BLOCKED))
+	return grid
 
-func _tagged(id: StringName, tags: Array) -> TerrainData:
+func _tagged(id: StringName, tags: Array,
+		build := TerrainData.Build.ALLOWED) -> TerrainData:
 	var data := TerrainData.new()
 	data.id = id
-	data.build = TerrainData.Build.ALLOWED
+	data.build = build
 	var typed: Array[StringName] = []
 	typed.assign(tags)
 	data.tags = typed
@@ -301,6 +357,9 @@ func _make_balance() -> ActionBalance:
 	balance.bare_capacity = BARE_CAPACITY
 	balance.bare_yield = 1
 	balance.bare_skill_family = &"harvest"
+	balance.site_skill_family = &"construction"
+	balance.terraform_floor = FLOOR
+	balance.terraform_ceiling = CEILING
 	var sources: Dictionary[StringName, Dictionary] = {}
 	sources[ActionTargeting.CARD_HARVEST] = {&"forest": &"wood", &"stone": &"stone"}
 	sources[ActionTargeting.CARD_HUNT] = {&"forest": &"food"}

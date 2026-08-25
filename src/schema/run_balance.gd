@@ -22,6 +22,18 @@ extends Resource
 ## précisément l'endroit où l'on itère sur une question encore ouverte.
 @export_range(1, 100, 1) var days: int
 
+## Bâtiment posé au centre de la carte à l'ouverture d'un run.
+##
+## `DESIGN.md` 2 en fait une étape à part entière — « génération de carte → pose du Cœur →
+## suite de journées ». Il est ici plutôt qu'écrit en dur dans `src/domain/run/` pour la
+## raison la plus simple : `&"heart"` dans un `.gd` serait un identifiant de contenu dans
+## du code, ce que les conventions refusent partout ailleurs.
+##
+## Vide est une réponse et non un oubli — c'est le run d'un harnais qui veut une carte
+## nue. Le champ n'est donc pas contrôlé par `missing_fields()`, à l'inverse de tous les
+## autres ; l'existence du bâtiment nommé l'est en revanche à l'ouverture du run.
+@export var starting_building: StringName
+
 ## Phases qui résolvent, dans l'ordre.
 func resolving_phases() -> Array[PhaseDef]:
 	var resolving: Array[PhaseDef] = []

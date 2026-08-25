@@ -3,21 +3,22 @@
 [ext_resource type="Script" path="res://src/schema/run_balance.gd" id="1_run_balance"]
 [ext_resource type="Script" path="res://src/schema/phase_def.gd" id="2_phase_def"]
 
-[sub_resource type="Resource" id="Resource_phase_day"]
+[sub_resource type="Resource" id="Resource_phase_build"]
 script = ExtResource("2_phase_def")
-id = &"day"
-label = "Journée"
-allows = Array[StringName]([&"play", &"assign"])
+id = &"build"
+label = "Construction"
+allows = Array[StringName]([&"play"])
 resolves = false
 
-[sub_resource type="Resource" id="Resource_phase_evening"]
+[sub_resource type="Resource" id="Resource_phase_assign"]
 script = ExtResource("2_phase_def")
-id = &"evening"
-label = "Soir"
-allows = Array[StringName]([])
+id = &"assign"
+label = "Affectation"
+allows = Array[StringName]([&"assign"])
 resolves = true
 
 [resource]
 script = ExtResource("1_run_balance")
-phases = Array[PhaseDef]([SubResource("Resource_phase_day"), SubResource("Resource_phase_evening")])
+phases = Array[PhaseDef]([SubResource("Resource_phase_build"), SubResource("Resource_phase_assign")])
 days = 15
+starting_building = &"heart"

@@ -50,17 +50,25 @@ static func handles(card: StringName) -> bool:
 ## bâtiment, le résultat rend son **ancre**, retrouvée depuis n'importe quelle cellule de
 ## l'empreinte. C'est le chemin d'un clic, et le faire ici évite que deux clics sur la
 ## même ferme posent deux actions qui se croient différentes.
+## `direction` n'est lu que par les verbes qui déplacent de la terre, et son défaut le
+## rend invisible aux trois autres. C'est le sens que `I1` a rendu obligatoire pour
+## *Terraformer* : `DESIGN.md` 4.2 lui en donne deux, `data/cards/` n'en porte qu'une
+## carte, donc le sens est un choix fait à la pose — au même titre que l'orientation d'un
+## bâtiment appartient au placement et non à sa `BuildingData`.
 static func validate(card: StringName, target: Vector2i, terrain: TerrainQuery,
-		city: CitySnapshot, plan: ActionPlan, balance: ActionBalance) -> TargetResult:
+		city: CitySnapshot, plan: ActionPlan, balance: ActionBalance,
+		direction := PlayedAction.DIRECTION_NONE) -> TargetResult:
 	assert(terrain != null, "ciblage sans terrain")
 	assert(city != null, "ciblage sans ville")
 	assert(plan != null, "ciblage sans plan d'actions")
 	assert(balance != null, "ciblage sans équilibrage")
+	assert(PlayedAction.is_known_direction(direction),
+		"ciblage sur un sens inconnu : %d" % direction)
 	if not handles(card):
 		return TargetResult.refused(TargetResult.REASON_UNKNOWN_CARD)
 	if not terrain.in_bounds(target):
 		return TargetResult.refused(TargetResult.REASON_OUT_OF_BOUNDS)
-	var verdict := _place_of(card, target, terrain, city, balance)
+	var verdict := _place_of(card, target, terrain, city, balance, direction)
 	if not verdict.is_ok():
 		return verdict
 	if _already_posted(card, verdict.target(), plan):
@@ -69,7 +77,7 @@ static func validate(card: StringName, target: Vector2i, terrain: TerrainQuery,
 
 ## Où ce verbe se joue, avant de regarder ce qui est déjà posé.
 static func _place_of(card: StringName, target: Vector2i, terrain: TerrainQuery,
-		city: CitySnapshot, balance: ActionBalance) -> TargetResult:
+		city: CitySnapshot, balance: ActionBalance, direction: int) -> TargetResult:
 	match card:
 		CARD_HARVEST:
 			return _harvest(target, terrain, city, balance)
@@ -78,7 +86,7 @@ static func _place_of(card: StringName, target: Vector2i, terrain: TerrainQuery,
 		CARD_BUILD:
 			return _build(target, city)
 		CARD_TERRAFORM:
-			return _terraform(target, city, balance)
+			return _terraform(target, terrain, city, balance, direction)
 	return TargetResult.refused(TargetResult.REASON_UNKNOWN_CARD)
 
 ## Cette carte est-elle déjà posée sur cette cible ?
@@ -149,17 +157,36 @@ static func _build(target: Vector2i, city: CitySnapshot) -> TargetResult:
 	return TargetResult.accepted(PlayedAction.Kind.BUILDING, building.anchor(),
 		building.remaining())
 
-## *Terraformer* : sur une case en carte que rien n'occupe.
+## *Terraformer* : sur une case **constructible** que rien n'occupe, dans un sens choisi,
+## et tant que ce sens ne sort pas des bornes de relief.
 ##
-## Aucun tag n'est exigé : DESIGN.md 4.2 dit « monte ou descend une case d'un cran »
-## sans restreindre le terrain. Que l'eau et le rocher puissent se terrasser est une
-## question de design ouverte, et elle appartient au jalon qui **exécute** le verbe —
-## la trancher ici en refusant `water` fermerait un choix que personne n'a fait.
-static func _terraform(target: Vector2i, city: CitySnapshot,
-		balance: ActionBalance) -> TargetResult:
+## Les trois refus sont trois questions ouvertes que `I1` referme, et l'ordre dans lequel
+## ils tombent est celui de ce qui se voit le mieux à l'écran : un bâtiment d'abord, le
+## sol ensuite, puis ce que le joueur tient.
+##
+## **Le terrain.** `DESIGN.md` 3.5 demandait « l'eau et le rocher se terrassent-ils ? ».
+## Non, et la raison est mécanique plutôt que thématique : terrasser déplace la hauteur et
+## non le `TerrainData`, donc monter une case d'eau la laisserait eau — inconstructible,
+## toujours tagguée `water` — pour le prix d'une carte et d'un ouvrier. Le jour où un
+## verbe voudra changer le sol lui-même, ce sera un *Défricher*, pas celui-ci.
+##
+## **Le sens.** Il n'a pas de valeur par défaut jouable : un terrassement sans sens choisi
+## se refuse, ce qui est un état d'écran normal et non une faute d'appelant.
+##
+## **Les bornes.** Elles sont lues sur la hauteur **d'arrivée**, pas de départ : une case
+## au plancher se monte encore, elle ne se descend plus.
+static func _terraform(target: Vector2i, terrain: TerrainQuery, city: CitySnapshot,
+		balance: ActionBalance, direction: int) -> TargetResult:
 	if city.at_cell(target) != null:
 		return TargetResult.refused(TargetResult.REASON_OCCUPIED)
-	return TargetResult.accepted(PlayedAction.Kind.BARE, target, balance.bare_capacity)
+	if not terrain.is_buildable(target):
+		return TargetResult.refused(TargetResult.REASON_NOT_BUILDABLE)
+	if direction == PlayedAction.DIRECTION_NONE:
+		return TargetResult.refused(TargetResult.REASON_NO_DIRECTION)
+	if not balance.in_terraform_range(terrain.height_at(target) + direction):
+		return TargetResult.refused(TargetResult.REASON_HEIGHT_LIMIT)
+	return TargetResult.accepted(PlayedAction.Kind.BARE, target, balance.bare_capacity,
+		direction)
 
 ## Un verbe joué à cru : accepté si la cellule porte l'un des tags que sa table nomme.
 ##
