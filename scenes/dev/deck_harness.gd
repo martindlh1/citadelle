@@ -17,10 +17,13 @@ extends Node
 ## ressources n'apparaît ici : la question se pose à ActionTargeting, l'écran affiche la
 ## réponse.
 ##
-## Les touches : 1 à 9 prennent une carte, clic gauche la joue sur la case survolée, clic
-## droit retire l'action posée là, Espace y envoie un ouvrier, Retour arrière les rappelle
-## tous, Tab pivote un bâtiment, Entrée résout le soir. La caméra garde Q/E, la molette,
-## WASD et R.
+## Les commandes : une carte se prend au clavier — 1 à 9 — ou au clic dessus, un clic
+## gauche sur le sol la joue sur la case survolée, un clic droit retire l'action posée là,
+## Espace y envoie un ouvrier, Retour arrière les rappelle tous, Tab pivote un bâtiment,
+## Entrée résout le soir. La caméra garde Q/E, la molette, WASD et R.
+##
+## Les deux chemins de sélection mènent au même `_hold(rang)`, ce qui n'est pas une
+## commodité : la main peut tenir plus de neuf cartes, et au-delà seul le clic répond.
 ##
 ## Ce que le soir ne fait **pas encore** : exécuter *Construire* et *Terraformer*. Les
 ## deux se posent, s'affectent, et leurs ouvriers rentrent bredouilles — leur effet mute
@@ -42,14 +45,23 @@ const SEEDED: Array[StringName] = [&"lumberjack_hut", &"farm", &"quarry"]
 ## Rendu quand aucune cellule ne convient.
 const NO_CELL := Vector2i(-1, -1)
 
-## Cartes que les touches 1 à 9 atteignent.
+## Cartes que les touches 1 à 9 atteignent. Au-delà, il faut cliquer.
 const SLOT_KEYS := 9
+
+## Rang qui ne désigne aucune carte.
+const NO_SLOT := -1
 
 const REPORT_MARGIN := 16.0
 const REPORT_FONT_SIZE := 13
 const REPORT_OUTLINE_SIZE := 4
 
-const CONTROLS := "1-9 : prendre une carte.   Clic gauche : jouer.   Clic droit : retirer l'action.   Espace : y envoyer un ouvrier.   Retour arr. : les rappeler.\nTab : pivoter un bâtiment.   Entrée : résoudre le soir.   Q/E : tourner la caméra.   Molette : zoom.   WASD : déplacer.   R : recadrer."
+## Le rappel des touches, en pied de rapport. Trois lignes groupées par ce sur quoi elles
+## agissent — la main, la carte du monde, la caméra — et non une seule : la ligne unique
+## de la première version débordait du viewport, et un rappel coupé au bord de l'écran ne
+## rappelle rien.
+const CONTROLS := """La main    1-9 ou clic sur une carte : la prendre.
+Sur la carte    Clic gauche : jouer la carte tenue.   Clic droit : retirer l'action.   Espace : y envoyer un ouvrier.   Retour arr. : les rappeler.
+La phase    Tab : pivoter un bâtiment.   Entrée : résoudre le soir.        Caméra    Q/E : tourner.   Molette : zoom.   WASD : déplacer.   R : recadrer."""
 
 var _metrics: TerrainMetrics
 var _world: DevWorld
@@ -79,10 +91,20 @@ var _workforce: WorkforceBalance
 ## mutable et en fabrique une Assignment figée au moment de résoudre.
 var _posted: Dictionary[StringName, int] = {}
 
-var _held: StringName = &""
+## Rang de la carte tenue dans Hand.cards(), ou NO_SLOT si l'on ne tient rien.
+##
+## Un **rang** et non un identifiant, et ce choix a été fait deux fois. La première
+## version tenait l'identifiant, ce qui paraissait plus solide : un rang survivrait à la
+## carte qu'il désigne quand la main se repioche. C'était faux, et faux d'une façon qui se
+## voyait au clavier — une main tient couramment **deux exemplaires de la même carte**, et
+## « la carte tenue » ne désigne alors plus rien de précis. Prendre le second exemplaire
+## revenait à reprendre le premier, donc à le reposer, et la touche paraissait morte. La
+## robustesse annoncée n'existait pas non plus : _held_card() relit la main à chaque appel
+## et rend &"" dès que le rang n'y répond plus.
+var _held_slot := NO_SLOT
 var _turns := 0
 var _evening := 0
-var _last_action := "Prendre une carte avec 1 à 9."
+var _last_action := "Prendre une carte : 1 à 9, ou un clic dessus."
 var _last_report := ""
 
 func _ready() -> void:
@@ -116,6 +138,7 @@ func _ready() -> void:
 	_ledger = Ledger.from_stock(_economy.starting_stock, _economy.base_storage_cap)
 
 	_hand_view = HandView.create(_catalogue)
+	_hand_view.card_picked.connect(_hold)
 	add_child(_hand_view)
 	_label = _make_label()
 	add_child(_label)
@@ -176,13 +199,32 @@ func _handle_key(event: InputEventKey) -> void:
 ## sans carte tenue les cibles s'éteignent, et c'est la seule façon de regarder la carte
 ## sans un voile dessus.
 func _hold(slot: int) -> void:
-	var cards := _deck.hand().cards()
-	if slot >= cards.size():
+	if slot < 0 or slot >= _deck.hand().size():
 		_last_action = "Aucune carte au rang %d." % (slot + 1)
 		return
-	_held = &"" if cards[slot] == _held else cards[slot]
-	_last_action = "Reposé." if _held.is_empty() else "En main : %s." % _label_of(_held)
+	_held_slot = NO_SLOT if slot == _held_slot else slot
+	var held := _held_card()
+	_last_action = "Reposé." if held.is_empty() else "En main : %s." % _label_of(held)
 	_refresh_targets()
+
+## La carte tenue, ou &"" si l'on ne tient rien.
+##
+## Relue depuis la main à chaque appel plutôt que gardée à côté du rang : une main qui
+## rétrécit — une carte jouée, une phase résolue — invalide le rang, et le rendre vide
+## d'office évite d'avoir à le remettre à zéro partout où la main bouge.
+func _held_card() -> StringName:
+	var cards := _deck.hand().cards()
+	if _held_slot < 0 or _held_slot >= cards.size():
+		return &""
+	return cards[_held_slot]
+
+## Le rang du premier exemplaire de cette carte en main, ou NO_SLOT.
+func _slot_of(card: StringName) -> int:
+	var cards := _deck.hand().cards()
+	for slot in cards.size():
+		if cards[slot] == card:
+			return slot
+	return NO_SLOT
 
 ## Joue la carte tenue sur la cellule survolée.
 ##
@@ -199,39 +241,40 @@ func _hold(slot: int) -> void:
 ## bâtiment se pose ici gratuitement, et le rapport le dit.
 func _play_here() -> void:
 	var hovered := _world.cursor().hovered()
-	if _held.is_empty():
-		_last_action = "Aucune carte en main — 1 à 9 pour en prendre une."
+	var held := _held_card()
+	if held.is_empty():
+		_last_action = "Aucune carte en main — 1 à 9, ou un clic sur une carte."
 		return
 	if not hovered.is_hit():
 		_last_action = "Rien sous le curseur."
 		return
-	if _catalogue.has(_held) and _catalogue.card(_held).places_a_building():
-		_place_here(hovered.cell())
+	if _catalogue.has(held) and _catalogue.card(held).places_a_building():
+		_place_here(held, hovered.cell())
 		return
-	_post_here(hovered.cell())
+	_post_here(held, hovered.cell())
 
-func _post_here(cell: Vector2i) -> void:
-	var verdict := _validate(_held, cell)
-	var action := _board.post(_held, cell, _terrain, _city.to_snapshot(), _action_balance)
+func _post_here(card: StringName, cell: Vector2i) -> void:
+	var verdict := _validate(card, cell)
+	var action := _board.post(card, cell, _terrain, _city.to_snapshot(), _action_balance)
 	if action == null:
-		_last_action = "Refusé : %s en %s — %s" % [_label_of(_held), cell, verdict.reason()]
+		_last_action = "Refusé : %s en %s — %s" % [_label_of(card), cell, verdict.reason()]
 		return
-	_deck.discard(_held)
+	_deck.discard(card)
 	_last_action = "Posé : %s en %s, %d poste(s), 0 ouvrier." % [
-		_label_of(_held), action.target(), action.capacity()]
+		_label_of(card), action.target(), action.capacity()]
 	_release()
 
-func _place_here(cell: Vector2i) -> void:
-	var data := _building_of(_held)
+func _place_here(card: StringName, cell: Vector2i) -> void:
+	var data := _building_of(card)
 	if data == null:
-		_last_action = "Carte de bâtiment sans bâtiment : %s" % _held
+		_last_action = "Carte de bâtiment sans bâtiment : %s" % card
 		return
 	var result := _city.place(_terrain, data, cell, _turns)
 	if not result.is_ok():
 		_last_action = "Refusé : %s en %s, %s — %s" % [
 			data.id, cell, _orientation(_turns), result.reason()]
 		return
-	_deck.discard(_held)
+	_deck.discard(card)
 	_renderer.rebuild(_city)
 	_last_action = "Chantier ouvert : %s en %s, %s, %d cran(s) à poser (non payé — I1)." % [
 		data.id, cell, _orientation(_turns), data.build_actions]
@@ -325,7 +368,7 @@ func _draw_phase() -> void:
 
 ## Repose la carte tenue et rafraîchit ce qui en dépend.
 func _release() -> void:
-	_held = &""
+	_held_slot = NO_SLOT
 	_refresh_targets()
 
 ## Recalcule le jeu de cibles de la carte tenue, et redessine les jalons.
@@ -335,8 +378,9 @@ func _release() -> void:
 ## plutôt que la seule case survolée, sans le payer soixante fois par seconde.
 func _refresh_targets() -> void:
 	_marker.rebuild(_board.to_plan(), _assignment(), _terrain)
-	_hand_view.show_hand(_deck.hand(), _held)
-	if _held.is_empty() or not ActionTargeting.handles(_held):
+	_hand_view.show_hand(_deck.hand(), _held_slot)
+	var held := _held_card()
+	if held.is_empty() or not ActionTargeting.handles(held):
 		_targets.clear()
 		return
 	var cells: Array[Vector2i] = []
@@ -345,7 +389,7 @@ func _refresh_targets() -> void:
 	for y in size.y:
 		for x in size.x:
 			var cell := Vector2i(x, y)
-			if not _validate(_held, cell).is_ok():
+			if not _validate(held, cell).is_ok():
 				continue
 			cells.append(cell)
 			heights.append(_terrain.height_at(cell))
@@ -358,7 +402,7 @@ func _refresh_targets() -> void:
 ## sa propre légende.
 func _refresh_ghost() -> void:
 	var hovered := _world.cursor().hovered()
-	var data := _building_of(_held)
+	var data := _building_of(_held_card())
 	if not hovered.is_hit() or data == null:
 		_ghost.clear()
 		return
@@ -465,12 +509,13 @@ func _hover_line() -> String:
 	var building := _city.building_at(cell)
 	if building != null:
 		line += "   |   %s : %s" % [building.data().id, _site_state(building)]
-	if _held.is_empty():
+	var held := _held_card()
+	if held.is_empty():
 		return line
-	if _catalogue.has(_held) and _catalogue.card(_held).places_a_building():
-		return "%s   ->   %s, %s" % [line, _label_of(_held), _orientation(_turns)]
-	var verdict := _validate(_held, cell)
-	return "%s   ->   %s : %s" % [line, _label_of(_held),
+	if _catalogue.has(held) and _catalogue.card(held).places_a_building():
+		return "%s   ->   %s, %s" % [line, _label_of(held), _orientation(_turns)]
+	var verdict := _validate(held, cell)
+	return "%s   ->   %s : %s" % [line, _label_of(held),
 		"accepté, %d poste(s)" % verdict.capacity() if verdict.is_ok()
 			else String(verdict.reason())]
 
@@ -684,15 +729,14 @@ func _capture_if_asked() -> void:
 ## attrape et qu'aucune des trois commandes ne dit.
 func _scripted_opening() -> void:
 	for card in _deck.hand().cards():
-		if not ActionTargeting.handles(card) or not _deck.hand().has(card):
+		if not ActionTargeting.handles(card) or _slot_of(card) == NO_SLOT:
 			continue
 		var target := _first_target(card)
 		if target == NO_CELL:
 			continue
-		_held = card
-		_post_here(target)
+		_post_here(card, target)
 		_staff(_board.to_plan().actions())
-	_held = _first_playable_card()
+	_held_slot = _first_playable_slot()
 	_refresh_targets()
 
 ## Remplit la dernière action posée, autant que les ouvriers libres le permettent.
@@ -716,16 +760,17 @@ func _first_target(card: StringName) -> Vector2i:
 			return cell
 	return NO_CELL
 
-## La première carte de la main qui a au moins une cible sur cette carte.
+## Le rang de la première carte de la main qui a au moins une cible sur le relief.
 ##
 ## Choisie sur ce critère et non par son nom : la main dépend du seed, et une capture qui
 ## exigerait une carte précise se viderait le jour où le deck de départ bouge — ce que
 ## DESIGN.md 3.5 annonce comme certain.
-func _first_playable_card() -> StringName:
-	for card in _deck.hand().cards():
-		if ActionTargeting.handles(card) and _first_target(card) != NO_CELL:
-			return card
-	return &""
+func _first_playable_slot() -> int:
+	var cards := _deck.hand().cards()
+	for slot in cards.size():
+		if ActionTargeting.handles(cards[slot]) and _first_target(cards[slot]) != NO_CELL:
+			return slot
+	return NO_SLOT
 
 func _make_label() -> Label:
 	var label := Label.new()

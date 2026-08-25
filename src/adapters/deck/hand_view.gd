@@ -21,6 +21,18 @@ extends HBoxContainer
 ## Les chiffres sont des constantes nommées et non de l'équilibrage : c'est de la mise en
 ## forme, et data/balance/ est réservé aux questions ouvertes de DESIGN.md.
 
+## Une carte vient d'être cliquée, à ce rang dans Hand.cards().
+##
+## Un **signal** et non un appel : la vue signale, elle ne sélectionne pas. C'est le
+## harnais qui garde ce qu'il tient, comme il garde déjà le bâtiment courant depuis C2, et
+## une vue qui déciderait de la sélection serait la même faute d'architecture qu'une vue
+## qui jugerait la jouabilité.
+##
+## Il transporte un rang et non un identifiant, pour la raison qui a coûté un bug au
+## clavier : une main tient couramment deux exemplaires de la même carte, et un
+## identifiant ne les distingue pas.
+signal card_picked(slot: int)
+
 ## Largeur et hauteur d'une carte, en pixels.
 const CARD_WIDTH := 104
 const CARD_HEIGHT := 74
@@ -52,6 +64,9 @@ const INDEX_FONT_SIZE := 11
 ## Main vide.
 const EMPTY_TEXT := "Main vide — Entrée résout le soir et repioche."
 
+## Rang qui n'encadre aucune carte.
+const NO_HELD := -1
+
 var _catalogue: CardCatalogue
 
 ## Vue prête à être ajoutée à l'arbre.
@@ -70,15 +85,17 @@ static func create(catalogue: CardCatalogue) -> HandView:
 	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return view
 
-## Redessine la main, `held` encadrée.
+## Redessine la main, la carte de rang `held` encadrée.
 ##
-## `held` est l'identifiant tenu et non un rang : la main se repioche entre deux phases,
-## et un rang survivrait à la carte qu'il désignait. Vide = rien de tenu.
+## `held` est un **rang** dans Hand.cards() et non un identifiant. La première version
+## prenait l'identifiant et se trompait : une main tient couramment deux exemplaires de la
+## même carte, si bien que le cadre se posait toujours sur le premier, quel que soit celui
+## qu'on avait pris. NO_HELD = rien de tenu.
 ##
 ## La numérotation suit Hand.cards(), donc l'ordre de CardData.POOLS puis l'ordre de
 ## pioche. C'est celui que le harnais lit sur les touches 1 à 9, et le même d'une image à
 ## l'autre — un affichage qui suivrait l'ordre d'un Dictionary changerait sous les doigts.
-func show_hand(hand: Hand, held: StringName) -> void:
+func show_hand(hand: Hand, held: int) -> void:
 	for child in get_children():
 		child.queue_free()
 		remove_child(child)
@@ -86,37 +103,54 @@ func show_hand(hand: Hand, held: StringName) -> void:
 		add_child(_make_empty_notice())
 		return
 	var slot := 0
-	var marked := false
 	for pool in CardData.POOLS:
 		var cards := hand.cards_in(pool)
 		if cards.is_empty():
 			continue
 		var row := HBoxContainer.new()
+		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_theme_constant_override("separation", CARD_GAP)
 		for card in cards:
+			row.add_child(_make_card(card, pool, slot, slot == held))
 			slot += 1
-			# Un seul exemplaire est encadré même quand la main en tient deux : c'est
-			# celui que la touche désigne, et encadrer les deux mentirait sur ce qu'un
-			# clic jouerait.
-			var selected := not marked and card == held
-			marked = marked or selected
-			row.add_child(_make_card(card, pool, slot, selected))
 		add_child(row)
 
 ## Un panneau de carte : le libellé, son rang au clavier, et un cadre s'il est tenu.
+##
+## Seul le panneau arrête la souris ; la vue, les rangées et les libellés la laissent
+## passer. C'est ce qui permet de cliquer le sol **entre** deux cartes et sous la main,
+## au lieu qu'une barre invisible avale le bas de la carte.
+##
+## Et c'est aussi ce qui évite qu'un clic sur une carte joue au passage la case survolée :
+## un Control qui traite l'événement le consomme, donc l'_unhandled_input du harnais ne le
+## voit jamais. Le routage est tenu par la structure, pas par un test dans le harnais.
 func _make_card(card: StringName, pool: StringName, slot: int,
 		selected: bool) -> PanelContainer:
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT)
-	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	panel.tooltip_text = _label_of(card)
+	panel.gui_input.connect(_on_card_input.bind(slot))
 	panel.add_theme_stylebox_override("panel", _make_style(pool, selected))
 	var column := VBoxContainer.new()
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	column.add_child(_make_line("%d" % slot, INDEX_FONT_SIZE, INDEX_COLOR))
+	column.add_child(_make_line("%d" % (slot + 1), INDEX_FONT_SIZE, INDEX_COLOR))
 	column.add_child(_make_line(_label_of(card), LABEL_FONT_SIZE, LABEL_COLOR))
 	panel.add_child(column)
 	return panel
+
+## Un clic gauche sur une carte la signale. Les autres boutons passent leur chemin —
+## le clic droit appartient au retrait d'une action, sur la carte du monde.
+func _on_card_input(event: InputEvent, slot: int) -> void:
+	if not (event is InputEventMouseButton):
+		return
+	var click := event as InputEventMouseButton
+	if not click.pressed or click.button_index != MOUSE_BUTTON_LEFT:
+		return
+	accept_event()
+	card_picked.emit(slot)
 
 func _make_style(pool: StringName, selected: bool) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
