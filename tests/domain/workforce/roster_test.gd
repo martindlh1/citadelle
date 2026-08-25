@@ -93,6 +93,16 @@ func test_a_city_without_a_house_leaves_the_base_alone() -> void:
 func test_an_empty_city_still_has_the_base_places() -> void:
 	assert_int(Roster.capacity_for(CitySnapshot.empty(), _balance())).is_equal(10)
 
+## Le miroir tient jusque dans le filtre : on ne loge personne sous un toit qui n'est
+## pas posé. Comme pour l'entrepôt, laisser passer ne casserait rien — ça mentirait.
+func test_an_unfinished_house_adds_no_places() -> void:
+	var city := _city_at(_site(_house(2), 2), Vector2i(0, 0), 1)
+	assert_int(Roster.capacity_for(city, _balance())).is_equal(10)
+
+func test_the_same_house_adds_them_once_finished() -> void:
+	var city := _city_at(_site(_house(2), 2), Vector2i(0, 0), 2)
+	assert_int(Roster.capacity_for(city, _balance())).is_equal(12)
+
 ## Le roster ne consulte jamais le plafond : c'est la couche qui orchestre la journée
 ## qui pose les deux questions à la suite, comme elle enchaîne payable et posable.
 ## Sans ce cas, quelqu'un finirait par « réparer » add() en y ajoutant un refus.
@@ -120,6 +130,17 @@ func _barn() -> BuildingData:
 	var barn := BuildingData.new()
 	barn.id = &"barn"
 	return barn
+
+## Le même bâtiment, mais réclamant un chantier.
+func _site(data: BuildingData, actions: int) -> BuildingData:
+	data.build_actions = actions
+	return data
+
+## Ville d'un seul bâtiment, avec ce nombre de crans déjà posés.
+func _city_at(data: BuildingData, anchor: Vector2i, progress: int) -> CitySnapshot:
+	var placed: Array[BuildingSnapshot] = [
+		BuildingSnapshot.create(data, anchor, 0, 0, progress)]
+	return CitySnapshot.create(placed)
 
 ## Ville depuis une liste plate — [data, ancre, data, ancre].
 func _city(flat: Array) -> CitySnapshot:

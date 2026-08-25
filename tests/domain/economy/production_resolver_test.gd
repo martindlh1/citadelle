@@ -76,6 +76,27 @@ func test_a_worker_sent_to_a_building_without_a_production_block_stays_idle() ->
 		Ledger.create(100))
 	assert_array(report.idle()).contains_exactly([&"ana"])
 
+## Un chantier n'offre AUCUN poste, même sur un bâtiment qui produira très bien une
+## fois fini. C'est la moitié du couple qui porte C4 : sans son jumeau ci-dessous, il
+## passerait tout aussi bien si plus rien ne produisait jamais.
+func test_a_worker_sent_to_an_unfinished_site_stays_idle() -> void:
+	var city := _city_at(_site(_farm, 2), FARM, 1)
+	var report := _resolve(city, _assign([&"ana", FARM]), _crew([&"ana"]),
+		Ledger.create(100))
+	assert_dict(report.produced()).is_empty()
+	assert_array(report.work()).is_empty()
+	assert_array(report.idle()).contains_exactly([&"ana"])
+
+## Le jumeau : le même bâtiment, le même ouvrier, le dernier cran posé. Seul
+## l'avancement change entre les deux cas.
+func test_the_same_site_produces_once_it_is_finished() -> void:
+	var city := _city_at(_site(_farm, 2), FARM, 2)
+	var report := _resolve(city, _assign([&"ana", FARM]), _crew([&"ana"]),
+		Ledger.create(100))
+	assert_int(report.produced()[FOOD]).is_equal(3)
+	assert_int(report.work().size()).is_equal(1)
+	assert_array(report.idle()).is_empty()
+
 func test_an_unassigned_worker_stays_idle() -> void:
 	var report := _resolve(_city, Assignment.empty(), _crew([&"ana"]), Ledger.create(100))
 	assert_array(report.idle()).contains_exactly([&"ana"])
@@ -148,6 +169,17 @@ func test_a_harvest_that_overruns_the_reserve_is_reported_as_wasted() -> void:
 func test_a_warehouse_raises_the_shared_capacity() -> void:
 	assert_int(ProductionResolver.capacity_for(_city, _balance)).is_equal(200)
 	assert_int(ProductionResolver.capacity_for(CitySnapshot.empty(), _balance)).is_equal(100)
+
+## Un entrepôt en chantier a payé son coût et occupe ses cellules, mais il n'a pas de
+## toit. Le laisser relever la réserve ne casserait rien — il mentirait, ce qui est
+## précisément pourquoi ce cas existe.
+func test_an_unfinished_warehouse_does_not_raise_the_capacity() -> void:
+	var city := _city_at(_site(_store, 2), STORE, 1)
+	assert_int(ProductionResolver.capacity_for(city, _balance)).is_equal(100)
+
+func test_the_same_warehouse_raises_it_once_finished() -> void:
+	var city := _city_at(_site(_store, 2), STORE, 2)
+	assert_int(ProductionResolver.capacity_for(city, _balance)).is_equal(200)
 
 func test_resolving_applies_the_capacity_of_the_evening() -> void:
 	var ledger := Ledger.create(10)
@@ -230,6 +262,20 @@ func _make_building(id: StringName, slots: int,
 	block.skill_family = HARVEST
 	data.production = block
 	return data
+
+## Le même bâtiment, mais réclamant un chantier. Les trois bâtiments de travail de ce
+## fichier n'en réclament aucun et sont donc finis à la pose : les cas qui parlent de
+## production parlent de production, et ceux qui parlent de chantier le disent.
+func _site(data: BuildingData, actions: int) -> BuildingData:
+	var copy := data.duplicate() as BuildingData
+	copy.build_actions = actions
+	return copy
+
+## Ville d'un seul bâtiment, avec ce nombre de crans déjà posés.
+func _city_at(data: BuildingData, anchor: Vector2i, progress: int) -> CitySnapshot:
+	var placed: Array[BuildingSnapshot] = [
+		BuildingSnapshot.create(data, anchor, 0, 0, progress)]
+	return CitySnapshot.create(placed)
 
 ## Ville depuis une liste plate — [données, ancre, données, ancre].
 func _make_city(flat: Array) -> CitySnapshot:

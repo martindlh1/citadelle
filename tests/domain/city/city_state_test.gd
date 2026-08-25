@@ -220,6 +220,100 @@ func test_a_snapshot_does_not_follow_later_changes() -> void:
 	assert_int(snapshot.count()).is_equal(1)
 	assert_bool(snapshot.has_anchor(Vector2i(2, 2))).is_true()
 
+# --- Chantiers (C4) ---
+
+## Poser une carte de bâtiment ouvre un CHANTIER, pas un bâtiment. Il occupe déjà ses
+## cellules — il les a payées — et ne fait rien d'autre. DESIGN.md 3.2.
+func test_placing_a_building_opens_a_site_rather_than_a_building() -> void:
+	_city.place(_terrain, _site(&"farm", 2), Vector2i(1, 1))
+	var placed := _city.building_at(Vector2i(1, 1))
+	assert_int(placed.progress()).is_equal(0)
+	assert_int(placed.remaining()).is_equal(2)
+	assert_bool(placed.is_complete()).is_false()
+	assert_bool(_city.is_occupied(Vector2i(1, 1))).is_true()
+
+## Le cas du Cœur : rien à bâtir, donc fini à la pose. C'est ce zéro qui lui évite un
+## chemin de pose particulier.
+func test_a_building_with_no_site_cost_is_finished_on_placement() -> void:
+	_city.place(_terrain, _hut(), Vector2i(1, 1))
+	assert_bool(_city.building_at(Vector2i(1, 1)).is_complete()).is_true()
+	assert_int(_city.building_at(Vector2i(1, 1)).remaining()).is_equal(0)
+
+func test_advancing_a_site_posts_one_notch() -> void:
+	_city.place(_terrain, _site(&"farm", 2), Vector2i(1, 1))
+	assert_bool(_city.advance(Vector2i(1, 1))).is_true()
+	assert_int(_city.building_at(Vector2i(1, 1)).progress()).is_equal(1)
+	assert_bool(_city.building_at(Vector2i(1, 1)).is_complete()).is_false()
+
+func test_enough_notches_finish_the_site() -> void:
+	_city.place(_terrain, _site(&"farm", 2), Vector2i(1, 1))
+	_city.advance(Vector2i(1, 1))
+	_city.advance(Vector2i(1, 1))
+	assert_bool(_city.building_at(Vector2i(1, 1)).is_complete()).is_true()
+	assert_int(_city.building_at(Vector2i(1, 1)).remaining()).is_equal(0)
+
+## Un chantier fini n'absorbe pas d'action Construire en silence : il refuse, et
+## remaining() ne part jamais dans le négatif. Le refus est rendu pour que l'appelant
+## sache que sa carte n'a servi à rien.
+func test_a_finished_site_refuses_further_notches() -> void:
+	_city.place(_terrain, _site(&"farm", 1), Vector2i(1, 1))
+	assert_bool(_city.advance(Vector2i(1, 1))).is_true()
+	assert_bool(_city.advance(Vector2i(1, 1))).is_false()
+	assert_int(_city.building_at(Vector2i(1, 1)).progress()).is_equal(1)
+	assert_int(_city.building_at(Vector2i(1, 1)).remaining()).is_equal(0)
+
+## Le chemin d'une action jouée au clic : on tient une cellule quelconque de
+## l'empreinte, advance() veut l'ancre. Miroir exact de la démolition.
+func test_a_covered_cell_leads_back_to_the_site_through_its_anchor() -> void:
+	_city.place(_terrain, _site(&"keep", 2, _quad()), Vector2i(1, 1))
+	_city.advance(_city.anchor_at(Vector2i(2, 2)))
+	assert_int(_city.building_at(Vector2i(2, 2)).progress()).is_equal(1)
+
+## L'avancement traverse l'instantané : c'est la ligne que DESIGN.md 8 demande
+## nommément — « CitySnapshot qui le porte ».
+func test_a_snapshot_carries_the_site_progress() -> void:
+	_city.place(_terrain, _site(&"farm", 3), Vector2i(1, 1))
+	_city.advance(Vector2i(1, 1))
+	var building := _city.to_snapshot().at_anchor(Vector2i(1, 1))
+	assert_int(building.progress()).is_equal(1)
+	assert_int(building.remaining()).is_equal(2)
+	assert_bool(building.is_complete()).is_false()
+
+## Jumeau du cas de la destruction : une vue figée ne suit pas non plus les crans posés
+## après elle. Sans lui, l'Économie pourrait résoudre sur un chantier qui s'achève
+## pendant qu'elle compte.
+func test_a_snapshot_does_not_follow_later_progress() -> void:
+	_city.place(_terrain, _site(&"farm", 2), Vector2i(1, 1))
+	var snapshot := _city.to_snapshot()
+	_city.advance(Vector2i(1, 1))
+	_city.advance(Vector2i(1, 1))
+	assert_int(snapshot.at_anchor(Vector2i(1, 1)).progress()).is_equal(0)
+	assert_bool(snapshot.at_anchor(Vector2i(1, 1)).is_complete()).is_false()
+
+## Le partage des rôles entre les deux lectures de l'instantané, et c'est lui qui évite
+## trois clauses recopiées chez trois consommateurs : buildings() rend tout, parce que
+## le Combat doit voir les chantiers ; completed() ne rend que les finis, parce que
+## l'Économie doit les ignorer.
+func test_a_snapshot_separates_every_building_from_the_finished_ones() -> void:
+	_city.place(_terrain, _site(&"done", 1), Vector2i(0, 0))
+	_city.place(_terrain, _site(&"site", 1), Vector2i(2, 0))
+	_city.advance(Vector2i(0, 0))
+	var snapshot := _city.to_snapshot()
+	assert_int(snapshot.buildings().size()).is_equal(2)
+	var finished: Array[StringName] = []
+	for building in snapshot.completed():
+		finished.append(building.data().id)
+	assert_array(finished).contains_exactly([&"done"])
+
+## Un chantier se détruit comme un bâtiment, et il ne laisse rien derrière lui. Ce que
+## ça RENDRAIT au joueur reste OUVERT en DESIGN.md 3.2 ; ce que ça libère, non.
+func test_removing_a_site_frees_its_cells_like_any_building() -> void:
+	_city.place(_terrain, _site(&"keep", 3, _quad()), Vector2i(1, 1))
+	_city.advance(Vector2i(1, 1))
+	_city.remove(Vector2i(1, 1))
+	assert_int(_city.count()).is_equal(0)
+	assert_bool(_city.is_occupied(Vector2i(2, 2))).is_false()
+
 func _single() -> Array[Vector2i]:
 	var offsets: Array[Vector2i] = [Vector2i.ZERO]
 	return offsets
@@ -227,10 +321,22 @@ func _single() -> Array[Vector2i]:
 func _hut() -> BuildingData:
 	return _building(&"hut", _single())
 
-func _keep() -> BuildingData:
+func _quad() -> Array[Vector2i]:
 	var offsets: Array[Vector2i] = [
 		Vector2i.ZERO, Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)]
-	return _building(&"keep", offsets)
+	return offsets
+
+func _keep() -> BuildingData:
+	return _building(&"keep", _quad())
+
+## Un bâtiment qui réclame un chantier. Les bâtiments de travail de ce fichier n'en
+## réclament aucun — ils sont finis à la pose, ce qui laisse les cas de rangement parler
+## de rangement.
+func _site(id: StringName, actions: int,
+		offsets: Array[Vector2i] = _single()) -> BuildingData:
+	var building := _building(id, offsets)
+	building.build_actions = actions
+	return building
 
 ## Un L, dont l'enveloppe couvre une cellule qu'il n'occupe pas : (1, 1).
 func _ell() -> BuildingData:

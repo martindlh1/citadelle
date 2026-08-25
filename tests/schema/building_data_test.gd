@@ -228,6 +228,43 @@ func test_negative_places_are_reported_under_their_own_name() -> void:
 	building.roster_places = -1
 	assert_array(building.missing_fields()).contains(["roster_places"])
 
+## Le coût de chantier suit la même doctrine, et pour une raison qui lui est propre : le
+## Cœur porte « — » dans la colonne Chantier de DESIGN.md 4.1 comme il porte « posé au
+## départ » dans celle du coût. Un zéro y veut dire « achevé à la pose », et le réclamer
+## refuserait de démarrer sur le seul bâtiment du jeu qui ne se construit pas.
+func test_a_building_without_a_site_is_complete() -> void:
+	var building := _building(_l_shape())
+	assert_int(building.build_actions).is_equal(0)
+	assert_array(building.missing_fields()).is_empty()
+
+func test_a_building_carries_its_site_cost() -> void:
+	var building := _building(_l_shape())
+	building.build_actions = 3
+	assert_array(building.missing_fields()).is_empty()
+
+## Sous son propre nom lui aussi : c'est un chiffre de la Construction.
+func test_a_negative_site_cost_is_reported_under_its_own_name() -> void:
+	var building := _building(_l_shape())
+	building.build_actions = -1
+	assert_array(building.missing_fields()).contains(["build_actions"])
+
+## Le rachat du zéro légitime, et la seule chose qui rattraperait un build_actions
+## oublié dans TOUS les .tres à la fois : au moins un bâtiment de data/ en déclare un.
+##
+## Sans cette exigence, un champ disparu du format entier passerait par vacuité — c'est
+## le même filet que production_block_test.gd tend sous les blocs de production.
+func test_at_least_one_building_of_data_declares_a_site() -> void:
+	var with_a_site: Array[String] = []
+	for file in DirAccess.get_files_at(BUILDING_ROOT):
+		if file.get_extension() != "tres":
+			continue
+		var building := load("%s/%s" % [BUILDING_ROOT, file]) as BuildingData
+		if building.build_actions > 0:
+			with_a_site.append(file.get_basename())
+	assert_array(with_a_site) \
+		.override_failure_message("aucun bâtiment de data/buildings/ ne déclare de chantier") \
+		.is_not_empty()
+
 ## Un producteur cohérent : deux postes, un rendement, une famille.
 func _producer() -> BuildingData:
 	var building := _building(_l_shape())
