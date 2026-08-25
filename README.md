@@ -66,11 +66,16 @@ obligatoire ; les autres sont optionnels :
 | `--shot-hover x,y` | cellule à désigner. À défaut, le centre de la carte |
 | `--shot-turns n` | quarts de tour appliqués à la **caméra** |
 | `--shot-rotate n` | quarts de tour appliqués au **bâtiment** à poser *(harnais Construction)* |
+| `--shot-evenings n` | soirs résolus avant de capturer *(harnais Cartes)* |
 
 `--shot-hover` a une valeur par défaut plutôt que rien, parce qu'une capture qui ne
 montre pas la surbrillance ne prouve rien à son sujet, et que souris à `(0, 0)` le
 survol réel tomberait hors carte. `--shot-rotate` existe pour la même raison : sans
-lui, aucune capture ne montrerait jamais un bâtiment pivoté.
+lui, aucune capture ne montrerait jamais un bâtiment pivoté. Et `--shot-evenings` pour
+une raison voisine mais plus forte : un rapport de fin de soirée est du texte fabriqué à
+la main, donc exactement le genre de code que ni le parsing ni les tests n'atteignent —
+sans ce drapeau, le chemin de résolution d'un harnais ne serait jamais emprunté par un
+contrôle.
 
 **Écrire l'image hors du projet.** Une capture déposée dans l'arborescence est
 importée par le prochain scan de l'éditeur, qui lui colle un `.png.import` à ranger
@@ -85,6 +90,12 @@ fabriqués à la main, et les trois commandes de vérification ne regardent pas 
 Celle du harnais Construction imprime à la place la ligne de survol : la cellule visée,
 son terrain, et le verdict du domaine sur une pose à cet endroit. C'est la légende de
 l'image — le fantôme y est vert ou rouge, cette ligne dit pourquoi.
+
+Celle du harnais Cartes imprime la ligne de survol **et** la table des actions posées :
+quelle carte, sur quelle cible, combien de postes, et qui les tient. C'est ce qui a
+attrapé le seul vrai bug de `D2` — deux *Récolter* sur une même cabane à deux postes, et
+trois ouvriers dedans. Il ne se voyait ni au parsing, ni aux tests, ni à l'œil sur
+l'image : il se lisait dans cette table.
 
 **Les coordonnées de la sonde ne sont pas des pixels de l'image.** `project.godot` est
 en `stretch/mode="canvas_items"` : le viewport garde la résolution de base du projet
@@ -107,9 +118,9 @@ toujours ça, et non le rendu qui a changé — au moindre doute, `cmp` sur les 
 
 ## Les harnais qui n'affichent rien
 
-Tous les harnais ne dessinent pas. Les harnais **Économie**, **Effectifs** et
-**Cartes** sont des rapports texte : ils impriment leurs tableaux sur la **sortie
-standard** en plus de l'écran, donc
+Tous les harnais ne dessinent pas. Les harnais **Économie** et **Effectifs** sont des
+rapports texte : ils impriment leurs tableaux sur la **sortie standard** en plus de
+l'écran, donc
 
 ```bash
 "$GODOT_BIN" --headless --quit --path .
@@ -135,13 +146,13 @@ vient de la produire, et son verdict répond à trois questions que les tests ne
 pas poser : au bout de combien de soirs un ouvrier devient bon, ce que la spécialisation
 rapporte une fois la troncature passée, et ce qu'une absence coûte.
 
-Le harnais **Cartes**, arrivé à `D1`, est le premier à mesurer sur un **échantillon de
-seeds** plutôt que sur un seul run. Sa table déroule huit phases lisibles — mains
-tirées, piles restantes, remélanges —, mais son verdict vient de deux cents seeds : au
-bout de combien de phases une main revoit la carte qu'on attend, et à quelle fréquence
-elle ne la voit pas du tout. Une fréquence lue sur un run ne dit rien, et c'est
-exactement le genre de chiffre qu'un test ne peut pas asserter sans figer un tirage.
+Le harnais **Cartes** en faisait partie à `D1`, où il mesurait sur deux cents seeds ce
+qu'un draft coûte en dilution. **`D2` l'a rendu graphique** : ce qu'il tabulait se lit
+maintenant en jouant, exactement comme le rapport de `C1` a cédé la place à la scène de
+`C2`. Son verdict statistique avait fait son travail et n'avait pas à être rejoué à
+chaque lancement ; les chiffres restent dans l'entrée `D1` du journal.
 
-Il répond aussi à une question qu'aucune autre couche ne pose : ce qu'un draft coûte.
-Grossir son deck fait revenir chaque carte précise moins souvent, et le harnais le
-chiffre au lieu de le supposer.
+C'est aujourd'hui le seul harnais où une **phase entière** se joue : prendre une carte,
+la poser sur une cible, y envoyer des ouvriers, résoudre le soir. Il compose donc trois
+systèmes du domaine — Cartes, Économie, Effectifs — là où celui des Effectifs en
+composait deux.

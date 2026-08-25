@@ -64,15 +64,26 @@ Les DTO échangés entre systèmes. C'est le seul endroit où deux systèmes se 
 
 | DTO | Producteur | Consommateur |
 |---|---|---|
-| `TerrainQuery` | Terrain | Construction, Combat |
-| `CitySnapshot` | Ville | Économie, Combat |
+| `TerrainQuery` | Terrain | Construction, Économie, Combat |
+| `CitySnapshot` | Ville | Économie, Cartes, Combat |
 | `PlacementResult` | Construction | adapters |
+| `PlayedAction` | Cartes | Économie, adapters |
+| `ActionPlan` | Cartes | Économie, adapters |
+| `TargetResult` | Cartes | adapters |
 | `Assignment` | Effectifs | Économie, Combat |
 | `LaborForce` | Effectifs | Économie |
 | `CombatForce` | Effectifs | Combat |
 | `ProductionReport` | Économie | Effectifs (XP), adapters |
 | `WaveDef` | Run | Combat |
 | `DamageReport` | Combat | Ville, Effectifs, adapters |
+
+L'Économie voit le relief depuis `D2`, et c'est la conséquence directe de la seconde
+lecture de `DESIGN.md` 3.5 : une action jouée **à cru** rend ce que le tag de sa cellule
+dicte, donc le résolveur doit pouvoir le lire. Il voit le contrat, jamais la grille.
+
+**`Assignment` associe un ouvrier à une action posée, pas à un lieu.** Une ancre ne
+suffisait plus à désigner sans ambiguïté ce qu'un ouvrier fait — *Terraformer* et
+*Récolter* peuvent viser la même case nue.
 
 **Changer l'intérieur d'un système est libre. Changer un contrat se discute.**
 

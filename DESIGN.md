@@ -107,7 +107,9 @@ C'est la couche d'optimisation du jeu. Chaque bâtiment porte des règles de la 
 
 ### 3.3 Économie
 
-> **Contrat** — `CitySnapshot` + `Assignment` + `LaborForce` → `ProductionReport`. Ne connaît ni la grille ni les Node : tout lui est fourni.
+> **Contrat** — `TerrainQuery` + `CitySnapshot` + `ActionPlan` + `Assignment` + `LaborForce` → `ProductionReport`. Ne connaît ni la grille ni les Node : tout lui est fourni.
+
+*(Le contrat a gagné deux entrées à `D2`, et elles se justifient l'une l'autre.)* L'**`ActionPlan`** est le pilote : la phrase de 2 — « un bâtiment dont aucun slot n'a reçu d'action ne rend rien » — n'était pas vraie tant que le résolveur balayait les ancres de l'affectation et servait le rendement du bâtiment qu'il y trouvait, sans qu'aucune carte n'ait eu à être jouée. Elle l'est maintenant par construction. Le **`TerrainQuery`** vient avec la seconde lecture de 3.5 : une action jouée à cru rend ce que le **tag de sa cellule** dicte, donc l'Économie doit voir le relief — le contrat, jamais la grille.
 
 Stocks de ressources sous réserve commune, résolution des actions jouées, application des modificateurs d'adjacence, upkeep en nourriture, famine si le stock ne couvre pas le roster.
 
@@ -211,6 +213,8 @@ Le deck est réparti en **trois pools**, qui se piochent et se draftent séparé
 
 **Ce que `D1` a écrit, et ce qu'il a délibérément laissé ouvert.** Le `Deck` tient trois pioches, trois défausses et une main ; il pioche, défausse, remélange quand une pioche s'épuise, et drafte. Il ne juge **aucune** jouabilité — une intention se refuse ailleurs — et ne décide d'**aucun moment** : les trois tailles de main vivent dans `data/balance/`, et *quand* on pioche appartient à la journée, donc à `I1`. C'est ce qui laisse l'`OUVERT` ci-dessous entier plutôt que tranché par accident, et ce qui permettra d'en tester deux réponses en échangeant un `.tres`.
 
+**Et où la jouabilité a fini par atterrir.** *(`D2`.)* Un seul fichier du domaine dit où chaque verbe peut se poser et combien d'ouvriers il y accepte, et il répond en `{ ok, reason }` comme le validateur de placement — un refus est le résultat normal d'un curseur promené sur la carte, pas un incident. Le `Deck`, lui, n'a rien appris : il ne connaît toujours ni la grille ni la ville.
+
 #### Une action se joue à cru ou dans un bâtiment
 
 C'est la règle qui donne aux bâtiments leur raison d'être sans les rendre obligatoires.
@@ -218,6 +222,24 @@ C'est la règle qui donne aux bâtiments leur raison d'être sans les rendre obl
 Une action jouée **à cru**, sur une case nue dont le tag l'autorise, rend peu — *Récolter* sur une `forest` donne un bois. La même action jouée **dans un slot de bâtiment** rend bien davantage, et applique le multiplicateur de la famille du bâtiment.
 
 On peut donc jouer sans rien construire, mal. On construit pour multiplier, pas pour débloquer — sauf là où c'est explicitement le contraire, voir ci-dessous.
+
+*(Écrit à `D2`.)* Le versant « à cru » vit dans `data/balance/`, sur le même principe que le bloc `production` d'un bâtiment porte le versant « en slot ». Une table y associe **une carte aux tags qu'elle sait exploiter et à ce que chacun rend**, ce qui est la mise en data de la phrase de 3.1 — les tags décident où une action à cru peut se jouer. Elle sert deux fois, au ciblage pour dire où la carte peut aller et à la résolution pour dire ce qu'elle paie : deux tables auraient dérivé, et l'écran aurait promis une récolte que le soir n'aurait pas versée.
+
+Une carte absente de cette table ne se joue pas à cru — c'est le cas de *Construire*, qui vise un chantier, et de *Terraformer*, qui ne rend rien. Une seconde table dit symétriquement quelles cartes **tiennent un poste de production** dans un bâtiment. C'est par ces deux absences, et non par leur nom, que les deux verbes sortent de la production : le résolveur n'écrit aucun identifiant de carte, et un cinquième verbe entrera sans qu'on ait à venir l'exclure d'une liste.
+
+#### Jouer une carte, puis y envoyer des ouvriers
+
+*(Tranché et écrit à `D2`.)* Le jalon annonçait que jouer une carte produirait un `Assignment` — ouvrier → (action, cible) —, donc un geste **atomique** où une carte vaut un ouvrier. C'est faux, et pour une raison qui touche au cœur du pitch : cartes et ouvriers se **doubleraient**. Chaque action en consommant une de chaque, la contrainte réelle deviendrait `min(cartes, ouvriers)`, alors que 3.4 veut « deux contraintes qui se croisent, et non deux ressources qui se doublent ».
+
+Le flux compte donc **deux gestes**. On joue la carte **sur une cible**, ce qui pose une *action* ; puis on y affecte **des** ouvriers. La carte dit ce qu'on peut faire, les ouvriers disent combien on peut en faire.
+
+Une action posée porte sa propre **identité**, et c'est elle que l'affectation désigne — plus l'ancre d'un bâtiment. Une cellule ne suffisait plus : *Terraformer* et *Récolter* peuvent viser la même case nue, *Récolter* et *Chasser* la même forêt, et ce sont deux métiers sur une même terre. Interdire ces doublets aurait tranché une question de design par une structure de données ; les autoriser laisse la règle s'écrire là où elle se discute.
+
+Elle porte aussi sa **capacité**, figée à la pose : les postes du bâtiment visé, les crans qui restent à un chantier, ou un chiffre d'équilibrage sur une case nue. C'est ce plafond que les ouvriers remplissent, et au-delà duquel ils chôment.
+
+**Une carte ouvre les postes de sa cible une fois.** Une seconde du même nom au même endroit les rouvrirait, et trois ouvriers produiraient dans une cabane qui n'en tient que deux — la carte cesserait d'être une permission pour devenir un multiplicateur. Deux cartes *différentes* sur une même cellule restent acceptées ; c'est le doublon qui est refusé, pas le partage.
+
+**`OUVERT`** — la direction de *Terraformer*. 4.2 dit « monte ou descend », `data/cards/` n'en contient qu'une carte, donc le sens est un choix fait à la pose. `D2` ne l'a pas tranché : le verbe se pose et s'affecte sans être exécuté, et lui inventer un champ avant que quoi que ce soit le lise reviendrait à deviner sa forme. La question appartient au jalon qui l'exécute. Même remarque pour les terrains qu'il accepte — l'eau et le rocher se terrassent-ils ?
 
 #### Certains bâtiments débloquent des actions
 
@@ -315,6 +337,10 @@ Les places de roster de l'habitation y sont entrées à `W1`, ce qui a sorti ce 
 
 Ce qu'une action **fait** n'est pas dans `data/` non plus, et ne le sera pas : les sept verbes se résolvent chacun autrement, donc une *nature* d'action est du code de `src/domain/`. La carte porte son identité et son pool ; c'est tout ce que le deck consomme. Même règle qu'en 3.3 pour les bâtiments.
 
+*(Écrit à `D2`.)* Cette règle a tenu à l'épreuve : les quatre verbes MVP sont ciblés par un seul fichier de `src/domain/deck/`, qui est le seul endroit du projet où un identifiant de carte est écrit en dur. Leurs **chiffres**, eux, sont en data — quels tags chaque verbe exploite, ce qu'une case nue rend, combien d'ouvriers elle accepte —, et c'est cette séparation qui permet au résolveur d'Économie de n'avoir aucune liste de noms.
+
+**La colonne « À cru » de la ligne *Récolter* n'a pas de cible pour `ore`.** *(Constaté à `D2`.)* La règle est écrite et la table de data la nomme, mais `data/terrain/` ne contient aucun terrain « filon » et la génération n'en pose pas — la palette de 3.1 s'arrête à la plaine, la forêt, le gisement, l'eau et le rocher. Le minerai ne s'obtient donc aujourd'hui qu'à la mine. Ce n'est pas un bug de ce jalon : c'est une ligne de 3.1 que `data/` n'a jamais reçue, et elle entrera avec le terrain, pas avec la carte.
+
 ---
 
 ## 5. Fin de run
@@ -373,7 +399,8 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 
 ### Cartes — `D`
 - **D1** ✅ — `Deck`, `Hand`, `CardCatalogue`, `DraftPool`, les **trois pools**, défausse, remélange, draft, tests. Les cartes sont de la data : seize `.tres` dans `data/cards/`, les quatre actions MVP de 4.2 et une par bâtiment de 4.1 sauf le Cœur, qui est posé au départ. Le pool des powers existe et reste vide. La colonne **Débloque** n'y est pas entrée, voir 4.1. Le mélange est écrit à la main — `Array.shuffle()` tire sur le RNG global de Godot et non sur celui du run.
-- **D2** — Main à l'écran. Jouer une carte produit un `Assignment` — **ouvrier → (action, cible)** — à cru ou dans un slot.
+- **D2** ✅ — **Main à l'écran**, et les **deux gestes** : jouer une carte sur une cible pose une *action*, puis on y affecte des ouvriers. `PlayedAction`, `ActionPlan`, `TargetResult`, `ActionBoard`, `ActionTargeting`, le bloc `action_balance`. L'`Assignment` est rekeyée sur l'action et non sur l'ancre, et le `ProductionResolver` part enfin des actions posées, ce qui rend vraie la phrase de 2. *Récolter* et *Chasser* se résolvent à cru comme en slot ; *Construire* et *Terraformer* se posent, s'affectent et attendent `I1`, parce que leur effet mute le `CityState` et la `HeightGrid`.
+  La ligne de ce jalon annonçait un geste **atomique** — une carte pour un ouvrier — et c'était une erreur de design, pas une simplification : voir 3.5.
 
 ### Combat — `F`
 - **F1** — `InstantCombatResolver` arithmétique, **`CombatForce`** et `DamageReport` complets, tests. Bouchon.
@@ -397,6 +424,6 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 - **X4** — Powers : le troisième pool se remplit *(3.5)*.
 - **X5** — Ce qu'un palier de **niveau d'ouvrier** offre : le choix de compétence *(3.4)*. `W1` écrit l'accumulateur et les paliers, qui se gagnent et se lisent ; ce qu'ils débloquent est du contenu et de l'UI, et se décide devant un roster qui a vraiment vécu quinze jours.
 
-**Ordre suivant** — `D2`, puis `I1`. `E1b` est passé avant `W1` parce qu'il touchait les `.tres` de bâtiments et que leur nombre a doublé ; `W1` a suivi parce qu'il était le dernier moment où `LaborForce` pouvait bouger sans douleur — elle n'a finalement pas bougé — et parce qu'il est le seul jalon qui rende le journal de travail de `E1` utile à quelque chose. `C4` est venu ensuite parce qu'il rouvrait ces mêmes `.tres` une dernière fois avant que les cartes n'arrivent, et parce que `D2` a besoin d'une cible pour *Construire* : sans chantier, cette carte n'aurait rien à avancer. `D1` a suivi sans surprise, étant le seul jalon qui ne dépende de rien — le `Deck` ne connaît ni la grille, ni la bourse, ni le roster.
+**Ordre suivant** — `I1`, qui a maintenant tout ce qu'il lui faut : la journée, la bourse au moment de poser un bâtiment, et l'exécution de *Construire* et *Terraformer* que `D2` a laissée à l'orchestrateur. `E1b` est passé avant `W1` parce qu'il touchait les `.tres` de bâtiments et que leur nombre a doublé ; `W1` a suivi parce qu'il était le dernier moment où `LaborForce` pouvait bouger sans douleur — elle n'a finalement pas bougé — et parce qu'il est le seul jalon qui rende le journal de travail de `E1` utile à quelque chose. `C4` est venu ensuite parce qu'il rouvrait ces mêmes `.tres` une dernière fois avant que les cartes n'arrivent, et parce que `D2` a besoin d'une cible pour *Construire* : sans chantier, cette carte n'aurait rien à avancer. `D1` a suivi sans surprise, étant le seul jalon qui ne dépende de rien — le `Deck` ne connaît ni la grille, ni la bourse, ni le roster.
 
 Le jeu devient jouable à `I2`. Tout ce qui suit est de l'enrichissement.
