@@ -213,7 +213,7 @@ done
 addons/gdUnit4/runtest.sh -a tests --headless --ignoreHeadlessMode
 ```
 
-Sept pièges constatés en 4.7.2, à ne pas réapprendre :
+Huit pièges constatés en 4.7.2, à ne pas réapprendre :
 
 - `--headless --quit` **échoue tant qu'aucune scène principale n'est définie**. C'est un vrai défaut de configuration, pas un faux positif à contourner.
 - `--headless --editor --quit` ne signale les erreurs qu'au **premier** scan. Cache `.godot/` chaud, il repasse à 0 sur un projet cassé : inutilisable comme contrôle.
@@ -222,6 +222,7 @@ Sept pièges constatés en 4.7.2, à ne pas réapprendre :
 - L'éditeur écrit ses références en `uid://`, résolues via `.godot/uid_cache.bin`. Tant que ce cache est en retard sur l'éditeur — typiquement juste après avoir créé une scène, éditeur encore ouvert —, la commande 1 échoue sur `Unrecognized UID: "uid://…"`. Ce n'est pas un projet cassé : une passe `godot --headless --editor --quit --path .` reconstruit le cache et la commande repasse. Ne pas confondre avec les erreurs réelles, et ne pas se servir de cette passe comme d'un contrôle (voir ci-dessus).
 - Le même retard frappe **le cache des classes globales**, et plus souvent : `.godot/global_script_class_cache.cfg` n'est écrit que par le scan de l'éditeur. Un `class_name` créé hors éditeur n'existe donc pour personne tant que ce scan n'a pas eu lieu, et la commande 1 échoue sur `Could not find type "X" in the current scope` alors que le fichier est parfaitement correct. Même remède : une passe `godot --headless --editor --quit --path .`. À faire après **chaque** ajout de `class_name`, donc à chaque nouveau fichier de `src/domain/` ou de `src/schema/`.
 - **La commande 1 rend `0` même quand elle imprime des erreurs de script.** Son code de sortie ne dit rien de la santé du projet — un contrôle qui ne teste que `$?` laisse passer un projet dont un script ne compile pas. Il faut lire la sortie, toujours.
+- **Un script lancé par `-s` n'a pas les autoloads.** `godot --headless --path . -s res://sonde.gd` échoue sur « Identifier not found: GameDatabase », exactement comme `--check-only`. C'est le mode qui sert à écrire une sonde jetable pour inspecter du data ou instancier du domaine ; il faut alors charger les `.tres` par `load()` et `DirAccess` plutôt que par l'index. Constaté à `I1`.
 
 Si la sortie contient une erreur ou un warning de script, la tâche n'est pas finie. Ne jamais annoncer un travail terminé sur la seule base que le code « devrait » compiler.
 
