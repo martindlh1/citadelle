@@ -141,6 +141,25 @@ actions posées** que la capture imprime. Sixième jalon d'affilée où le harna
 chose qu'aucune des trois commandes ne pouvait dire — et le premier où ce qu'il dit est un
 défaut de règle et non un chiffre d'équilibrage.
 
+**Un troisième est venu du clavier, après coup**, et il fallait un humain pour le trouver :
+les touches 4 et 5 « ne sélectionnaient pas ». Elles étaient parfaitement liées. La
+sélection portait sur l'**identifiant** de la carte tenue, et une main tient couramment
+deux exemplaires du même nom — sur la main d'ouverture, le rang 4 double le rang 2 et le
+rang 5 double le rang 1. Les presser retombait donc sur la carte déjà tenue, ce que le
+code interprétait comme « on la repose ». Le cadre ne bougeait pas non plus, la vue
+encadrant le premier exemplaire du nom quel qu'ait été le rang pris.
+
+La sélection porte désormais sur le **rang**. Le docstring d'origine défendait
+l'identifiant en disant qu'un rang ne survivrait pas à une repioche : c'était le mauvais
+arbitrage, et la robustesse annoncée n'existait pas — l'accesseur relit la main à chaque
+appel et se vide dès que le rang n'y répond plus. Les cartes se prennent aussi au **clic**,
+ce que le jalon devait de toute façon : une main peut tenir plus de neuf cartes, et
+au-delà de neuf seul le clic les atteint.
+
+Trois défauts, trois contrôles différents — la suite de tests, la table d'une capture, et
+une paire de mains. Le troisième est celui qu'aucune discipline d'écriture n'aurait
+attrapé, parce qu'il ne se voit qu'en jouant.
+
 ### Ce que le harnais est devenu
 
 Le rapport texte de `D1` a disparu, remplacé par la scène — le geste exact que `C2` a fait
@@ -205,10 +224,10 @@ ajoutée — le harnais lit les keycodes bruts comme `camera_rig.gd` et `city_ha
   `scenes/dev/dev_boot.gd`. Il **dessine** désormais, contrairement à `D1` : une carte, une
   main en bas de l'écran, et un rapport en surimpression. `godot --headless --quit` ne
   suffit plus à le lire.
-- **Les touches** : 1 à 9 prennent une carte, clic gauche la joue sur la case survolée, clic
-  droit retire l'action posée là, Espace y envoie un ouvrier, Retour arrière les rappelle
-  tous, Tab pivote un bâtiment, **Entrée résout le soir**. La caméra garde Q/E, la molette,
-  WASD et R.
+- **Les commandes** : une carte se prend au clavier — 1 à 9 — ou **au clic dessus** ; un
+  clic gauche sur le sol la joue sur la case survolée, un clic droit retire l'action posée
+  là, Espace y envoie un ouvrier, Retour arrière les rappelle tous, Tab pivote un bâtiment,
+  **Entrée résout le soir**. La caméra garde Q/E, la molette, WASD et R.
 - **Un `.tres` neuf sans `uid://`** — `data/balance/action_balance.tres`, comme les
   dix-sept de `D1` avant lui. L'éditeur lui en ajoutera un au premier réenregistrement :
   c'est un diff à attendre, pas un problème.
