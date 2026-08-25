@@ -138,11 +138,34 @@ Deux bénéfices immédiats. La cohérence devient **structurelle** au lieu d'ê
 Un effectif n'est pas un compteur. Chaque unité est un individu nommé, avec :
 
 - des **pistes de compétence** par famille — Récolte, Artisanat, Combat — qui gagnent de l'XP à l'usage et donnent un multiplicateur d'efficacité
-- éventuellement des **traits**, acquis ou de naissance, qui donnent des bonus conditionnels plutôt que des chiffres bruts
+- un **niveau d'ouvrier**, qui agrège toute l'XP gagnée quelle qu'en soit la source *(cf. ci-dessous)*
+- éventuellement des **traits**, acquis ou de naissance, qui donnent des bonus conditionnels plutôt que des chiffres bruts. C'est aux paliers de niveau qu'ils s'acquerront — `X5`
 
 Les familles ne sont pas décoratives. *(Tranché à `E1`.)* La `LaborForce` expose un multiplicateur **par famille**, et chaque bâtiment déclare dans `data/` celle qu'il emploie : un même ouvrier rend donc différemment au camp de bûcheron et à l'atelier. C'est ce qui donne son sens à la spécialisation, et ce qui permet à l'XP de savoir quelle piste créditer.
 
 Ce qui en découle : spécialiser rend excellent à un poste et médiocre ailleurs, et une unité expérimentée perdue est une vraie perte. C'est ce qui donne au roguelite sa charge émotionnelle.
+
+#### Deux axes de progression
+
+*(Tranché à `W1`.)* Un ouvrier progresse sur **deux compteurs distincts**, qui ne disent pas la même chose.
+
+La **piste de compétence** dit *ce qu'il sait faire*. Une par famille — Récolte, Artisanat, Combat —, elle monte par paliers, et chaque palier ajoute un cran au multiplicateur d'efficacité de cette famille. C'est le seul des deux que l'Économie consomme, via la `LaborForce`.
+
+Le **niveau d'ouvrier** dit *ce qu'il a vécu*. Un seul par unité, alimenté par **toute** source d'XP — travail, combat, événement —, il ne donne par lui-même aucun multiplicateur. Sa raison d'être est double : un vétéran se distingue d'un bleu d'un coup d'œil, sans lire trois pistes, et c'est à ses paliers que se branchera le choix de compétence *(cf. `X5`)*.
+
+La règle qui les relie tient en une ligne : **toute XP compte deux fois** — une fois pour la piste concernée, une fois pour le niveau. Une XP qui n'appartient à aucune famille, celle d'un événement, n'alimente que le niveau : c'est précisément pourquoi ce compteur est réel et non dérivé de la somme des pistes.
+
+Les deux courbes de paliers vivent dans `data/balance/` et se règlent séparément. Un ouvrier peut donc plafonner sa spécialité en continuant à monter en niveau, ce qui est exactement la situation qui rendra `X5` intéressant.
+
+**Les paliers plutôt qu'une courbe continue**, et pour une raison d'affichage autant que de design : un passage de niveau est un événement qu'on annonce, et un ouvrier qu'on peut appeler « Récolte 3 » existe dans une conversation comme un multiplicateur à 1,37 n'existera jamais. Une progression douce reste exprimable — c'est beaucoup de petits paliers.
+
+#### Qui est là, et combien de places
+
+*(Tranché à `W1`.)* Le roster porte un **état de présence** par unité, et les projections ne montrent que les présents. C'est la contrainte que 3.9 impose d'honorer d'avance : des ouvriers partis en expédition sont absents sans être morts, et rien ne doit supposer le roster entier disponible.
+
+Conséquence directe, décidée par construction : **un absent ne mange pas**, puisqu'il ne compte pas dans la `LaborForce` sur laquelle l'upkeep tombe. L'inverser coûterait un champ sur ce contrat.
+
+Le roster a un **plafond de places** — une base d'équilibrage, plus ce que les habitations ajoutent, exactement comme l'entrepôt relève la réserve commune. Ce qui remplit ces places reste ouvert ci-dessous.
 
 #### Vivier unique — tranché
 
@@ -164,7 +187,9 @@ La subtilité qui distingue ça d'un simple compteur : **on choisit *qui* on pla
 
 Des effectifs à quinze, sur deux phases, pendant quinze jours, c'est plusieurs centaines de décisions par run dont la plupart sont évidentes. Mitigations à prévoir dès la conception de l'UI : effectifs volontairement réduits, bouton d'auto-affectation avec surcharge manuelle, affectation persistante d'une phase à l'autre par défaut. C'est du travail d'adapter, pas de domaine. Ce risque augmente mécaniquement si le modèle à deux phases symétriques est retenu.
 
-**`OUVERT`** — taille des effectifs, granularité (statistiques chiffrées visibles vs traits qualitatifs), recrutement (croissance passive, événement, carte ?).
+**`OUVERT`** — taille des effectifs, et **recrutement** : le plafond de places existe, ce qui le remplit non. Croissance passive, événement, carte ? La question est adossée à celle du sort de la main non jouée en 3.5, et se tranchera au même playtest.
+
+La **granularité** cesse d'être ouverte, et la réponse est *les deux* : des chiffres visibles sur les pistes, et du qualitatif au niveau d'ouvrier quand `X5` y branchera le choix de compétence. Ce qu'un palier de niveau offre reste entièrement à définir.
 
 ### 3.5 Cartes — trois pools
 
@@ -258,7 +283,7 @@ La **palissade** est entrée par la pratique et non par le design : `C2` l'a cr�
 
 Les bonus d'adjacence ne sont pas dans cette table : ils viennent avec `C3`, qui décidera de leur forme avant de les chiffrer.
 
-**Ce que `data/` porte, et ce qu'il ne porte pas encore.** *(Constaté à `E1b`.)* Un champ arrive avec le système qui le lit : la colonne **Chantier** est écrite ici mais vit dans `data/` à `C4`, **Déf.** et **PV** à `F1`, **Débloque** à `D1`, et les places de roster de l'habitation à `W1`. La conséquence à ne pas confondre avec un oubli : **cinq bâtiments portent « 1 slot » dans ce tableau et n'ont pourtant aucun bloc `production`** — tour de guet, caserne, marché, atelier, camp d'exploration. Leur poste n'est pas un poste de production ; il héberge une défense, un échange ou une action débloquée, et la nature qui le décrira n'existe pas encore. Leur écrire un `slots = 1` que rien ne lit ferait mentir la data et détruirait la garantie que `E1b` vient d'acheter — un bloc qui existe produit.
+**Ce que `data/` porte, et ce qu'il ne porte pas encore.** *(Constaté à `E1b`.)* Un champ arrive avec le système qui le lit : la colonne **Chantier** est écrite ici mais vit dans `data/` à `C4`, **Déf.** et **PV** à `F1`, **Débloque** à `D1`. Les places de roster de l'habitation y sont entrées à `W1`, ce qui a sorti ce bâtiment de la coquille vide où `E1b` l'avait laissé. La conséquence à ne pas confondre avec un oubli : **cinq bâtiments portent « 1 slot » dans ce tableau et n'ont pourtant aucun bloc `production`** — tour de guet, caserne, marché, atelier, camp d'exploration. Leur poste n'est pas un poste de production ; il héberge une défense, un échange ou une action débloquée, et la nature qui le décrira n'existe pas encore. Leur écrire un `slots = 1` que rien ne lit ferait mentir la data et détruirait la garantie que `E1b` vient d'acheter — un bloc qui existe produit.
 
 ### 4.2 Actions
 
@@ -326,7 +351,8 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 - **E2** — HUD des ressources, panneau de rapport de production.
 
 ### Effectifs — `W`
-- **W1** — Unité individuelle, pistes de compétence, XP depuis les `WorkLine`, projection en `LaborForce` et `CombatForce`, tests. **Vivier unique**, et rien qui suppose le roster entier disponible *(cf. 3.9)*.
+- **W1** ✅ — `Worker`, `SkillTrack`, `Roster`, XP depuis les `WorkLine`, projection en `LaborForce`, tests. **Vivier unique**, et rien qui suppose le roster entier disponible *(cf. 3.9)*.
+  La `CombatForce` **n'y est pas** : son contenu est décidé par le format de combat, qui est `OUVERT` en 3.6, et l'écrire ici serait ou bien un clone de `LaborForce` qui ne prouve rien, ou bien une devinette. Elle arrive à `F1`, avec le `DamageReport` et pour le même système neuf — c'est la règle « on n'invente pas une frontière que personne ne franchit », déjà appliquée à `E1`. Ce que `W1` garantit à sa place est plus solide : `Roster` est le seul propriétaire des `Worker`, et rien hors de `domain/workforce/` n'en voit un.
 - **W2** — Panneau d'affectation, fiches d'unité, auto-affectation.
 
 ### Cartes — `D`
@@ -334,7 +360,7 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 - **D2** — Main à l'écran. Jouer une carte produit un `Assignment` — **ouvrier → (action, cible)** — à cru ou dans un slot.
 
 ### Combat — `F`
-- **F1** — `InstantCombatResolver` arithmétique, `DamageReport` complet, tests. Bouchon.
+- **F1** — `InstantCombatResolver` arithmétique, **`CombatForce`** et `DamageReport` complets, tests. Bouchon.
 - **F2** — Prototype du vrai combat, sur snapshots fabriqués. *Format à définir, vivier unique imposé.*
 - **F3** — Vue de combat intégrée, échange de l'implémentation dans l'orchestrateur.
 
@@ -353,7 +379,8 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 - **X2** — Artisanat : atelier et *Fabriquer* *(3.3)*.
 - **X3** — Entraînement : caserne et *S'entraîner* *(3.4)*.
 - **X4** — Powers : le troisième pool se remplit *(3.5)*.
+- **X5** — Ce qu'un palier de **niveau d'ouvrier** offre : le choix de compétence *(3.4)*. `W1` écrit l'accumulateur et les paliers, qui se gagnent et se lisent ; ce qu'ils débloquent est du contenu et de l'UI, et se décide devant un roster qui a vraiment vécu quinze jours.
 
-**Ordre suivant** — `W1`, puis `C4`, puis `D1` et `D2`, puis `I1`. `E1b` est passé le premier parce qu'il touchait les `.tres` de bâtiments et que leur nombre a doublé ; `W1` vient maintenant parce qu'il est le dernier moment où `LaborForce` peut bouger sans douleur, et parce qu'il est le seul jalon qui rende le journal de travail de `E1` utile à quelque chose.
+**Ordre suivant** — `C4`, puis `D1` et `D2`, puis `I1`. `E1b` est passé avant `W1` parce qu'il touchait les `.tres` de bâtiments et que leur nombre a doublé ; `W1` a suivi parce qu'il était le dernier moment où `LaborForce` pouvait bouger sans douleur — elle n'a finalement pas bougé — et parce qu'il est le seul jalon qui rende le journal de travail de `E1` utile à quelque chose.
 
 Le jeu devient jouable à `I2`. Tout ce qui suit est de l'enrichissement.
