@@ -13,6 +13,7 @@ const CATEGORY_BALANCE := &"balance"
 const CATEGORY_TERRAIN := &"terrain"
 const CATEGORY_BUILDINGS := &"buildings"
 const CATEGORY_COMMODITIES := &"commodities"
+const CATEGORY_CARDS := &"cards"
 const ID_BALANCE := &"balance"
 
 ## Catégorie -> (identifiant -> Resource).
@@ -25,7 +26,9 @@ func _ready() -> void:
 	_assert_terrain_is_complete()
 	_assert_buildings_are_complete()
 	_assert_commodities_are_complete()
+	_assert_cards_are_complete()
 	_assert_resources_are_known()
+	_assert_cards_are_known()
 	EventBus.database_ready.emit.call_deferred()
 
 ## Racine de l'équilibrage. Jamais null une fois le boot passé.
@@ -55,6 +58,19 @@ func get_commodity(id: StringName) -> CommodityData:
 ## Identifiants de ressource connus, triés.
 func list_commodity_ids() -> Array[StringName]:
 	return list_ids(CATEGORY_COMMODITIES)
+
+## Carte indexée, ou null si l'identifiant est inconnu.
+func get_card(id: StringName) -> CardData:
+	return get_resource(CATEGORY_CARDS, id) as CardData
+
+## Identifiants de carte connus, triés.
+##
+## Le tri compte plus ici qu'ailleurs : c'est dans cet ordre que le CardCatalogue reçoit
+## les cartes, et c'est cet ordre que les offres de draft mélangent. Un catalogue chargé
+## dans l'ordre d'un DirAccess tirerait différemment d'une machine à l'autre sur le même
+## seed.
+func list_card_ids() -> Array[StringName]:
+	return list_ids(CATEGORY_CARDS)
 
 ## Resource indexée, ou null si la paire (catégorie, identifiant) est inconnue.
 func get_resource(category: StringName, id: StringName) -> Resource:
@@ -134,6 +150,23 @@ func _assert_commodities_are_complete() -> void:
 			"champs non renseignés dans data/commodities/%s.tres : %s"
 				% [id, ", ".join(missing)])
 
+## Et sur les cartes : un pool non renseigné rangerait la carte nulle part, et elle
+## serait possédée sans jamais pouvoir être piochée.
+##
+## Cinquième copie de la même boucle. Le seuil annoncé à C1 — « le jour où il y aura six
+## catégories, une base commune vaudra le coup » — n'est toujours pas franchi, et
+## l'écrire maintenant coûterait le typage des cinq : il faudrait passer par une Resource
+## nue pour appeler missing_fields().
+func _assert_cards_are_complete() -> void:
+	for id in list_card_ids():
+		var card := get_card(id)
+		assert(card != null, "data/cards/%s.tres n'est pas une CardData" % id)
+		if card == null:
+			continue
+		var missing := card.missing_fields()
+		assert(missing.is_empty(),
+			"champs non renseignés dans data/cards/%s.tres : %s" % [id, ", ".join(missing)])
+
 ## Les identifiants de ressource nommés ailleurs existent-ils dans le catalogue ?
 ##
 ## C'est le seul contrôle que les Resource de src/schema/ ne peuvent pas faire
@@ -161,6 +194,31 @@ func _assert_resources_are_known() -> void:
 		for resource in building.production.yield_per_slot:
 			_assert_known(known, resource,
 				"buildings/%s.tres → production.yield_per_slot" % id)
+
+## Ce que les cartes et le deck de départ nomment existe-t-il ?
+##
+## Même rôle que _assert_resources_are_known() juste au-dessus, et même raison d'être
+## ici plutôt que dans le schéma : ni une CardData ni une DeckBalance ne lit l'index.
+## Sans ce contrôle, une carte de bâtiment mal orthographiée ne casserait qu'à D2 sous
+## le curseur, et un deck de départ nommant une carte disparue se composerait
+## silencieusement avec un exemplaire de moins.
+func _assert_cards_are_known() -> void:
+	var known := list_card_ids()
+	if known.is_empty():
+		return
+	var buildings := list_building_ids()
+	for id in known:
+		var card := get_card(id)
+		if card == null or not card.places_a_building():
+			continue
+		assert(buildings.has(card.building),
+			"la carte data/cards/%s.tres pose un bâtiment inconnu : %s" % [id, card.building])
+	var balance := get_balance()
+	if balance == null or balance.deck == null:
+		return
+	for card in balance.deck.starting_deck:
+		assert(known.has(card),
+			"carte inconnue « %s » dans balance/deck_balance.tres → starting_deck" % card)
 
 ## Cette ressource figure-t-elle au catalogue ?
 func _assert_known(known: Array[StringName], resource: StringName, where: String) -> void:
