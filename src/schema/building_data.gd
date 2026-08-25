@@ -6,11 +6,11 @@ extends Resource
 ## argument et ne lit jamais GameDatabase, comme pour TerrainData.
 ##
 ## C1 n'y mettait que ce que le placement consomme ; E1 y ajoute l'économie — coût,
-## réserve, et la production à plat —, et E1b sort cette dernière dans un bloc
-## nullable. Avancement de chantier, défense, PV et bonus d'adjacence arriveront avec
-## leur système — C4, C3, F1 — de la même façon que BalanceData gagne un bloc quand un
-## système atterrit. Un champ ajouté plus tard oblige à rouvrir les .tres ; un champ
-## ajouté d'avance oblige à deviner sa forme, ce qui coûte plus cher.
+## réserve, et la production à plat —, E1b sort cette dernière dans un bloc nullable, et
+## W1 les places de roster. Avancement de chantier, défense, PV et bonus d'adjacence
+## arriveront avec leur système — C4, C3, F1 — de la même façon que BalanceData gagne un
+## bloc quand un système atterrit. Un champ ajouté plus tard oblige à rouvrir les .tres ;
+## un champ ajouté d'avance oblige à deviner sa forme, ce qui coûte plus cher.
 ##
 ## Ajouter un **bâtiment** doit rester une édition de data/. Ajouter une **nature** de
 ## bâtiment est légitimement une modification de code — mais dans src/domain/, jamais
@@ -92,6 +92,18 @@ const QUARTER_TURNS := 4
 ## En réserve commune, ce chiffre ne relève pas trois compteurs indépendants mais la
 ## seule capacité partagée : c'est ce qui donne à l'entrepôt une valeur d'arbitrage.
 @export_range(0, 500, 1) var storage_bonus: int
+
+## Ce qu'il ajoute au plafond de places du roster. 0 pour tout ce qui n'est pas une
+## habitation.
+##
+## Champ plat et non bloc, exactement comme storage_bonus juste au-dessus, et pour la
+## même raison : c'est un nombre qui relève un plafond global, pas une nature de
+## bâtiment. La doctrine du zéro ne s'y applique donc pas non plus — douze bâtiments
+## sur treize ne logent personne, et le réclamer refuserait de démarrer sur des données
+## correctes.
+##
+## Entré à W1 avec le système qui le lit, comme DESIGN.md 4.1 l'avait annoncé à E1b.
+@export_range(0, 20, 1) var roster_places: int
 
 ## Ce décalage, pivoté de `turns` quarts de tour dans le sens horaire.
 ##
@@ -181,6 +193,10 @@ func missing_fields() -> PackedStringArray:
 		missing.append("color")
 	if height <= 0.0:
 		missing.append("height")
+	# Hors du bloc économie : les places de roster sont un chiffre des Effectifs, et
+	# les ranger avec le coût et la réserve ferait mentir le nom de cette fonction.
+	if roster_places < 0:
+		missing.append("roster_places")
 	missing.append_array(_economy_fields())
 	if footprint.is_empty():
 		missing.append("footprint")

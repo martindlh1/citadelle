@@ -19,6 +19,9 @@ extends Resource
 ## Économie : réserve commune, upkeep, stock d'ouverture.
 @export var economy: EconomyBalance
 
+## Effectifs : places du roster, valeur d'une soirée, courbes de paliers.
+@export var workforce: WorkforceBalance
+
 ## Champs non renseignés de tous les blocs, préfixés du nom de leur bloc.
 ## Vide = équilibrage exploitable. Vérifié au boot par GameDatabase.
 ##
@@ -48,4 +51,9 @@ func missing_fields() -> PackedStringArray:
 	else:
 		for field in economy.missing_fields():
 			missing.append("economy.%s" % field)
+	if workforce == null:
+		missing.append("workforce")
+	else:
+		for field in workforce.missing_fields():
+			missing.append("workforce.%s" % field)
 	return missing

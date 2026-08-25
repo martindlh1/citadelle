@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="WorkforceBalance" format=3]
+
+[ext_resource type="Script" path="res://src/schema/workforce_balance.gd" id="1_workforce_balance"]
+
+[resource]
+script = ExtResource("1_workforce_balance")
+base_roster_places = 10
+xp_per_shift = 4
+skill_xp_per_level = 25
+max_skill_level = 5
+efficiency_per_skill_level = 0.15
+worker_xp_per_level = 40
+max_worker_level = 10
