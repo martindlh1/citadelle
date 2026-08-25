@@ -15,6 +15,13 @@ extends RefCounted
 ## place() est la SEULE porte d'entrée mutante, et elle valide avant de muter. Rien ne
 ## peut donc entrer dans la ville sans être passé par PlacementValidator : c'est un
 ## invariant tenu par la structure, et non une consigne qu'un appelant doit respecter.
+##
+## advance() est une seconde porte mutante depuis C4, mais d'une autre nature, et il
+## faut être honnête sur ce qu'elle garantit : elle n'est **pas** exclusive. Un appelant
+## qui tient un PlacedBuilding — le renderer en tient toute une liste depuis C2 — peut
+## l'avancer sans passer par ici. Fermer ça demanderait de ne plus jamais laisser sortir
+## un PlacedBuilding, ce dont le rendu dépend. advance() est donc la porte documentée,
+## celle qu'une action vise par son ancre ; elle n'est pas un verrou.
 
 ## Ancre -> bâtiment posé. L'ordre d'insertion d'un Dictionary est l'ordre de pose :
 ## c'est lui qui rend buildings() déterministe pour un même seed et une même suite
@@ -72,11 +79,15 @@ func has_anchor(anchor: Vector2i) -> bool:
 ## Construction. C'est la seule sortie du système vers ses consommateurs.
 ##
 ## L'ordre est celui de la pose, comme buildings().
+##
+## L'avancement traverse **figé**, comme le reste : un instantané pris ce soir ne suit
+## pas les crans posés demain.
 func to_snapshot() -> CitySnapshot:
 	var projected: Array[BuildingSnapshot] = []
 	for building in buildings():
 		projected.append(BuildingSnapshot.create(
-			building.data(), building.anchor(), building.height(), building.turns()))
+			building.data(), building.anchor(), building.height(), building.turns(),
+			building.progress()))
 	return CitySnapshot.create(projected)
 
 ## Pose ce bâtiment sur cette ancre, dans cette orientation, si le placement est valide.
@@ -97,6 +108,25 @@ func place(terrain: TerrainQuery, data: BuildingData, anchor: Vector2i,
 	for cell in result.cells():
 		_anchors[cell] = anchor
 	return result
+
+## Pose un cran de chantier sur le bâtiment ancré ici. Rend vrai s'il a avancé, faux
+## s'il était déjà achevé.
+##
+## Précondition : has_anchor(anchor). Passer par anchor_at() quand on tient une cellule
+## quelconque plutôt que l'ancre — c'est le chemin d'une action jouée au clic, le même
+## que celui d'une démolition.
+##
+## Profil de remove() et non de place() : une précondition, pas un PlacementResult. Un
+## refus de placement est le résultat normal d'un curseur promené sur toute la carte,
+## et le fantôme l'interroge à chaque image ; ici les deux seuls refus possibles — rien
+## à cette ancre, chantier déjà fini — se posent avant l'appel, et un booléen suffit à
+## dire lequel s'est produit quand même.
+##
+## Le cran est délégué au bâtiment plutôt que compté ici. La ville sait qui est posé où ;
+## combien il lui reste à bâtir est son affaire à lui.
+func advance(anchor: Vector2i) -> bool:
+	assert(has_anchor(anchor), "chantier avancé sur une cellule qui n'ancre rien : %s" % anchor)
+	return _buildings[anchor].advance()
 
 ## Retire le bâtiment ancré ici et libère toutes ses cellules.
 ##

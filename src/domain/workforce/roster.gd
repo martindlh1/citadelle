@@ -32,10 +32,13 @@ static func empty() -> Roster:
 	var none: Array[Worker] = []
 	return Roster.create(none)
 
-## Places disponibles pour cette ville : la base, plus ce que les habitations ajoutent.
+## Places disponibles pour cette ville : la base, plus ce que les habitations
+## **achevées** ajoutent.
 ##
 ## Miroir exact de ProductionResolver.capacity_for(), et publique pour la même raison :
-## la fiche de W2 doit afficher « 10 / 12 » sans rien résoudre.
+## la fiche de W2 doit afficher « 10 / 12 » sans rien résoudre. Le miroir tient jusque
+## dans le filtre : depuis C4 les deux lisent completed(), parce qu'on ne loge personne
+## sous un toit qui n'est pas posé.
 ##
 ## Ce qui **remplit** ces places n'existe pas — DESIGN.md 3.4 garde le recrutement sous
 ## un OUVERT. Le plafond, lui, est réel dès aujourd'hui : il dit si le vivier peut
@@ -44,7 +47,7 @@ static func capacity_for(city: CitySnapshot, balance: WorkforceBalance) -> int:
 	assert(city != null, "capacité de roster demandée sans ville")
 	assert(balance != null, "capacité de roster demandée sans équilibrage")
 	var places := balance.base_roster_places
-	for building in city.buildings():
+	for building in city.completed():
 		places += building.data().roster_places
 	return places
 
