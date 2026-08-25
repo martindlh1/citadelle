@@ -1,6 +1,6 @@
 extends Node
-## Harnais de dev du système Construction — jalon C2 : le fantôme, la pose, la
-## destruction.
+## Harnais de dev du système Construction — jalons C2 et C4 : le fantôme, la pose, la
+## destruction, et les chantiers.
 ##
 ## Le rapport texte de C1 a disparu, remplacé par la scène : c'est très exactement ce
 ## que C2 apporte. Ce qu'il énumérait — les quatre raisons de refus, trouvées sur la
@@ -17,8 +17,12 @@ extends Node
 ## piloter des clics, et la première destruction a une cible sans qu'il faille bâtir
 ## d'abord.
 ##
-## Clic gauche pose, clic droit détruit, 1 à 9 choisissent le bâtiment. La caméra garde
-## Q et E, la molette, WASD et R.
+## Clic gauche pose, clic droit détruit, Espace avance le chantier sous le curseur, 1 à
+## 9 choisissent le bâtiment. La caméra garde Q et E, la molette, WASD et R.
+##
+## Espace tient lieu de carte *Construire*, qui n'existe pas encore — c'est D1 et D2 qui
+## l'écriront. Le harnais ne fait donc pas semblant d'avoir des actions : il appelle la
+## porte du domaine directement, une touche pour un cran.
 
 ## Seed de la carte. Fixe : deux lancements doivent se comparer.
 const SEED := 1234
@@ -38,7 +42,7 @@ const REPORT_FONT_SIZE := 13
 const REPORT_OUTLINE_SIZE := 4
 
 ## Rappel des touches, en pied du rapport.
-const CONTROLS := "Clic gauche : poser.   Clic droit : détruire.   1-9 : bâtiment.   Tab : pivoter.\nQ/E : tourner la caméra.   Molette : zoom.   WASD ou clic milieu : déplacer.   R : recadrer."
+const CONTROLS := "Clic gauche : poser.   Clic droit : détruire.   Espace : bâtir un cran.   1-9 : bâtiment.   Tab : pivoter.\nQ/E : tourner la caméra.   Molette : zoom.   WASD ou clic milieu : déplacer.   R : recadrer."
 
 var _metrics: TerrainMetrics
 var _world: DevWorld
@@ -116,6 +120,10 @@ func _handle_key(event: InputEventKey) -> void:
 		_turns = posmod(_turns + 1, BuildingData.QUARTER_TURNS)
 		get_viewport().set_input_as_handled()
 		return
+	if event.keycode == KEY_SPACE:
+		_build_here()
+		get_viewport().set_input_as_handled()
+		return
 	var index := event.keycode - KEY_1
 	if index < 0 or index >= _catalogue.size():
 		return
@@ -140,6 +148,32 @@ func _place_here() -> void:
 	_renderer.rebuild(_city)
 	_last_action = "Posé : %s en %s, %s, hauteur %d" % [
 		data.id, hovered.cell(), _orientation(_turns), result.height()]
+
+## Pose un cran de chantier sur le bâtiment sous le curseur.
+##
+## Le curseur tient une cellule quelconque de l'empreinte et advance() veut l'ancre :
+## même chemin que la démolition, et c'est pour ça que anchor_at() existe.
+##
+## Le harnais ne teste pas l'achèvement avant d'appeler — il rapporte ce qu'on lui
+## répond, comme pour la pose. C'est ce qui garantit que l'écran ne dit pas autre chose
+## que l'état.
+func _build_here() -> void:
+	var hovered := _world.cursor().hovered()
+	if not hovered.is_hit():
+		_last_action = "Chantier : rien sous le curseur."
+		return
+	var cell := hovered.cell()
+	if not _city.is_occupied(cell):
+		_last_action = "Chantier : rien de bâti en %s" % cell
+		return
+	var anchor := _city.anchor_at(cell)
+	var building := _city.building_at(cell)
+	var id := building.data().id
+	if not _city.advance(anchor):
+		_last_action = "Chantier : %s ancré en %s est déjà achevé." % [id, anchor]
+		return
+	_renderer.rebuild(_city)
+	_last_action = "Bâti : %s ancré en %s, %s" % [id, anchor, _site_state(building)]
 
 ## Détruit le bâtiment sous le curseur.
 ##
@@ -184,12 +218,30 @@ func _refresh_preview() -> void:
 ## office de crans. C'est arbitraire et assumé : sans ça, aucune capture ne montrerait
 ## un bâtiment POSÉ pivoté, et le rendu d'une empreinte tournée ne serait vérifié nulle
 ## part — le fantôme seul ne prouve rien sur BuildingRenderer.
+##
+## Chacun reçoit aussi un avancement différent, pour la même raison exactement : ça
+## étale la ville sur toute la gamme — des chantiers à peine ouverts, des chantiers
+## presque finis, des bâtiments achevés — et met les trois sous les yeux d'une seule
+## capture. Une pose neuve seule ne montrerait qu'un chantier à zéro, donc qu'un seul
+## point du rendu.
+##
+## Les crans sont pris **modulo ce que le bâtiment réclame**, et non égaux au rang comme
+## l'orientation : les chantiers de DESIGN.md 4.1 plafonnent à 3, si bien qu'un rang
+## brut achèverait tout à partir du quatrième et ne laisserait que deux chantiers sur
+## treize. Constaté en capture, corrigé sur-le-champ — c'est exactement le genre de
+## chose qu'aucune des trois commandes ne dit.
+##
+## C'est aussi ce qui rend inutile un drapeau --shot-build : là où --shot-rotate était
+## nécessaire parce que rien d'autre ne pivotait un bâtiment posé, l'étalement suffit.
 func _seed_city() -> void:
 	for index in _catalogue.size():
 		var data := _catalogue[index]
 		var anchor := _first_accepted_anchor(data, index)
-		if anchor != NO_CELL:
-			_city.place(_terrain, data, anchor, index)
+		if anchor == NO_CELL:
+			continue
+		_city.place(_terrain, data, anchor, index)
+		for _notch in index % (data.build_actions + 1):
+			_city.advance(anchor)
 
 func _first_accepted_anchor(data: BuildingData, turns: int) -> Vector2i:
 	var size := _terrain.size()
@@ -215,8 +267,8 @@ func _selected_building() -> BuildingData:
 func _report() -> String:
 	var size := _grid.size()
 	var lines := PackedStringArray()
-	lines.append("Construction — seed %d, %d x %d   %d bâtiment(s) posé(s)"
-		% [SEED, size.x, size.y, _city.count()])
+	lines.append("Construction — seed %d, %d x %d   %d posé(s), dont %d en chantier"
+		% [SEED, size.x, size.y, _city.count(), _open_sites()])
 	lines.append("")
 	lines.append(_catalogue_lines())
 	lines.append("")
@@ -226,6 +278,14 @@ func _report() -> String:
 	lines.append(CONTROLS)
 	return "\n".join(lines)
 
+## Combien de bâtiments posés ne sont pas finis.
+func _open_sites() -> int:
+	var open := 0
+	for building in _city.buildings():
+		if not building.is_complete():
+			open += 1
+	return open
+
 func _catalogue_lines() -> String:
 	var lines := PackedStringArray()
 	lines.append("Bâtiments")
@@ -233,8 +293,9 @@ func _catalogue_lines() -> String:
 		var data := _catalogue[index]
 		var mark := ">" if index == _selected else " "
 		var turns := _orientation(_turns) if index == _selected else ""
-		lines.append("  %s %d  %-16s %d cellule(s), h %.2f  %s"
-			% [mark, index + 1, data.id, data.footprint.size(), data.height, turns])
+		lines.append("  %s %d  %-16s %d cellule(s), h %.2f, chantier %d  %s"
+			% [mark, index + 1, data.id, data.footprint.size(), data.height,
+				data.build_actions, turns])
 	return "\n".join(lines)
 
 ## Ce que le curseur désigne, et le verdict du domaine sur une pose à cet endroit.
@@ -245,9 +306,28 @@ func _hover_line() -> String:
 		return "Survol : —"
 	var cell := hovered.cell()
 	var verdict := "accepté" if _preview.is_ok() else String(_preview.reason())
-	return "Survol : (%d, %d)   h = %d   %s   %s   -> %s" % [
+	return "Survol : (%d, %d)   h = %d   %s   %s   -> %s%s" % [
 		cell.x, cell.y, hovered.height(), _grid.terrain_at(cell).id,
-		_orientation(_turns), verdict]
+		_orientation(_turns), verdict, _hovered_site()]
+
+## Ce qui est déjà bâti sous le curseur, s'il y a quelque chose. Vide sinon.
+##
+## Accolé à la ligne de survol plutôt qu'à sa propre ligne : c'est le même endroit et
+## la même question — qu'y a-t-il ici —, et c'est là qu'on regarde en promenant le
+## curseur pour voir un chantier monter.
+func _hovered_site() -> String:
+	var hovered := _world.cursor().hovered()
+	var building := _city.building_at(hovered.cell())
+	if building == null:
+		return ""
+	return "   |   %s : %s" % [building.data().id, _site_state(building)]
+
+## L'état d'un chantier en clair. Les crans seuls ne disent rien tant qu'on ne sait pas
+## combien il en faut.
+func _site_state(building: PlacedBuilding) -> String:
+	if building.is_complete():
+		return "achevé"
+	return "chantier %d/%d" % [building.progress(), building.data().build_actions]
 
 ## L'orientation en clair. Les crans seuls ne disent rien à la lecture d'une capture,
 ## et c'est précisément là qu'on cherche à vérifier qu'une forme a bien pivoté.

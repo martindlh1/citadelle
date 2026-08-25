@@ -4,6 +4,440 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-25 — `C4` : le chantier, ses deux lectures, et un contrôle par l'image
+
+**État : terminé.** Cinq commits sur `feat/c4-construction-sites`, tirée de
+`feat/w1-workforce` — `master` n'a toujours pas reçu `W1`, la chaîne empilée continue.
+Les trois commandes passent : boot sans erreur ni warning, tout `src/domain/` parse,
+**324 tests verts contre 304** à l'ouverture.
+
+La branche a de nouveau été créée **à l'orientation**, avant la première ligne. Trois
+jalons d'affilée.
+
+### Ce qui a été livré
+
+- `BuildingData.build_actions`, et la colonne **Chantier** de `DESIGN.md` 4.1 écrite
+  dans les treize `.tres`.
+- `BuildingSnapshot` — `progress()`, `is_complete()`, `remaining()` ; `CitySnapshot` —
+  `completed()` à côté de `buildings()`.
+- `PlacedBuilding` — l'avancement et `advance()` ; `CityState.advance(anchor)`.
+- `ProductionResolver` et `Roster.capacity_for()` — les trois endroits qui devaient
+  cesser de compter un inachevé.
+- `tests/` — quatorze cas neufs répartis sur quatre suites.
+- `BuildingRenderer` — le rendu distinct ; `city_harness.gd` — `Espace`, l'état sous le
+  curseur, l'étalement des avancements.
+- `DESIGN.md` 3.2, 4.1 et 8.
+
+### Deux arbitrages avant d'écrire
+
+**Le « — » du Cœur est un zéro**, et non un champ réclamé au boot. L'argument qui a
+tranché n'est pas le confort mais la **cohérence de ligne** : ce même Cœur porte déjà
+« posé au départ » dans la colonne Coût, et `data/` le représente par un coût vide que
+le schéma accepte sans broncher. Représenter « — » par un zéro est le même geste sur la
+même ligne du tableau. Le bénéfice se voit à ce qui n'a pas été écrit : `is_complete()`
+étant `progress >= build_actions`, le Cœur est achevé à la pose et **aucun chemin
+particulier n'existe** pour lui — ni dans `place()`, ni dans le harnais, ni demain dans
+`RunOrchestrator`.
+
+Le prix est réel et a été payé, pas ignoré : un `build_actions` oublié vaut 0 et fait
+sauter le chantier en silence. Un cas de test charge tout `data/` et exige qu'au moins un
+bâtiment en déclare un — le filet que `production_block_test.gd` tend déjà sous les blocs
+de production, et qui rattrape la disparition du **format entier** sinon rien. C'est un
+filet à mailles larges, et c'est dit comme tel.
+
+**Les harnais Économie et Effectifs achèvent à la pose.** Sans intervention ils
+devenaient muets : leurs bâtiments seraient restés des chantiers pour toujours, faute de
+carte *Construire* à leur jeter dessus. Chez l'Économie ça vidait le rapport ; chez les
+Effectifs ça cascadait — pas de poste, pas de ligne de travail, pas d'XP, deux tableaux
+et un verdict à zéro.
+
+L'alternative — un cran par soir — est la version **intéressante**, et elle répondrait à
+une vraie question : ce que le délai de chantier coûte à l'économie. Elle a été écartée
+pour une raison de méthode et non de goût : les chiffres d'un harnais sont des **repères
+écrits au journal**, et déplacer ceux de `E1b` et `W1` depuis un jalon dont le sujet est
+la Construction aurait rendu la prochaine dérive inattribuable. Vérifié après coup plutôt
+que supposé — la famine tombe toujours au soir 6, la mine se paie toujours au soir 8, la
+réserve finit toujours à 189/200 ; côté Effectifs, la nourriture bouge toujours au soir
+20 et Elric revient toujours avec 24 postes et 96 XP. Aucun repère n'a bougé.
+
+Elle a un meilleur moment, et il est nommé : **`I1`**, où l'orchestrateur séquence une
+vraie journée et où le délai est *joué* au lieu d'être simulé par un harnais qui ferait
+semblant d'avoir des cartes.
+
+### La décision qui porte le jalon : deux lectures plutôt qu'un filtre recopié
+
+Trois consommateurs devaient cesser de compter un bâtiment inachevé — les postes de
+production, la réserve que les entrepôts relèvent, les places que les habitations
+ajoutent. Et un quatrième, le Combat, doit au contraire les **voir** : `DESIGN.md` 3.2
+veut qu'un chantier détruit la veille de la vague soit une vraie perte.
+
+Trois clauses `if not is_complete()` recopiées auraient marché, et auraient été oubliées
+à la quatrième. Le pire est que **l'oubli aurait été silencieux** : un entrepôt en
+chantier qui relève quand même la réserve ne casse rien, il ment — et un mensonge de ce
+genre ne se découvre qu'en équilibrage, six jalons plus loin.
+
+`CitySnapshot` porte donc `completed()` à côté de `buildings()`. Une implémentation, du
+côté du DTO qui sait déjà tout ce qu'il faut pour répondre, et deux questions qui ont
+chacune leur consommateur — ce qui est précisément la condition que le projet s'impose
+avant d'ouvrir une porte.
+
+### Ce que la capture a trouvé, et ce qu'elle a innocenté
+
+Cinquième jalon d'affilée où l'image dit quelque chose qu'aucune des trois commandes ne
+pouvait dire. Deux fois, et les deux comptent.
+
+**Un bug à moi.** Le premier étalement donnait à chaque bâtiment un nombre de crans égal
+à son rang dans le catalogue, calqué sur ce que `C2` fait des orientations. Sauf que les
+orientations bouclent à 4 et que les chantiers de `DESIGN.md` 4.1 plafonnent à **3** :
+tout ce qui vient après le quatrième rang était achevé d'office, et la ville d'ouverture
+ne montrait que **2 chantiers sur 13**. Corrigé en prenant les crans modulo ce que chaque
+bâtiment réclame — 9 chantiers sur 13, et toute la gamme sous une seule capture. Aucun
+test n'aurait signalé ça : le code était correct, c'est la mise en scène qui ne montrait
+rien.
+
+**Un bug qui n'est pas à moi.** La même capture montre une **trame en damier** sur le
+dessus des boîtes, là où l'ombre d'un bâtiment haut tombe sur un bâtiment bas. La
+tentation était de l'attribuer aux boîtes minces que `C4` introduit. Contrôle fait plutôt
+que supposé : une capture avec `SITE_BASE_RATIO` forcé à `1.0` — donc au rendu exact de
+`C2`, toutes les boîtes à pleine hauteur — **montre exactement la même trame**. C'est un
+défaut de filtrage d'ombre de la lumière de `DevWorld`, que `C4` a seulement rendu plus
+visible en posant des boîtes basses à côté d'une tour. Consigné, pas corrigé : c'est du
+travail Terrain, et `CLAUDE.md` interdit depuis `C2` de « réparer » un problème qu'on n'a
+pas d'abord constaté chez soi.
+
+Le stratagème du contrôle mérite d'être retenu : neutraliser **son propre** paramètre et
+recapturer répond en trente secondes à « est-ce moi ? », là où un `git stash` a fait
+perdre deux minutes et failli emporter le travail — la remise au propre rebasculait
+`HARNESS` sur `&"workforce"`, un harnais sans `--shot` ni `quit()`, qui a bloqué jusqu'au
+délai d'expiration.
+
+### Décisions
+
+**L'avancement vit sur `PlacedBuilding`, pas dans un troisième index.** `CityState` tient
+deux index qui disent la même vérité — ce qui existe, quelle cellule renvoie à quoi. Un
+avancement rangé à côté d'eux serait un état séparé du bâtiment qu'il décrit, à
+resynchroniser à chaque pose et à chaque retrait. Le docstring qui promettait un
+`PlacedBuilding` immuable est corrigé plutôt que contourné : **son placement est figé,
+son avancement ne l'est pas**, et c'est exactement ce que `DESIGN.md` 3.2 demande en
+disant qu'un chantier est un *état* du bâtiment posé.
+
+**`advance()` rend un `bool`, pas un DTO `{ok, reason}`.** Profil de `remove()` et non de
+`place()`. La convention réserve le DTO aux erreurs récupérables, et un refus de
+placement en est une vraie — le fantôme interroge le validateur à chaque image et la
+plupart des réponses sont des refus. Ici les deux seuls refus possibles — rien à cette
+ancre, chantier déjà fini — se posent avant l'appel, et un booléen suffit à dire lequel
+s'est produit quand même.
+
+**`advance()` n'est pas un verrou, et le docstring le dit.** `place()` est une porte
+exclusive : rien n'entre dans la ville sans être passé par le validateur, et c'est tenu
+par la structure. `advance()` ne peut pas l'être — le renderer tient une liste de
+`PlacedBuilding` depuis `C2`, et fermer ça demanderait de ne plus jamais en laisser
+sortir un. Écrire « porte documentée » plutôt que « seule porte » coûte une phrase et
+évite qu'on croie à une garantie qui n'existe pas.
+
+**L'achèvement se teste dans `_work_lines()`, avant le bloc de production.** Même endroit
+unique que `E1b` avait choisi pour `produces()` : toute ligne de travail en sort, donc
+tout ce qui en consomme une sait que le bâtiment produit **et** qu'il est fini. L'ordre
+des deux clauses n'est pas indifférent — un ouvrier envoyé sur une ferme en chantier
+chôme parce qu'elle n'est pas finie, pas parce qu'elle ne produirait pas. La distinction
+ne se lit nulle part aujourd'hui ; elle se lira le jour où le rapport dira pourquoi.
+
+**Hauteur et couleur sont pilotées par le même nombre.** Un chantier monte et reprend sa
+couleur ensemble. Réglés séparément, les deux signaux auraient fini par se contredire —
+une boîte presque haute encore grise. La teinte de fondation et le plancher de hauteur
+sont des constantes d'adapter et non de `data/` : ce que `data/` décide reste ce qu'un
+bâtiment **fini** vaut, l'écart qu'un chantier montre est de l'affichage. `PlacementGhost`
+tient ses deux teintes exactement là pour la même raison.
+
+**Le plancher de hauteur est non nul, et c'est le seul des trois chiffres qui compte.** À
+zéro, un chantier fraîchement posé serait une boîte d'épaisseur nulle, donc invisible, et
+on ne verrait pas qu'on vient de payer une case. Il faut qu'il se voie *pour* se lire
+comme inachevé.
+
+**Pas de drapeau `--shot-build`.** `--shot-rotate` existait parce que rien d'autre ne
+pivotait un bâtiment posé ; ici l'étalement des avancements met déjà chantiers et
+bâtiments finis sous les yeux d'une seule capture. Un drapeau qui ne montrerait rien de
+neuf est une option de plus à documenter et à maintenir.
+
+**Le nom `build_actions`, et pas `turns`.** `turns` désigne déjà les quarts de tour d'une
+orientation, partout dans le système. La collision aurait été silencieuse et
+catastrophique.
+
+### Ce qui reste
+
+Rien pour `C4`. Cinq choses volontairement laissées de côté :
+
+- **la carte *Construire* et l'affectation typée par action** — `D1` et `D2`. Inventer
+  aujourd'hui un verbe dans `Assignment` serait deviner la forme du Deck : c'est la règle
+  qui a sorti `CombatForce` de `W1`.
+- **ce que rend un chantier détruit** — `OUVERT` de 3.2, laissé entier. Détruire libère
+  les cellules et ne rend rien, ce qui est l'état par défaut et non une réponse.
+- **le Combat qui voit les chantiers** — `F1`. `buildings()` lui garde la porte ouverte,
+  et c'est tout ce que `C4` lui devait.
+- **l'adjacence** — `C3`, inchangé.
+- **le délai de chantier dans les harnais Économie et Effectifs** — `I1`, argumenté
+  ci-dessus.
+
+Et deux constats à porter ailleurs :
+
+- **une question de design neuve, inscrite en `OUVERT` dans 3.2** : quelle piste l'action
+  *Construire* crédite-t-elle ? Aucune des trois familles ne la couvre. Elle appartient à
+  `D2`, et elle a trois issues — une quatrième famille, un rattachement à l'Artisanat, ou
+  de l'XP de niveau seule, ce que les deux axes de `W1` rendent déjà possible.
+- **la trame d'ombre sur le dessus des boîtes** — travail Terrain, antérieure à `C4`,
+  prouvée telle par capture de contrôle.
+
+Les deux reports de `W1` tiennent toujours : la troncature du rendement à `I3`, et la
+mise en commun des rapports texte des harnais, toujours sans jalon attitré — `_make_label()`
+en est maintenant à cinq exemplaires.
+
+### Prochain jalon
+
+**`D1`** — le `Deck`, la `Hand`, les trois pools, défausse, remélange, draft. Puis `D2`,
+qui donnera enfin à *Construire* une carte et un ouvrier, et qui trouvera le chantier
+déjà là à viser. `I1` ensuite.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'input
+ajoutée — `Espace` est lu en `InputEventKey` brut comme le reste.
+
+- `F5` lance le **harnais Construction** : la carte, treize bâtiments posés en haut à
+  droite dont neuf en chantier à des stades différents, le fantôme sous le curseur. Clic
+  gauche pose, clic droit détruit, **Espace bâtit un cran**, 1 à 9 choisissent, Tab
+  pivote. Q/E, molette, WASD et R restent à la caméra. `HARNESS` revient à `&"economy"`,
+  `&"workforce"` ou `&"terrain"` en un mot dans `scenes/dev/dev_boot.gd`.
+- **les treize chiffres de chantier sont à relire.** Ils viennent du tableau de
+  `DESIGN.md` 4.1, donc ce sont des hypothèses au même titre que les coûts — et le Cœur
+  n'en porte volontairement aucun. Le boot ne peut pas refuser un zéro, puisque c'est une
+  valeur légitime : c'est le seul champ de `BuildingData` où une faute de saisie passe
+  sans bruit, et c'est la raison de le relire une fois.
+- rien de neuf dans `data/` : aucun `.tres` créé, donc **aucun `uid` manquant** cette
+  fois-ci — pour la première fois depuis `T1`.
+
+---
+
+## 2026-08-25 — `W1` : l'ouvrier, ses deux axes, et la boucle refermée sur `E1`
+
+**État : terminé.** Six commits sur `feat/w1-workforce`, tirée de **`master`** — la
+première depuis `I0`, la chaîne de branches empilées s'arrête ici parce que `E1b` y a
+été fusionnée entre-temps. Les trois commandes passent : boot sans erreur ni warning,
+tout `src/domain/` parse, **304 tests verts contre 247** à l'ouverture, 21 suites contre
+16.
+
+La branche a de nouveau été créée **à l'orientation**, avant la première ligne. Deux
+jalons d'affilée : la leçon de `E1` tient.
+
+### Ce qui a été livré
+
+- `src/domain/workforce/` — six fichiers : `skill_track.gd`, `worker.gd`, `roster.gd`,
+  `skill_resolver.gd`, et les deux du rapport, `skill_gain.gd` et `progress_report.gd`.
+- `src/schema/workforce_balance.gd` + `data/balance/workforce_balance.tres`, chaînés
+  dans `BalanceData` — cinquième bloc.
+- `BuildingData.roster_places`, et `house.tres` qui cesse d'être une coquille vide.
+- `tests/domain/workforce/` — quatre suites, plus `workforce_balance_test.gd` et la
+  couture dans les deux suites de schéma voisines.
+- `scenes/dev/workforce_harness.gd`, `HARNESS` basculé sur `&"workforce"`.
+- `DESIGN.md` 3.4, 4.1 et 8 ; `README.md`.
+
+**`contracts/` n'a pas bougé d'une ligne de code**, et c'est le résultat que le jalon
+visait. `E1` avait été écrit en pensant à ici : `LaborUnit` portait déjà un
+multiplicateur par famille, `WorkLine` portait déjà la famille à créditer. `W1` était
+annoncé comme « le dernier moment où `LaborForce` peut bouger sans douleur » — elle n'a
+pas eu à bouger. Seul un docstring y a gagné une précision, celle de savoir ce que « le
+roster » veut dire une fois les absents retirés.
+
+### Quatre arbitrages avant d'écrire, dont un qui a changé le design
+
+**`CombatForce` sort de `W1` pour `F1`**, contre ce que `DESIGN.md` 8 annonçait. Son
+contenu est décidé par le format de combat, qui est `OUVERT` en 3.6 : écrite
+aujourd'hui, elle serait ou bien un clone strict de `LaborForce` qui ne prouve rien, ou
+bien une devinette sur des PV et de l'équipement. Et contrairement à `skill_family` à
+`E1`, la repousser ne coûte rien — `F1` l'écrira avec le `DamageReport`, pour le même
+système neuf. C'est la règle de `E1` appliquée à la classe qui l'avait fait énoncer.
+
+Ce que `W1` garantit à la place est plus solide qu'un second DTO : **`Roster` est le
+seul propriétaire des `Worker`**, et rien hors de `domain/workforce/` n'en voit un. Le
+vivier unique n'est plus une discipline d'écriture, c'est une conséquence de la
+structure.
+
+**La progression se fait par paliers**, pas par courbe continue. Un passage de niveau
+est un événement qu'on annonce, et un ouvrier qu'on peut appeler « Récolte 3 » existe
+dans une conversation comme un multiplicateur à 1,37 n'existera jamais. Une progression
+douce reste exprimable — c'est beaucoup de petits paliers.
+
+**Un second axe est entré, et il vient de l'humain.** À côté de la piste par famille,
+un **niveau d'ouvrier** alimenté par toute source d'XP — travail, combat, événement —,
+qui ne donne aucun multiplicateur et sert à distinguer un vétéran d'un bleu d'un coup
+d'œil. `DESIGN.md` ne le portait pas : le design est donc passé **en premier**, dans le
+commit d'ouverture, comme les empreintes libres à `C1` et la rotation à `C2`.
+
+Il est entré coupé en deux, et la coupure compte. L'**accumulateur et les paliers** sont
+écrits ; ce qu'un palier **offre** — le menu de compétences — devient `X5`. Une raison
+de ne pas tout repousser : « XP de toute source » veut dire que `F1` et les événements
+devront trouver le compteur déjà là, sinon chacun inventera où loger son XP.
+
+**L'absence de 3.9 entre maintenant**, minimale : un état de présence, et `to_labor()`
+qui ne projette que les présents. Coût réel : un booléen, un filtre, trois cas de test.
+C'est la contrainte qu'on ne rattrape pas après coup.
+
+### La règle qui relie les deux axes, et pourquoi elle est structurelle
+
+**Toute XP compte deux fois** — une fois pour la piste concernée, une fois pour le
+niveau. Un seul chiffre de gain les alimente tous les deux ; deux montants distincts
+auraient donné un levier de plus à régler par source d'XP, et deux chiffres à tenir
+cohérents pour rien.
+
+Ce qui rend la règle tenable est un choix d'encapsulation : **une `SkillTrack` ne sort
+jamais de son `Worker`**. La rendre laisserait un appelant la créditer seule, et
+l'invariant redeviendrait une consigne. Le prix est une poignée d'accesseurs qui
+délèguent, et il est faible.
+
+Le niveau est un **compteur réel et non la somme des pistes**. Aujourd'hui les deux
+coïncident, puisque le travail est la seule source d'XP écrite. Ils divergeront à la
+première XP qui n'appartient à aucune famille — celle d'un événement —, et le dériver
+maintenant obligerait alors à inventer une famille fourre-tout pour l'y loger.
+
+### Le cas de test qui porte le jalon
+
+C'est le premier de tout le projet à faire tourner **deux systèmes du domaine
+ensemble** : résoudre un soir, distribuer l'XP, reprojeter, résoudre le suivant — et la
+cabane rend 2 puis 3. `E1` avait écrit un journal de travail que personne ne lisait ;
+c'est ce cas qui prouve qu'il sert.
+
+Son jumeau compte autant : la même séquence **sans** la distribution rend 2 deux fois.
+Sans lui, le premier passerait tout aussi bien si la récolte montait toute seule.
+
+Deux autres tiennent un terrain que rien d'autre ne couvre — **spécialiser doit
+soulever une famille et laisser les autres à plat**, ce que `DESIGN.md` 3.4 promet
+depuis `E1` sans que rien ne le vérifie ; et **`to_labor()` doit laisser les absents**,
+la seule ligne qui paie pour 3.9 et celle dont la disparition ne réveillerait personne
+avant `X1`.
+
+### Le harnais, et le constat qu'il rapporte
+
+Premier harnais à composer deux systèmes : chaque soir, l'Économie résout, les Effectifs
+distribuent, la main-d'œuvre est reprojetée. C'est le rôle que `RunOrchestrator`
+reprendra à `I1`, et il tient en trois lignes.
+
+Il répond, et sa réponse n'est pas celle qu'on attendait : **la récolte reste plate
+dix-neuf soirs alors que toutes les pistes montent.** Le rendement est tronqué **par
+ouvrier et par soir** — une décision de `E1`, écrite et argumentée —, or sur des
+promesses à 2 ou 3, un cran de 0,15 est entièrement avalé tant que le multiplicateur n'a
+pas franchi l'entier suivant. La nourriture ne bouge qu'au soir 20 (×1,45), le bois et
+la pierre qu'au soir 26 (×1,60).
+
+**Le constat est structurel, pas un mauvais réglage** : aucune valeur du cran ne le
+supprime. Seuls des rendements plus gros, ou une troncature déplacée — accumuler en
+flottant et n'arrondir qu'une fois par ressource —, y changeraient quelque chose. Les
+deux sont des questions de `I3`, et la seconde touche `ProductionResolver`. À consigner
+plutôt qu'à corriger dans un jalon qui n'est pas le sien.
+
+Il chiffre aussi ce que l'absence coûte, ce qu'aucun test ne montre : Elric part au soir
+12, la carrière tombe de 4 pierre à 2, il revient six soirs plus tard avec une piste de
+retard sur ses camarades — et il n'a rien mangé pendant ce temps.
+
+C'est le quatrième harnais d'affilée à répondre quelque chose qu'aucune suite de tests
+ne pouvait donner. Le motif est maintenant une règle : ils travaillent sur les chiffres
+de `data/`, là où les tests travaillent sur des chiffres choisis.
+
+### Décisions
+
+**`SkillTrack.level_at()` est statique, publique, et sert aux deux axes.** Les paliers
+montent de la même façon des deux côtés ; seuls les réglages diffèrent. Une progression
+qui accélérerait sur un axe et pas sur l'autre serait une décision d'équilibrage
+déguisée en décision de code.
+
+**`SkillResolver` mute le `Roster` et rend un rapport.** Profil identique à
+`ProductionResolver` qui mute le `Ledger`, et pour la même raison : le roster est l'état
+interne des Effectifs, ce qui est précisément pourquoi il ne figure dans aucune ligne de
+contrat.
+
+**`ProgressReport` reste dans `domain/workforce/`.** Comme `PickResult` est resté dans
+`domain/terrain/` : aucun second système du domaine ne le franchit, et la table des DTO
+de `CLAUDE.md` ne le liste pas. Son seul consommateur sera un adapter de `W2`.
+
+**Chaque ligne de travail est créditée séparément**, sans regroupement par ouvrier.
+Aujourd'hui les deux reviennent au même — une `Assignment` envoie un ouvrier à une seule
+ancre —, mais rien n'en dépend, et deux lignes du même ouvrier cumuleraient
+correctement. Un cas de test le tient.
+
+**Un ouvrier nommé au journal mais absent du roster est sauté sans un mot.** Miroir exact
+de `ProductionResolver._work_lines()` : une affectation peut avoir survécu à celui qui la
+portait, et un mort ne progresse pas.
+
+**`roster_places` est un champ plat sur `BuildingData`**, à côté de `storage_bonus` et
+pour la même raison : c'est un nombre qui relève un plafond global, pas une nature de
+bâtiment. La doctrine du zéro ne s'y applique donc pas non plus — douze bâtiments sur
+treize ne logent personne. Il remonte sous son propre nom et non sous le préfixe
+économique, parce que c'est un chiffre des Effectifs.
+
+**Le roster ne consulte jamais son plafond.** `add()` n'oppose aucun refus : c'est la
+couche qui orchestre la journée qui pose les deux questions à la suite, exactement comme
+elle enchaîne « payable » et « posable ». Un cas de test le dit à voix haute, pour que
+personne ne « répare » `add()` plus tard.
+
+**Le harnais lit la famille dans `data/` au lieu de l'écrire.** Un `&"harvest"` en dur y
+survivrait à un renommage du catalogue sans que rien ne le signale. Constat au passage :
+les quatre producteurs de `data/buildings/` emploient tous la même famille, donc la
+spécialisation *entre* familles n'est pas encore observable sur le contenu réel —
+l'atelier, qui en emploierait une autre, n'a toujours pas de bloc de production.
+
+**Les prénoms sont codés en dur dans le harnais.** Un catalogue de prénoms dans `data/`
+est du contenu, donc `I3`, exactement comme les empreintes inventées à `C1`.
+
+**La duplication des rapports texte n'a pas été traitée.** `_make_label()` existe
+maintenant en quatre exemplaires, `_bundle_text()` en deux. La mettre en commun est une
+passe à part entière — les variantes diffèrent, surimpression sur de la 3D contre
+rapport plein écran —, et ce n'était pas le sujet de `W1`. Consigné ici pour que ça ne
+passe pas pour un oubli.
+
+### Ce qui reste
+
+Rien pour `W1`. Cinq choses volontairement laissées de côté :
+
+- **les traits** — sous l'`OUVERT` de granularité de 3.4, et désormais rattachés à `X5` :
+  c'est aux paliers de niveau qu'ils s'acquerront.
+- **le recrutement** — `OUVERT` de 3.4. Le plafond de places existe ; ce qui le remplit
+  non.
+- **la conséquence de la famine** — `OUVERT` de 3.3. La tentation était ici, puisque les
+  Effectifs possèdent les unités ; les quatre issues restent entières.
+- **blessures, morts, XP de combat, `CombatForce`** — `F1`, tous les quatre.
+- **le panneau d'affectation, les fiches, l'auto-affectation** — `W2`, nommément.
+
+Et deux constats à porter ailleurs :
+
+- **la troncature du rendement** — `I3`, et elle touche `ProductionResolver`.
+- **la mise en commun des rapports texte des harnais** — une passe de nettoyage, sans
+  jalon attitré.
+
+### Prochain jalon
+
+**`C4`** — les chantiers. Il rouvrira les treize `.tres` de `data/buildings/` pour y
+écrire la colonne **Chantier** de `DESIGN.md` 4.1, fera porter l'avancement à
+`CityState`, et le fera traverser `CitySnapshot`. `D1` et `D2` suivent, puis `I1`.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'input
+ajoutée.
+
+- `F5` lance le **harnais Effectifs** : deux tableaux texte et un verdict, aucune 3D. Il
+  s'imprime aussi sur la sortie standard, donc `godot --headless --quit --path .` suffit
+  à le lire. `HARNESS` revient à `&"economy"`, `&"city"` ou `&"terrain"` en un mot dans
+  `scenes/dev/dev_boot.gd`.
+- `data/balance/workforce_balance.tres` naît **sans `uid`**, comme à chaque jalon :
+  **diff à committer, pas à jeter**.
+- **les sept chiffres d'équilibrage sont à relire.** `DESIGN.md` ne donne aucune courbe
+  de compétence : `base_roster_places`, `xp_per_shift`, les deux seuils, les deux
+  plafonds et le cran d'efficacité sont **inventés**, comme les empreintes depuis `C1`.
+  Le harnais est fait pour dire ce qu'ils valent, et il a déjà répondu que le cran est
+  trop fin pour les rendements actuels. Le boot refuse un champ vide, donc les corriger
+  dans l'inspecteur est sans risque.
+- `house.tres` porte désormais `roster_places = 2`, repris du tableau de `DESIGN.md` 4.1.
+
+---
+
 ## 2026-08-25 — `E1b` : le bloc de production, le minerai, et les douze bâtiments
 
 **État : terminé.** Six commits sur `feat/e1b-production-block`, tirée de

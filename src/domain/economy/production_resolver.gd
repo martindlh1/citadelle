@@ -16,15 +16,19 @@ extends RefCounted
 ## avant le multiplicateur de l'ouvrier.
 
 ## Capacité de la réserve pour cette ville : la base, plus ce que les entrepôts
-## ajoutent.
+## **achevés** ajoutent.
 ##
 ## Publique et appelable seule, parce que le HUD de E2 doit afficher « 47 / 200 » sans
 ## résoudre quoi que ce soit.
+##
+## completed() et non buildings() : un entrepôt en chantier a payé son coût et occupe
+## ses cellules, mais il n'a pas de toit. Le laisser relever la réserve ne casserait
+## rien — c'est bien pour ça qu'il faut le dire ici plutôt que de compter dessus.
 static func capacity_for(city: CitySnapshot, balance: EconomyBalance) -> int:
 	assert(city != null, "capacité demandée sans ville")
 	assert(balance != null, "capacité demandée sans équilibrage")
 	var capacity := balance.base_storage_cap
-	for building in city.buildings():
+	for building in city.completed():
 		capacity += building.data().storage_bonus
 	return capacity
 
@@ -63,13 +67,20 @@ static func resolve(city: CitySnapshot, assign: Assignment, labor: LaborForce,
 ## Qui tient effectivement un poste, et où.
 ##
 ## Les slots se remplissent dans l'ordre de l'affectation : sur un bâtiment
-## sur-affecté, les premiers arrivés travaillent et les autres chôment. Trois cas
+## sur-affecté, les premiers arrivés travaillent et les autres chôment. Quatre cas
 ## ne produisent aucune ligne et se retrouvent donc oisifs — une ancre qui ne porte
-## plus rien, un bâtiment sans bloc de production, et un slot déjà pris.
+## plus rien, un chantier inachevé, un bâtiment sans bloc de production, et un slot
+## déjà pris.
 ##
-## C'est ici, et nulle part ailleurs, que se teste l'existence du bloc : toute ligne
-## de travail en sort, donc tout ce qui consomme une ligne sait que le bâtiment
-## produit. Un entrepôt reste un bâtiment parfaitement valide où personne ne travaille.
+## C'est ici, et nulle part ailleurs, que se testent l'achèvement et l'existence du
+## bloc : toute ligne de travail en sort, donc tout ce qui consomme une ligne sait que
+## le bâtiment produit **et** qu'il est fini. Un entrepôt reste un bâtiment parfaitement
+## valide où personne ne travaille, et une ferme en chantier aussi.
+##
+## L'achèvement passe avant le bloc, et l'ordre n'est pas indifférent : un ouvrier
+## envoyé sur une ferme en chantier chôme parce qu'elle n'est pas finie, pas parce
+## qu'elle ne produirait pas. La distinction ne se lit nulle part aujourd'hui — les deux
+## mènent au même oisif —, mais elle se lira le jour où le rapport dira pourquoi.
 ##
 ## Un ouvrier que l'affectation nomme mais que la main-d'œuvre ne connaît pas est
 ## ignoré sans un mot, et ne compte même pas comme oisif : une affectation peut avoir
@@ -80,6 +91,8 @@ static func _work_lines(city: CitySnapshot, assign: Assignment,
 	for anchor in assign.anchors():
 		var building := city.at_anchor(anchor)
 		if building == null:
+			continue
+		if not building.is_complete():
 			continue
 		var data := building.data()
 		if not data.produces():

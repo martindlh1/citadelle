@@ -13,6 +13,27 @@ extends MultiMeshInstance3D
 ## Le renderer ne connaît aucun bâtiment par son nom. Il lit couleur et hauteur sur le
 ## BuildingData, comme celui du terrain les lit sur le TerrainData : ajouter un
 ## bâtiment reste une édition de data.
+##
+## Depuis C4 il dessine aussi les chantiers, et il les dessine **autrement**. Ce que
+## data/ décide reste ce qu'un bâtiment FINI vaut ; l'écart qu'un chantier montre est
+## une décision d'affichage, donc des constantes d'adapter, exactement comme
+## PlacementGhost tient ses deux teintes ici plutôt que dans data/.
+
+## Part de sa hauteur finale qu'un chantier atteint au tout premier cran, avant même
+## qu'une action ait été jouée.
+##
+## Non nulle, et c'est le seul chiffre des trois qui compte vraiment : à zéro, un
+## chantier fraîchement posé serait une boîte d'épaisseur nulle, donc invisible, et on
+## ne verrait pas qu'on vient de payer une case. Il faut qu'il se voie POUR se lire
+## comme inachevé.
+const SITE_BASE_RATIO := 0.2
+
+## Teinte vers laquelle la couleur d'un chantier est tirée — un gris de fondation.
+##
+## Sa part décroît à mesure que le chantier monte, pilotée par le même nombre que la
+## hauteur : un bâtiment reprend sa couleur en même temps qu'il prend sa taille. Voir
+## _raised().
+const SITE_COLOR := Color(0.62, 0.60, 0.55, 1.0)
 
 var _metrics: TerrainMetrics
 
@@ -42,9 +63,12 @@ func rebuild(city: CityState) -> void:
 	var index := 0
 	for building in placed:
 		var data := building.data()
+		var raised := _raised(building)
 		# La hauteur est en fractions de tuile : c'est tile_size qui la met à l'échelle
 		# du monde, pour qu'un réglage de la taille des cellules emporte les bâtiments.
-		var thickness := data.height * tile
+		# Un chantier n'en montre qu'une part, qui monte avec ses crans.
+		var thickness := data.height * tile * raised
+		var color := SITE_COLOR.lerp(data.color, raised)
 		for cell in building.cells():
 			var base := _metrics.cell_surface_center(cell, building.height())
 			# La BoxMesh est centrée sur son origine : on monte d'une demi-hauteur pour
@@ -52,8 +76,24 @@ func rebuild(city: CityState) -> void:
 			base.y += thickness * 0.5
 			multimesh.set_instance_transform(index,
 				Transform3D(Basis.IDENTITY.scaled(Vector3(tile, thickness, tile)), base))
-			multimesh.set_instance_color(index, data.color)
+			multimesh.set_instance_color(index, color)
 			index += 1
+
+## Part de sa hauteur et de sa couleur finales que ce bâtiment montre : 1.0 une fois
+## achevé, et entre SITE_BASE_RATIO et 1.0 tant qu'il est en chantier.
+##
+## Les deux signaux — la taille et la couleur — sont pilotés par le MÊME nombre, et
+## c'est délibéré : réglés séparément, ils finiraient par se contredire, une boîte
+## presque haute encore grise. Ici un chantier reprend sa couleur en même temps qu'il
+## prend sa taille.
+##
+## L'achèvement est testé avant tout calcul : sur un bâtiment sans coût de chantier —
+## le Cœur —, le rapport diviserait par zéro.
+func _raised(building: PlacedBuilding) -> float:
+	if building.is_complete():
+		return 1.0
+	var done := float(building.progress()) / float(building.data().build_actions)
+	return SITE_BASE_RATIO + (1.0 - SITE_BASE_RATIO) * done
 
 ## Combien de boîtes cette ville demande : la somme des cellules de ses empreintes.
 func _cell_count(placed: Array[PlacedBuilding]) -> int:

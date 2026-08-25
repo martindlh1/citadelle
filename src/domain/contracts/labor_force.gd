@@ -10,6 +10,11 @@ extends RefCounted
 ## monde, oisifs compris. C'est ce qui rend un ouvrier non affecté coûteux, donc le
 ## pool tendu, ce qui est la tension centrale du jeu.
 ##
+## « Le roster » veut dire les ouvriers **présents**, ce que W1 a tranché en ne
+## projetant pas les absents : un ouvrier parti en expédition ne mange pas. La bascule
+## inverse demanderait de distinguer ici « qui peut travailler » de « qui mange », soit
+## un champ de plus sur ce contrat. Voir DESIGN.md 3.4 et 3.9.
+##
 ## Immuable.
 
 ## Ouvriers, dans l'ordre où les Effectifs les ont donnés.
