@@ -274,12 +274,23 @@ func _reference_family() -> StringName:
 			return building.data().production.skill_family
 	return &""
 
+## La ville de travail, **tous chantiers achevés**.
+##
+## Elle est fabriquée en instantanés à la main, sans CityState : ce harnais n'a pas de
+## carte et n'a rien à valider. L'avancement est donc écrit directement, à hauteur de ce
+## que chaque bâtiment réclame.
+##
+## Même choix que dans le harnais Économie, et pour la même raison : sans lui, aucun
+## poste ne s'ouvrirait, donc aucune ligne de travail, donc aucune XP — les deux
+## tableaux et le verdict de ce harnais se videraient entièrement. Le délai de chantier
+## se joue à I1, quand *Construire* existera comme carte.
 func _make_city() -> CitySnapshot:
 	var placed: Array[BuildingSnapshot] = []
 	for index in CITY.size():
 		var data := GameDatabase.get_building(CITY[index])
 		assert(data != null, "bâtiment introuvable : %s" % CITY[index])
-		placed.append(BuildingSnapshot.create(data, Vector2i(index * ANCHOR_STRIDE, 0), 0))
+		placed.append(BuildingSnapshot.create(
+			data, Vector2i(index * ANCHOR_STRIDE, 0), 0, 0, data.build_actions))
 	return CitySnapshot.create(placed)
 
 ## Un ouvrier par prénom, tous neufs et tous présents.

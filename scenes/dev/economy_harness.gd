@@ -119,11 +119,28 @@ func _build(data: BuildingData) -> String:
 		return "posé en %s, gratuit" % anchor
 	return "posé en %s pour %s" % [anchor, _bundle_text(data.cost)]
 
-## Pose et dépense, la bourse ayant déjà répondu oui. Partagée entre la construction
-## d'ouverture et la file, pour que les deux paient exactement de la même façon.
+## Pose, dépense, et **achève le chantier sur-le-champ**, la bourse ayant déjà répondu
+## oui. Partagée entre la construction d'ouverture et la file, pour que les deux paient
+## exactement de la même façon.
+##
+## L'achèvement immédiat est un choix, pas un oubli. Depuis C4 une pose ouvre un
+## chantier, et ce harnais n'a aucune action *Construire* à lui jeter dessus — la carte
+## est D1 et D2. Sans ça, ses sept bâtiments resteraient des chantiers pendant vingt
+## soirs et le rapport tomberait à zéro partout.
+##
+## L'alternative — un cran par soir — est la version intéressante, et elle répondrait à
+## une vraie question : ce que le délai de chantier coûte à l'économie. Elle déplacerait
+## en revanche tous les repères écrits aux journaux de E1b et W1 — le soir où la mine se
+## paie, celui où la famine cesse — depuis un jalon dont le sujet est la Construction.
+## Elle a un meilleur moment : I1, où l'orchestrateur séquence une vraie journée et où
+## le délai est **joué** au lieu d'être simulé par un harnais qui fait semblant d'avoir
+## des cartes. Le chantier se regarde d'ici là dans le harnais Construction, qui est
+## fait pour ça.
 func _place(data: BuildingData, anchor: Vector2i) -> bool:
 	if not _city.place(_terrain, data, anchor).is_ok():
 		return false
+	while _city.advance(anchor):
+		pass
 	_ledger.spend(data.cost)
 	return true
 
