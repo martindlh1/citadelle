@@ -17,6 +17,9 @@ const WOOD := &"wood"
 const FOOD := &"food"
 const HUT := Vector2i(1, 1)
 
+## L'identifiant de la seule action que ces deux soirs posent.
+const HUT_ACTION := 1
+
 func test_an_evening_without_work_credits_nobody() -> void:
 	var roster := _roster([&"ana", &"bo"])
 	var progress := SkillResolver.award(roster, _report([]), _balance())
@@ -40,7 +43,7 @@ func test_each_worker_is_credited_once_per_post_held() -> void:
 	assert_int(progress.gains().size()).is_equal(2)
 	assert_int(progress.total_xp()).is_equal(20)
 
-## Rien ici ne dépend du fait qu'une Assignment envoie un ouvrier à une seule ancre.
+## Rien ici ne dépend du fait qu'une Assignment envoie un ouvrier à une seule action.
 ## Le jour où elle en autoriserait deux, les gains cumulent au lieu de s'écraser.
 func test_two_lines_for_the_same_worker_accumulate() -> void:
 	var roster := _roster([&"ana"])
@@ -96,14 +99,14 @@ func test_a_worker_who_learned_yesterday_harvests_more_today() -> void:
 	var ledger := Ledger.from_stock(_stock(), 500)
 	var economy := _economy()
 
-	var first := ProductionResolver.resolve(city, assign, roster.to_labor(_balance()),
-		ledger, economy)
+	var first := ProductionResolver.resolve(_terrain(), city, _plan(), assign,
+		roster.to_labor(_balance()), ledger, economy, _actions())
 	assert_int(first.produced()[WOOD]).is_equal(2)
 
 	SkillResolver.award(roster, first, _balance())
 
-	var second := ProductionResolver.resolve(city, assign, roster.to_labor(_balance()),
-		ledger, economy)
+	var second := ProductionResolver.resolve(_terrain(), city, _plan(), assign,
+		roster.to_labor(_balance()), ledger, economy, _actions())
 	assert_int(second.produced()[WOOD]).is_equal(3)
 
 ## L'autre moitié du même constat : sans distribution, rien ne bouge. Sans ce cas, le
@@ -115,10 +118,10 @@ func test_without_the_award_the_second_evening_repeats_the_first() -> void:
 	var ledger := Ledger.from_stock(_stock(), 500)
 	var economy := _economy()
 
-	var first := ProductionResolver.resolve(city, assign, roster.to_labor(_balance()),
-		ledger, economy)
-	var second := ProductionResolver.resolve(city, assign, roster.to_labor(_balance()),
-		ledger, economy)
+	var first := ProductionResolver.resolve(_terrain(), city, _plan(), assign,
+		roster.to_labor(_balance()), ledger, economy, _actions())
+	var second := ProductionResolver.resolve(_terrain(), city, _plan(), assign,
+		roster.to_labor(_balance()), ledger, economy, _actions())
 	assert_int(second.produced()[WOOD]).is_equal(first.produced()[WOOD])
 
 func _roster(ids: Array[StringName]) -> Roster:
@@ -154,10 +157,35 @@ func _city() -> CitySnapshot:
 	placed.append(BuildingSnapshot.create(hut, HUT, 0))
 	return CitySnapshot.create(placed)
 
-func _at_the_hut(worker: StringName) -> Dictionary[StringName, Vector2i]:
-	var table: Dictionary[StringName, Vector2i] = {}
-	table[worker] = HUT
+## Le plan d'un soir : une récolte posée sur la cabane, un poste.
+##
+## Fabriqué à la main plutôt que par un ActionBoard : ce fichier compose l'Économie et
+## les Effectifs, et lui ajouter le ciblage lui demanderait un vrai relief pour rien.
+func _plan() -> ActionPlan:
+	var posted: Array[PlayedAction] = [
+		PlayedAction.create(HUT_ACTION, &"harvest", HUT, PlayedAction.Kind.BUILDING, 1)]
+	return ActionPlan.create(posted)
+
+func _at_the_hut(worker: StringName) -> Dictionary[StringName, int]:
+	var table: Dictionary[StringName, int] = {}
+	table[worker] = HUT_ACTION
 	return table
+
+## Un relief quelconque. Ces deux soirs se jouent dans un bâtiment, mais le résolveur
+## réclame le contrat Terrain depuis que les actions se jouent aussi à cru.
+func _terrain() -> TerrainQuery:
+	var plain := TerrainData.new()
+	plain.id = &"plain"
+	plain.build = TerrainData.Build.ALLOWED
+	return HeightGrid.create(Vector2i(8, 8), 0, plain).to_query()
+
+## Équilibrage des actions à cru, sans table de sources : rien ici ne se joue à cru.
+func _actions() -> ActionBalance:
+	var balance := ActionBalance.new()
+	balance.bare_capacity = 1
+	balance.bare_yield = 1
+	balance.bare_skill_family = HARVEST
+	return balance
 
 func _stock() -> Dictionary[StringName, int]:
 	var stock: Dictionary[StringName, int] = {}

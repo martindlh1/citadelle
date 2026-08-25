@@ -10,8 +10,14 @@ extends RefCounted
 ## ancre : sans lui, le résolveur de production balaierait toute la ville une fois par
 ## ouvrier.
 ##
-## Il n'y a **pas** d'index par cellule. C3 et le Combat en voudront peut-être un ; on
-## n'ouvre pas une porte que personne ne pousse.
+## L'index par cellule a été ajouté à D2, qui est le premier à pousser la porte que ce
+## docstring gardait fermée. Une action se joue au clic sur une cellule quelconque de
+## l'empreinte — on désigne un coin de la ferme, on vise la ferme —, exactement comme une
+## démolition, et c'est ce que CityState.anchor_at() fait déjà côté Construction.
+##
+## Il ne coûte aucune entrée de plus au contrat : les cellules se déduisent des
+## BuildingSnapshot que create() reçoit déjà, puisque chacun sait son empreinte et son
+## orientation.
 ##
 ## Depuis C4 il transporte aussi l'état d'avancement des chantiers, et il le fait sans
 ## trier : buildings() rend tout, completed() rend les finis. C'est le contrat de
@@ -26,6 +32,9 @@ var _buildings: Array[BuildingSnapshot] = []
 ## Ancre -> bâtiment.
 var _by_anchor: Dictionary[Vector2i, BuildingSnapshot] = {}
 
+## Cellule occupée -> bâtiment qui l'occupe, ancre comprise.
+var _by_cell: Dictionary[Vector2i, BuildingSnapshot] = {}
+
 ## Vue figée de ces bâtiments, dans cet ordre.
 static func create(buildings: Array[BuildingSnapshot]) -> CitySnapshot:
 	var snapshot := CitySnapshot.new()
@@ -35,6 +44,10 @@ static func create(buildings: Array[BuildingSnapshot]) -> CitySnapshot:
 			"deux bâtiments sur la même ancre : %s" % building.anchor())
 		snapshot._buildings.append(building)
 		snapshot._by_anchor[building.anchor()] = building
+		for cell in building.cells():
+			assert(not snapshot._by_cell.has(cell),
+				"deux bâtiments se recouvrent en %s" % cell)
+			snapshot._by_cell[cell] = building
 	return snapshot
 
 ## Vue d'une ville sans aucun bâtiment.
@@ -85,3 +98,16 @@ func at_anchor(anchor: Vector2i) -> BuildingSnapshot:
 	if not _by_anchor.has(anchor):
 		return null
 	return _by_anchor[anchor]
+
+## Bâtiment qui occupe cette cellule, ou null si elle est libre.
+##
+## Le pendant de CityState.building_at(), et null pour la même raison : un adapter
+## interroge la cellule survolée à chaque image et la plupart sont libres. « Rien ici »
+## est une réponse, pas une faute d'appelant.
+##
+## Répond hors carte comme dedans : la ville ne connaît pas les bornes, et « rien n'est
+## posé là » reste vrai d'une cellule qui n'existe pas.
+func at_cell(cell: Vector2i) -> BuildingSnapshot:
+	if not _by_cell.has(cell):
+		return null
+	return _by_cell[cell]

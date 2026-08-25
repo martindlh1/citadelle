@@ -25,7 +25,7 @@ extends RefCounted
 ##
 ## Chaque ligne est créditée et rapportée séparément plutôt que regroupée par ouvrier.
 ## Aujourd'hui les deux reviennent au même — une Assignment envoie un ouvrier à une
-## seule ancre, donc il tient au plus un poste par soir —, mais rien ici n'en dépend :
+## seule action, donc il tient au plus un poste par soir —, mais rien ici n'en dépend :
 ## deux lignes du même ouvrier cumuleraient correctement, et leurs paliers seraient
 ## rapportés dans l'ordre où ils ont été franchis.
 ##

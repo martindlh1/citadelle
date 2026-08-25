@@ -53,6 +53,7 @@ var _terrain: TerrainQuery
 var _city: CityState
 var _ledger: Ledger
 var _economy: EconomyBalance
+var _actions: ActionBalance
 var _lines := PackedStringArray()
 
 ## Ce que la bourse a refusé à l'ouverture, dans l'ordre. Se vide un soir à la fois.
@@ -61,6 +62,7 @@ var _deferred: Array[StringName] = []
 func _ready() -> void:
 	var balance := GameDatabase.get_balance()
 	_economy = balance.economy
+	_actions = balance.actions
 	_grid = TerrainGen.generate(SEED, balance.terrain_gen.map_size, balance.terrain_gen)
 	_terrain = _grid.to_query()
 	_city = CityState.new()
@@ -177,26 +179,41 @@ func _first_valid_anchor(data: BuildingData) -> Vector2i:
 	return NO_CELL
 
 func _report_workforce() -> void:
-	var assign := _assignment()
+	var assign := _assignment(_plan())
 	_lines.append("Effectifs : %d ouvriers, %d affectés au départ, %d oisifs"
 		% [ROSTER, assign.size(), ROSTER - assign.size()])
 	_lines.append("  l'upkeep tombe sur les %d, oisifs compris — %d nourriture par soir"
 		% [ROSTER, ROSTER * _economy.upkeep_per_worker])
 	_lines.append("")
 
+## Une carte *Récolter* posée sur chaque bâtiment de la ville.
+##
+## C'est ce que D2 change au soir, et ce fichier le montre sans le dire : une ville ne
+## produit plus toute seule, il faut lui jouer des cartes dessus. Le harnais les pose
+## toutes, ce qui reproduit exactement le comportement de E1 — et c'est bien ce qu'on
+## veut ici, puisque ce fichier mesure l'économie et non le deck.
+##
+## Rien n'est filtré avant d'appeler : le ciblage refuse de lui-même les entrepôts, les
+## habitations et les chantiers, et le harnais ne rejoue pas ses règles à sa place. C'est
+## la même discipline que la pose au clic dans le harnais Construction.
+func _plan() -> ActionPlan:
+	var board := ActionBoard.new()
+	var city := _city.to_snapshot()
+	for building in _city.buildings():
+		board.post(ActionTargeting.CARD_HARVEST, building.anchor(), _terrain, city,
+			_actions)
+	return board.to_plan()
+
 ## Les postes se remplissent dans l'ordre de pose, et on s'arrête quand il n'y en a
 ## plus. Le reste du roster chôme, ce qui est exactement ce qu'on veut voir payer.
-func _assignment() -> Assignment:
-	var table: Dictionary[StringName, Vector2i] = {}
+func _assignment(plan: ActionPlan) -> Assignment:
+	var table: Dictionary[StringName, int] = {}
 	var hired := 0
-	for building in _city.buildings():
-		var data := building.data()
-		if not data.produces():
-			continue
-		for _slot in data.production.slots:
+	for action in plan.actions():
+		for _post in action.capacity():
 			if hired >= ROSTER:
 				break
-			table[_worker(hired)] = building.anchor()
+			table[_worker(hired)] = action.id()
 			hired += 1
 	return Assignment.create(table)
 
@@ -210,8 +227,9 @@ func _report_evenings() -> void:
 		% [PRODUCED_WIDTH, "produit"])
 	for evening in range(1, EVENINGS + 1):
 		var raised := _drain_queue()
-		var report := ProductionResolver.resolve(_city.to_snapshot(), _assignment(), labor,
-			_ledger, _economy)
+		var plan := _plan()
+		var report := ProductionResolver.resolve(_terrain, _city.to_snapshot(), plan,
+			_assignment(plan), labor, _ledger, _economy, _actions)
 		if first_famine == 0 and report.is_famine():
 			first_famine = evening
 		if first_full == 0 and _ledger.is_full():
