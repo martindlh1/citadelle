@@ -196,6 +196,11 @@ func _report_the_cap() -> void:
 ##
 ## Elle bâtit par `city().place()` plutôt qu'en jouant des cartes : un harnais a le droit
 ## de bâtir sans jouer, et le sujet ici est la vague et non la pose.
+##
+## Elle **arme** chaque vague avant de la faire tomber, depuis que `I2` a daté les vagues :
+## on ne se bat plus que contre une vague en attente, ce que `close_the_day()` fait le reste
+## du temps en lisant le calendrier. Le cycle avance donc d'une phase à chaque ligne, ce qui
+## est sans effet sur ce que ces tables mesurent — un état de ville et un roster.
 func _report_chronicle(balance: BalanceData) -> void:
 	var state := _open_run(balance)
 	_lines.append("%d vagues sur un vrai village — %d bâtiments dont un chantier, %d ouvriers"
@@ -205,7 +210,8 @@ func _report_chronicle(balance: BalanceData) -> void:
 	for index in CHRONICLE_WAVES:
 		var wave := _waves[mini(index, _waves.size() - 1)]
 		var defense := _defense_of(state)
-		var report := RunOrchestrator.fight(state, wave)
+		state.arm_wave(wave)
+		var report := RunOrchestrator.fight(state)
 		_lines.append("  %-*s %5d %5d %6d  %s" % [NAME_WIDTH, wave.label, defense,
 			report.damage().breach(), report.total_plundered(), _aftermath(state, report)])
 	_lines.append("")

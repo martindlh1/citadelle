@@ -101,6 +101,25 @@ func closes_the_day() -> bool:
 		return false
 	return _index == _phases.size() - 1
 
+## Arrête le cycle ici, quel qu'ait été le jour. Un run peut finir avant sa dernière
+## journée.
+##
+## `DESIGN.md` 5 donne deux défaites — le Cœur détruit, le roster vide — et aucune n'attend
+## la quinzième journée. Il fallait donc que « le run est fini » puisse devenir vrai au
+## milieu, et le faire ici plutôt que d'ajouter un second drapeau ailleurs est le seul
+## choix qui garde **une** vérité : `is_over()` répond pour les deux fins, et tous les
+## gardes déjà écrits — `permits()`, `resolves()`, `closes_the_day()`, `advance()` — se
+## ferment sans qu'une ligne bouge. Deux « le run est fini » qui peuvent se contredire
+## seraient pire que le cas qu'ils couvrent.
+##
+## Il ne dit pas **pourquoi**, et ce n'est pas son affaire : la cause et le score sont un
+## `RunOutcome`, que `RunState` porte. Le cycle ne connaît que des jours.
+##
+## Appelable sur un cycle déjà terminé, où il ne fait rien : une victoire se constate
+## justement après que le dernier jour est passé.
+func end() -> void:
+	_day = maxi(_day, _days + 1)
+
 ## Passe à la phase suivante. Rend vrai si un nouveau jour vient de s'ouvrir.
 ##
 ## Le booléen porte l'information qu'un appelant ne peut pas déduire sans avoir gardé

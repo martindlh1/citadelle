@@ -672,7 +672,7 @@ func test_a_held_wave_leaves_the_run_alone() -> void:
 	var state := _open()
 	_raise(state, CARD_STORE, SPOT)
 	var before := state.ledger().total()
-	var report := RunOrchestrator.fight(state, _wave(_defense(state)))
+	var report := _strike(state, _wave(_defense(state)))
 	assert_bool(report.is_held()).is_true()
 	assert_int(state.city().count()).is_equal(1)
 	assert_int(state.roster().size()).is_equal(3)
@@ -682,7 +682,7 @@ func test_a_held_wave_leaves_the_run_alone() -> void:
 func test_a_wave_that_breaks_through_takes_the_building_out() -> void:
 	var state := _open()
 	_raise(state, CARD_STORE, SPOT)
-	var report := RunOrchestrator.fight(state, _wave(_defense(state) + HIT_POINTS))
+	var report := _strike(state, _wave(_defense(state) + HIT_POINTS))
 	assert_array(report.damage().destroyed()).is_equal([SPOT])
 	assert_int(state.city().count()).is_equal(0)
 	assert_bool(state.city().is_occupied(SPOT)).is_false()
@@ -695,7 +695,7 @@ func test_a_destroyed_warehouse_lowers_the_reserve() -> void:
 	var state := _open()
 	_raise(state, CARD_STORE, SPOT)
 	assert_int(state.ledger().capacity()).is_equal(BASE_CAP + STORE_BONUS)
-	RunOrchestrator.fight(state, _wave(_defense(state) + HIT_POINTS))
+	_strike(state, _wave(_defense(state) + HIT_POINTS))
 	assert_int(state.ledger().capacity()).is_equal(BASE_CAP)
 
 ## La vague emporte ce que la brèche lui vaut, et c'est le `Ledger` qui décide **quoi** :
@@ -703,7 +703,7 @@ func test_a_destroyed_warehouse_lowers_the_reserve() -> void:
 func test_the_wave_carries_off_what_the_breach_is_worth() -> void:
 	var state := _open()
 	var before := state.ledger().total()
-	var report := RunOrchestrator.fight(state, _wave(_defense(state) + 4))
+	var report := _strike(state, _wave(_defense(state) + 4))
 	assert_int(report.damage().plunder()).is_equal(4)
 	assert_int(report.total_plundered()).is_equal(4)
 	assert_int(state.ledger().total()).is_equal(before - 4)
@@ -714,7 +714,7 @@ func test_the_wave_carries_off_what_the_breach_is_worth() -> void:
 func test_an_empty_reserve_gives_nothing_up() -> void:
 	var state := _open()
 	state.ledger().take_share(state.ledger().total())
-	var report := RunOrchestrator.fight(state, _wave(_defense(state) + 4))
+	var report := _strike(state, _wave(_defense(state) + 4))
 	assert_int(report.damage().plunder()).is_equal(4)
 	assert_int(report.total_plundered()).is_equal(0)
 
@@ -722,8 +722,7 @@ func test_an_empty_reserve_gives_nothing_up() -> void:
 ## places, celui qui est resté au village est en sécurité quoi qu'il arrive.
 func test_the_fallen_leave_the_roster() -> void:
 	var state := _open()
-	var report := RunOrchestrator.fight(state,
-		_wave(_defense(state) + BREACH_PER_CASUALTY))
+	var report := _strike(state, _wave(_defense(state) + BREACH_PER_CASUALTY))
 	assert_int(report.damage().lost().size()).is_equal(1)
 	assert_int(state.roster().size()).is_equal(2)
 	assert_bool(state.roster().has(report.damage().lost()[0])).is_false()
@@ -733,8 +732,7 @@ func test_the_fallen_leave_the_roster() -> void:
 ## on retire, puis on crédite, et le résolveur saute un ouvrier qu'il ne connaît plus.
 func test_the_fallen_earn_nothing() -> void:
 	var state := _open()
-	var report := RunOrchestrator.fight(state,
-		_wave(_defense(state) + BREACH_PER_CASUALTY))
+	var report := _strike(state, _wave(_defense(state) + BREACH_PER_CASUALTY))
 	var rewarded: Array[StringName] = []
 	for gain in report.progress().gains():
 		rewarded.append(gain.worker())
@@ -744,14 +742,14 @@ func test_the_fallen_earn_nothing() -> void:
 ## une piste comme un chantier depuis `I1`, sans une ligne de GDScript qui l'énumère.
 func test_holding_the_line_pays_the_combat_track() -> void:
 	var state := _open()
-	RunOrchestrator.fight(state, _wave(_defense(state)))
+	_strike(state, _wave(_defense(state)))
 	assert_int(state.roster().worker(&"ana").track_xp(COMBAT)).is_equal(XP_PER_SHIFT)
 
 ## Un homme resté au village ne gagne rien : il n'était pas sur la ligne. C'est le revers
 ## exact de « il ne défend rien », et les deux viennent de la même borne.
 func test_a_man_left_at_the_village_earns_nothing() -> void:
 	var state := _open()
-	RunOrchestrator.fight(state, _wave(_defense(state)))
+	_strike(state, _wave(_defense(state)))
 	assert_int(state.roster().worker(&"cy").track_xp(COMBAT)).is_equal(0)
 
 ## **Une vague ne demande pas la permission à la phase.** Les quatre autres portes de ce
@@ -761,7 +759,7 @@ func test_a_man_left_at_the_village_earns_nothing() -> void:
 func test_a_wave_does_not_ask_the_phase() -> void:
 	var state := _open()
 	RunOrchestrator.end_phase(state)
-	var report := RunOrchestrator.fight(state, _wave(_defense(state) + HIT_POINTS))
+	var report := _strike(state, _wave(_defense(state) + HIT_POINTS))
 	assert_bool(report.is_held()).is_false()
 
 ## Le déterminisme, sur le chemin neuf : deux runs partis du même seed et frappés par la
@@ -771,9 +769,8 @@ func test_a_wave_does_not_ask_the_phase() -> void:
 func test_the_same_seed_loses_the_same_people() -> void:
 	var first := _open()
 	var second := _open()
-	var here := RunOrchestrator.fight(first, _wave(_defense(first) + BREACH_PER_CASUALTY))
-	var there := RunOrchestrator.fight(second,
-		_wave(_defense(second) + BREACH_PER_CASUALTY))
+	var here := _strike(first, _wave(_defense(first) + BREACH_PER_CASUALTY))
+	var there := _strike(second, _wave(_defense(second) + BREACH_PER_CASUALTY))
 	assert_array(there.damage().lost()).is_equal(here.damage().lost())
 
 ## Ce que le village oppose à l'instant, tel que le résolveur le calculera.
@@ -792,6 +789,16 @@ func _raise(state: RunState, id: StringName, anchor: Vector2i) -> void:
 	state.ledger().set_capacity(
 		ProductionResolver.capacity_for(state.city().to_snapshot(),
 			state.balance().economy))
+
+## Arme cette vague et la fait tomber, ce que le calendrier fait le reste du temps.
+##
+## `fight()` a perdu son argument à `I2` : on ne se bat plus que contre une vague **en
+## attente**, et l'armer est ce que `close_the_day()` fait en lisant `data/balance/`. Les
+## cas qui veulent une puissance précise passent donc par ici plutôt que par une journée
+## entière, exactement comme ils fabriquent leurs propres phases.
+func _strike(state: RunState, wave: WaveDef) -> BattleReport:
+	state.arm_wave(wave)
+	return RunOrchestrator.fight(state)
 
 func _wave(power: int) -> WaveDef:
 	var wave := WaveDef.new()
@@ -987,6 +994,10 @@ func _run(phases: Array[PhaseDef]) -> RunBalance:
 	var run := RunBalance.new()
 	run.days = DAYS
 	run.starting_building = &""
+	run.score_per_resource = 1
+	run.score_per_building = 1
+	run.score_per_worker = 1
+	run.score_per_worker_level = 1
 	var day := phases
 	if day.is_empty():
 		day = [_phase(&"first", [PhaseDef.ACTION_PLAY], false),
