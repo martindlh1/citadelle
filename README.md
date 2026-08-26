@@ -174,3 +174,8 @@ restent utiles pour isoler un système.
 
 `Tab` y fait une seule chose, exprimée deux fois : elle agit sur ce que la carte tenue
 **ferait**. Elle pivote un bâtiment, elle retourne un terrassement.
+
+Son rapport distingue les **deux sortes de résolution** de la journée : chaque phase
+imprime ce qu'elle a produit, et seule celle qui ferme la journée porte la ligne
+d'upkeep, marquée « fin de journée ». Une ligne d'upkeep à zéro sur les autres phases se
+lirait comme un soir où personne n'a mangé.

@@ -87,11 +87,11 @@ suffisait plus à désigner sans ambiguïté ce qu'un ouvrier fait — *Terrafor
 
 **Un rapport reste chez son système tant qu'aucun autre ne le franchit.** `PickResult`
 vit dans `domain/terrain/`, `ProgressReport` dans `domain/workforce/`, et `I1` y a rangé
-`PlayResult`, `SiteReport` et `EveningReport` sous `domain/run/`. Le critère est un
+`PlayResult`, `SiteReport`, `PhaseReport` et `DayReport` sous `domain/run/`. Le critère est un
 second **système du domaine**, pas un adapter : les adapters lisent le domaine, c'est
 leur métier. Le coût d'une promotion ultérieure est un déplacement de fichier ; le coût
 d'une frontière inventée trop tôt est une forme figée avant qu'on la connaisse. Et une
-frontière qui doit vraiment traverser se remarque : `EveningReport` porte un
+frontière qui doit vraiment traverser se remarque : `PhaseReport` porte un
 `ProgressReport`, ce qui l'aurait fait entrer dans `contracts/` en traînant un interne
 des Effectifs derrière lui.
 
@@ -295,6 +295,8 @@ L'occlusion par le relief est un problème connu du système Terrain. V1 : la ro
 *(Écrit à `I1`.)* La règle vaut aussi pour **les tests** : un cas qui écrirait `&"evening"` pour vérifier une règle figerait exactement ce que `DESIGN.md` 2 garde ouvert. Les suites fabriquent leurs propres journées, sur des noms qui n'existent dans aucun `.tres`.
 
 `resolves` est un booléen, donc le seul champ de tout `data/balance/` que la doctrine du zéro ne protège pas : effacé par un réenregistrement, il vaut faux sans que rien ne le dise. Le filet est posé un cran plus haut — `RunBalance` exige qu'**au moins une** phase de la journée résolve. Même geste que `C4` sur `build_actions`.
+
+**Une phase résout, une journée ferme, et ce sont deux choses.** Une phase produit ce que les actions posées rapportent ; une journée prélève l'upkeep, et demain l'événement et le combat. La fin de journée n'est **pas** un champ de `PhaseDef` : c'est la fin de la dernière phase, par définition, et un booléen en data pourrait dire le contraire de la liste qui le porte. Elle ne dépend pas non plus de `resolves` — une journée coûte à nourrir même si sa dernière phase ne produit rien. Écrire quoi que ce soit qui fasse manger une fois par phase reviendrait à rendre la structure de la journée inséparable de son équilibrage, ce que `DESIGN.md` 2 veut précisément pouvoir échanger séparément.
 
 ### Effectifs — un vivier ou deux, indécidé
 

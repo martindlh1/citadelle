@@ -10,8 +10,14 @@ extends GdUnitTestSuite
 ## réel dupliqué en surface, dont les cinq blocs que ces cas lisent sont remplacés par des
 ## blocs écrits à la main.
 ##
-## Journée de travail, deux phases anonymes : la première pose, la seconde affecte et
-## résout. Aucun cas ne les nomme — l'ordre suffit.
+## Journée de travail par défaut, deux phases anonymes : la première pose, la seconde
+## affecte et résout. Aucun cas ne les nomme — l'ordre suffit.
+##
+## Elle ne ressemble **pas** à celle que `data/balance/` porte, et c'est voulu : une
+## journée restrictive est la seule façon de vérifier qu'une phase garde bien un geste.
+## Les cas qui ont besoin de la journée livrée — deux phases identiques qui résolvent
+## toutes les deux — fabriquent la leur avec `_two_working_phases()`. C'est ce partage qui
+## a permis à la journée de `data/` de changer sans qu'une ligne de test bouge.
 
 const BALANCE_PATH := "res://data/balance/balance.tres"
 

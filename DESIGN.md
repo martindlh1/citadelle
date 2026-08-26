@@ -32,13 +32,22 @@ Deux modèles sur la table, aucun n'est tranché.
 
 *(Écrit à `I1`.)* La machine existe, et la promesse tient jusqu'au bout : **aucun nom de phase n'apparaît nulle part**, ni dans le domaine, ni dans les adapters, ni même dans les tests. L'écran lit son libellé et les gestes qu'il allume sur la phase courante. Deux gestes seulement sont déclarables aujourd'hui — poser et affecter ; *échanger* attend le marché et *piocher* n'est pas encore un geste du joueur.
 
-La journée que `data/` porte est **les deux gestes de `D2`** : on pose ses cartes, puis on y envoie ses ouvriers, et le soir se résout à la fin de la seconde phase. C'est la lecture des « deux phases asymétriques » ci-dessus qui donne vraiment deux décisions de nature différente. C'est une hypothèse de départ au même titre qu'un coût de 4.1, et `I2b` l'arbitrera en éditant un `.tres`.
+La journée que `data/` porte est le **modèle symétrique** : deux phases identiques — matin et après-midi —, chacune autorisant les deux gestes de `D2` et se résolvant à sa fin. On joue deux fois par jour, et chaque tour est un tour complet : poser ses cartes, y envoyer ses ouvriers, voir ce que ça rend. C'est une hypothèse de départ au même titre qu'un coût de 4.1, et `I2b` l'arbitrera en éditant un `.tres`.
+
+**Une journée compte donc deux sortes de résolution**, et c'est ce qui rend le modèle symétrique jouable sans le confondre avec son équilibrage :
+
+- une **phase** produit — ce que les actions posées rapportent, ce que les chantiers avancent, l'XP que ça vaut ;
+- une **journée** coûte — l'upkeep, et demain l'événement de 3.7 et le combat de `F1`.
+
+Manger deux fois parce qu'on a récolté deux fois serait un contresens, et forcerait à rééquilibrer la nourriture chaque fois qu'on change le nombre de phases. La fin de journée n'est d'ailleurs **pas un champ** de la data : c'est la fin de la dernière phase, par définition — un booléen pourrait dire le contraire de la liste qui le porte. Elle est aussi indépendante du fait de résoudre : une journée coûte à nourrir même si sa dernière phase ne produit rien.
 
 **La durée d'un run est un champ de `data/balance/`** depuis le même jalon, pour la même raison.
 
 ### Séquence de résolution
 
-Quel que soit le modèle retenu, une phase qui résout le fait dans cet ordre : **actions jouées** → événement → upkeep → combat s'il y a lieu → gain d'XP → rapport.
+Quel que soit le modèle retenu, l'ordre est : **actions jouées** → événement → upkeep → combat s'il y a lieu → gain d'XP → rapport.
+
+*(Précisé à `I1`.)* Ces étapes ne tombent pas toutes au même moment. **Les actions jouées et l'XP appartiennent à la phase** ; **l'événement, l'upkeep et le combat appartiennent à la journée**, et ne se déclenchent qu'à la fin de la dernière phase. La séquence les listait déjà séparément — leur simultanéité n'était vraie que tant qu'une journée n'avait qu'une seule résolution.
 
 La production n'est plus une étape passive qui balaye les bâtiments : c'est le résultat des actions que le joueur a posées. Un bâtiment dont aucun slot n'a reçu d'action ne rend rien.
 
@@ -121,7 +130,7 @@ C'est la couche d'optimisation du jeu. Chaque bâtiment porte des règles de la 
 
 ### 3.3 Économie
 
-> **Contrat** — `TerrainQuery` + `CitySnapshot` + `ActionPlan` + `Assignment` + `LaborForce` → `ProductionReport`. Ne connaît ni la grille ni les Node : tout lui est fourni.
+> **Contrat** — deux portes depuis `I1`, parce qu'une journée compte deux sortes de résolution *(cf. 2)*. Une **phase** : `TerrainQuery` + `CitySnapshot` + `ActionPlan` + `Assignment` + `LaborForce` → `ProductionReport`. Une **journée** : `LaborForce` → `UpkeepReport`, et rien d'autre — ce qu'on doit à manger ne dépend que de qui est là. Ne connaît ni la grille ni les Node : tout lui est fourni.
 
 *(Le contrat a gagné deux entrées à `D2`, et elles se justifient l'une l'autre.)* L'**`ActionPlan`** est le pilote : la phrase de 2 — « un bâtiment dont aucun slot n'a reçu d'action ne rend rien » — n'était pas vraie tant que le résolveur balayait les ancres de l'affectation et servait le rendement du bâtiment qu'il y trouvait, sans qu'aucune carte n'ait eu à être jouée. Elle l'est maintenant par construction. Le **`TerrainQuery`** vient avec la seconde lecture de 3.5 : une action jouée à cru rend ce que le **tag de sa cellule** dicte, donc l'Économie doit voir le relief — le contrat, jamais la grille.
 
@@ -139,6 +148,8 @@ Conséquence directe, et c'est le prix de ce choix : une récolte qui déborde d
 
 **La famine se constate, elle ne se punit pas encore.** *(Tranché à `E1`.)* La résolution vide ce qui reste de nourriture et rapporte combien d'ouvriers n'ont pas mangé. Ce qu'il leur arrive ensuite appartient aux Effectifs, qui possèdent les unités.
 
+**L'upkeep tombe une fois par jour, quel que soit le nombre de phases.** *(Précisé à `I1`.)* Il a vécu dans le rapport de production tant qu'une journée n'avait qu'un soir ; il en est sorti dès qu'elle en a eu deux. C'est ce qui permet de changer la structure de la journée sans rééquilibrer la nourriture — les deux questions sont séparées, et elles doivent le rester.
+
 #### Ce qu'un bâtiment déclare produire
 
 *(Tranché avant `E1b`, écrit à `E1b`.)* Un bâtiment ne porte pas de champs de production en vrac. Il porte un **bloc `production` nullable** : ou bien il produit, et le bloc dit tout — slots, famille de compétence, rendement —, ou bien il ne produit pas et le bloc est absent. L'entrepôt et l'habitation n'ont pas « zéro slot », ils n'ont **pas de bloc**.
@@ -147,7 +158,7 @@ Deux bénéfices immédiats. La cohérence devient **structurelle** au lieu d'ê
 
 **La règle qui décide où va le code.** Ajouter un **bâtiment** doit rester une édition de `data/`. Ajouter une **nature** de bâtiment est légitimement une modification de code — mais dans `src/domain/`, jamais dans le schéma ni dans la data. Une `Resource` qui porterait une méthode de résolution serait du domaine déguisé, et le jour où il lui faut le terrain, la ville et le roster, on aurait recodé le résolveur dans `src/schema/`.
 
-**`OUVERT`** — la conséquence de la famine. Perte d'efficacité le lendemain, blessure, départ, mort ? Le rapport de production porte déjà le compte des non-nourris : les quatre restent ouvertes sans que le contrat bouge.
+**`OUVERT`** — la conséquence de la famine. Perte d'efficacité le lendemain, blessure, départ, mort ? Le rapport d'upkeep porte déjà le compte des non-nourris : les quatre restent ouvertes sans que le contrat bouge. C'est le jour où l'une sera choisie que ce rapport entrera dans `contracts/`, puisque ce jour-là ce sont les Effectifs qui le liront.
 
 **`HORS MVP` — artisanat.** L'atelier et l'action *Fabriquer* convertiront des ressources brutes en ressources ouvrées. Rien n'est écrit tant que la boucle n'est pas jouable, mais la réserve commune et le catalogue de `data/` accueillent une cinquième ressource sans refonte.
 
@@ -295,7 +306,9 @@ Source d'aléatoire quotidien indépendante de la pioche. Pistes : arrivée d'ou
 
 Machine à états sur les phases, séquence de résolution, conditions de fin, transition vers l'écran de récompense.
 
-*(Écrit à `I1`.)* Il tient trois choses. Le **cycle**, qui marche sur la liste de `PhaseDef` sans jamais savoir où il est. L'**état du run** — relief, ville, réserve, roster, deck, actions posées, brouillon d'affectation —, qui est le seul objet du projet à tenir les internes de plusieurs systèmes, et c'est cette section qui l'autorise. L'**orchestrateur**, qui ne calcule rien : il enchaîne deux questions là où chaque système n'en répond qu'à une, et il applique des ordres que les résolveurs se contentent de rendre.
+*(Écrit à `I1`.)* Il enchaîne **deux sortes de résolution** — la phase produit, la journée coûte *(cf. 2)* — et c'est la seule chose du projet qui sache que les deux existent. Chaque système ne connaît que sa part.
+
+Il tient trois choses. Le **cycle**, qui marche sur la liste de `PhaseDef` sans jamais savoir où il est. L'**état du run** — relief, ville, réserve, roster, deck, actions posées, brouillon d'affectation —, qui est le seul objet du projet à tenir les internes de plusieurs systèmes, et c'est cette section qui l'autorise. L'**orchestrateur**, qui ne calcule rien : il enchaîne deux questions là où chaque système n'en répond qu'à une, et il applique des ordres que les résolveurs se contentent de rendre.
 
 C'est ce qui a permis à deux choses annoncées de longue date de devenir vraies. La **bourse au moment de bâtir** de 3.2 — « ai-je les 15 bois ? » est une seconde question, posée par la couche qui orchestre la journée. Et l'**exécution** de *Construire* et de *Terraformer*, que `D2` avait laissée en attente parce que leur effet mute l'état de deux autres systèmes : le résolveur ordonne, l'orchestrateur applique, et il est le seul à tenir les deux.
 
@@ -437,7 +450,7 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 
 ### Intégration — `I`
 - **I0** ✅ — Squelette : projet, arborescence, autoloads, `EventBus`, `GameDatabase`.
-- **I1** ✅ — **Boucle minimale.** `PhaseDef`, `DayCycle`, `RunState`, `SiteResolver`, `RunOrchestrator`, le bloc `run_balance`, et les trois rapports du run — `PlayResult`, `SiteReport`, `EveningReport`. `RunManager` cesse d'être la coquille de `I0`. Une journée en deux phases, en data, sans qu'un nom de phase existe dans le code. La **bourse au moment de bâtir** que 3.2 annonçait depuis `C1`, et l'**exécution** de *Construire* et *Terraformer* que `D2` avait laissée en attente. Trois `OUVERT` refermés : la piste que crédite un chantier *(3.2)*, le sens d'un terrassement et les terrains qu'il accepte *(3.5)*.
+- **I1** ✅ — **Boucle minimale.** `PhaseDef`, `DayCycle`, `RunState`, `SiteResolver`, `RunOrchestrator`, le bloc `run_balance`, et les rapports du run — `PlayResult`, `SiteReport`, `PhaseReport`, `DayReport`, plus l'`UpkeepReport` que l'Économie a sorti du rapport de production. `RunManager` cesse d'être la coquille de `I0`. Une journée en deux phases identiques, en data, **deux sortes de résolution**, et aucun nom de phase dans le code. La **bourse au moment de bâtir** que 3.2 annonçait depuis `C1`, et l'**exécution** de *Construire* et *Terraformer* que `D2` avait laissée en attente. Trois `OUVERT` refermés : la piste que crédite un chantier *(3.2)*, le sens d'un terrassement et les terrains qu'il accepte *(3.5)*.
   Le jalon touche **deux DTO de `contracts/`**, ce qui est rare et a été décidé avant d'écrire : le sens du terrassement voyage sur l'action posée et sur le verdict de ciblage. Les trois rapports neufs, eux, restent dans `domain/run/` — aucun second système du domaine ne les franchit, ce qui est l'argument que `PickResult` et `ProgressReport` portaient déjà.
 - **I2** — Boucle complète : Cartes + Effectifs + Combat bouchon, run jouable du début à la fin.
 - **I2b** — Playtest : arbitrage de la **structure de journée** (2.) et du sort de la main non jouée (3.5). Les deux se testent en échangeant un `.tres`.

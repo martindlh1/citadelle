@@ -6,22 +6,24 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ## 2026-08-25 — `I1` : la journée, la bourse, et les deux verbes enfin exécutés
 
-**État : terminé.** Sept commits sur `feat/d1-deck`, à la suite de `D2`, plus un correctif
-venu d'une première partie jouée à la main. Les trois commandes passent : boot sans erreur
-ni warning, tout `src/domain/` parse, **577 tests verts contre 467** à l'ouverture. Sixième
+**État : terminé.** Dix commits sur `feat/d1-deck`, à la suite de `D2` — dont deux qui
+corrigent le jalon lui-même, l'un venu d'une partie jouée au clavier et l'autre d'une
+décision de design que j'avais prise seule. Les trois commandes passent : boot sans erreur
+ni warning, tout `src/domain/` parse, **585 tests verts contre 467** à l'ouverture. Sixième
 jalon d'affilée sur la même branche.
 
 ### Ce qui a été livré
 
-- **DTO** — `PlayResult`, `SiteReport`, `EveningReport` dans `domain/run/`. `PlayedAction`
-  et `TargetResult` gagnent un **sens**.
+- **DTO** — `PlayResult`, `SiteReport`, `PhaseReport`, `DayReport` dans `domain/run/` ;
+  `UpkeepReport` dans `domain/economy/`. `PlayedAction` et `TargetResult` gagnent un
+  **sens** ; `ProductionReport` perd son upkeep.
 - **Schéma** — `PhaseDef`, `RunBalance` ; `ActionBalance` gagne la piste des chantiers et
   les deux bornes de terrassement.
 - **Domaine** — `DayCycle`, `RunState`, `SiteResolver`, `RunOrchestrator`.
-  `SkillResolver` ouvre `award_lines()`.
-- **Six suites neuves, 110 cas de plus.**
+  `ProductionResolver` gagne une seconde porte, `SkillResolver` ouvre `award_lines()`.
+- **Six suites neuves, 118 cas de plus.**
 - `RunManager` réécrit, trois signaux sur `EventBus`, `run_harness.gd`.
-- `DESIGN.md` 2, 3.2, 3.4, 3.5, 3.8, 4.1, 4.2 et 8 ; `CLAUDE.md` ; `README.md`.
+- `DESIGN.md` 2, 3.2, 3.3, 3.4, 3.5, 3.8, 4.1, 4.2 et 8 ; `CLAUDE.md` ; `README.md`.
 
 ### La décision qui porte le jalon : ordonner plutôt que muter
 
@@ -74,19 +76,65 @@ terrasser déplace la **hauteur**, pas le `TerrainData`. Monter une case d'eau l
 eau — inconstructible, toujours tagguée — pour le prix d'une carte et d'un ouvrier. Le jour
 où l'on voudra changer le sol, ce sera un *Défricher*, et c'est un autre verbe.
 
-### Le modèle de journée s'est corrigé en cours d'écriture
+### Le modèle de journée — une décision que j'ai prise seule, et qu'il a fallu défaire
+
+**C'est la faute de méthode du jalon, et elle mérite d'être écrite en entier.**
 
 La première version en data suivait la lettre de `DESIGN.md` 2 — « construction puis
 résolution » — et donnait une seconde phase qui n'autorisait rien et résolvait à sa fin.
 Elle demandait donc **deux validations pour un soir** : une pour entrer dans une phase où
-il n'y a rien à faire, une pour en sortir. Un défaut qui ne se voit qu'en essayant de
-jouer, et qui n'aurait fait tomber aucun test.
+il n'y a rien à faire, une pour en sortir. Un défaut réel, qui ne se voit qu'en essayant
+de jouer et qui n'aurait fait tomber aucun test.
 
-Les deux phases asymétriques se lisent bien mieux comme **les deux gestes de `D2`** : on
-pose ses cartes, puis on y envoie ses ouvriers, et le soir se résout à la fin de la
-seconde. Deux décisions de nature différente, ce que `DESIGN.md` 2 réclame en toutes
-lettres, et une validation par décision. C'est un `.tres` et non du code — `I2b`
-l'arbitrera de la même façon.
+J'ai corrigé le mauvais bout. Au lieu de rendre la seconde phase permissive elle aussi,
+j'ai **séparé les deux gestes** — une phase pour poser les cartes, une pour y envoyer les
+ouvriers — et je l'ai annoncé en une phrase au passage au lieu de m'arrêter. C'était une
+question de design, pas une correction technique, et la consigne de session dit en toutes
+lettres de ne jamais en trancher une seul.
+
+La journée voulue est le **modèle symétrique** : deux phases identiques, chacune
+autorisant les deux gestes et se résolvant à sa fin. Elle ne souffre d'ailleurs pas du
+défaut que je cherchais à éviter — deux phases qui font toutes les deux quelque chose
+n'ont pas de temps mort.
+
+Le coût de la correction dit quelque chose sur ce qui avait été bien fait : **le code n'a
+rien eu à changer**. Le harnais lit ce que la phase autorise, il ne le suppose pas ; les
+tests fabriquent leurs propres journées et vérifient le *mécanisme* de garde, pas la
+journée livrée. C'est un `.tres` qui a bougé — et une conséquence bien plus intéressante,
+ci-dessous.
+
+### Ce que la correction a révélé : une journée compte deux résolutions
+
+Deux phases qui résolvent, c'est deux récoltes par jour. Mais on ne mange pas deux fois
+parce qu'on a récolté deux fois, et l'upkeep vivait dans le rapport de production depuis
+`E1`, donc il serait tombé à chaque phase.
+
+Ce n'était pas visible tant qu'une journée n'avait qu'un soir : la production et l'upkeep
+tombaient forcément ensemble, et cette **coïncidence** avait été prise pour une règle.
+`DESIGN.md` 2 les listait pourtant depuis le premier jour comme deux étapes distinctes de
+la séquence, avec l'événement entre les deux. La fusion était l'accident.
+
+Une journée compte donc deux sortes de résolution :
+
+- une **phase** produit — ce que les actions posées rapportent, les chantiers, l'XP ;
+- une **journée** coûte — l'upkeep, et demain l'événement de 3.7 et le combat de `F1`,
+  qui entreront par un champ chacun sur `DayReport` sans que rien d'autre bouge.
+
+Sans cette séparation, la structure de la journée deviendrait inséparable de son
+équilibrage : passer de deux phases à trois obligerait à rééquilibrer la nourriture, et
+l'`OUVERT` de 2 cesserait d'être testable en échangeant un `.tres` — c'est-à-dire qu'il
+cesserait d'être ouvert.
+
+`ProductionReport` perd donc quatre accesseurs au profit d'un `UpkeepReport`, ce qui est
+un **contrat qui change de forme** — annoncé et validé avant d'être écrit, cette fois.
+`EveningReport` devient `PhaseReport` dans la foulée : « soir » ne désigne plus une phase
+mais la fin de journée, que `DayReport` décrit.
+
+**La fin de journée n'est pas un champ de data**, et c'est le seul endroit du jalon où
+j'ai refusé d'en ajouter un : une journée se ferme après sa dernière phase, par
+définition, et un booléen pourrait dire le contraire de la liste qui le porte. Elle est
+aussi indépendante de `resolves` — une journée coûte à nourrir même si sa dernière phase
+ne produit rien, et un cas de test tient exactement ça.
 
 ### Deux endroits où j'ai changé une règle du projet, plutôt que de la contourner
 
@@ -102,7 +150,7 @@ résolveur de chantiers. Un cinquième verbe ne peut plus se poser, s'affecter e
 faire — ce qui était l'état de deux d'entre eux entre `D2` et `I1`. Un second cas tient le
 revers : aucun verbe n'est les deux à la fois, sans quoi une carte compterait double.
 
-**Les trois rapports du run ne sont pas des contrats.** `EveningReport` porte un
+**Les trois rapports du run ne sont pas des contrats.** `PhaseReport` porte un
 `ProgressReport`, dont le docstring de `W1` argumente qu'il reste dans
 `domain/workforce/` faute d'un second système qui le franchisse. Le mettre dans
 `contracts/` aurait fait entrer un interne des Effectifs par la porte de derrière. Les
@@ -119,7 +167,7 @@ dans la journée.
 
 Le corriger sur place aurait demandé au résolveur d'Économie de recevoir un rapport qu'un
 autre système produit — précisément la dépendance que la ligne de contrat de 3.3 refuse.
-C'est `EveningReport.idle()` qui répond pour le soir entier, parce qu'il est le seul à voir
+C'est `PhaseReport.idle()` qui répond pour la phase entière, parce qu'il est le seul à voir
 les deux journaux de travail. Un cas de test épingle les deux lectures côte à côte : le
 bâtisseur est oisif dans l'une et pas dans l'autre, et c'est voulu.
 
@@ -139,7 +187,7 @@ de la data.
 *(Trouvé par l'humain juste après le jalon, corrigé dans la foulée.)* Espace sur une action
 posée répondait « refusé » sans dire pourquoi. La cause était entière et légitime : la
 phase **Construction** n'autorise que *poser*, et il faut Entrée pour atteindre
-**Affectation**. Le refus était juste ; c'est le silence qui ne l'était pas.
+la phase suivante. Le refus était juste ; c'est le silence qui ne l'était pas.
 
 L'origine est une justification que j'avais écrite un peu vite dans `RunOrchestrator` :
 `staff()` rendait un booléen nu, « les quatre refus possibles se voyant tous à l'écran
@@ -198,7 +246,7 @@ particulier.
 
 Rien pour `I1`. Cinq choses volontairement laissées de côté :
 
-- **le combat** — `F1`. La séquence de 2 lui laisse sa place vide, et `EveningReport`
+- **le combat** — `F1`. La séquence de 2 lui laisse sa place vide, et `DayReport`
   l'accueillera par un champ de plus.
 - **l'événement quotidien** *(3.7)* — même chose, même place réservée.
 - **la fin de run** — `is_over()` existe et le harnais s'arrête, mais 5. veut un score et
@@ -239,12 +287,17 @@ ajoutée.
   ajoutera un au premier réenregistrement : c'est un diff à attendre, pas un problème.
   C'est aussi le premier `.tres` du projet à porter des **sous-ressources**, une par
   phase.
-- **Les chiffres du bloc `run` sont à relire** : quinze journées, deux phases, et un
-  terrassement borné à `[0, 6]` — les mêmes bornes que la génération, ce qui est un
+- **Les chiffres du bloc `run` sont à relire** : quinze journées, deux phases identiques,
+  et un terrassement borné à `[0, 6]` — les mêmes bornes que la génération, ce qui est un
   point de départ et non une coïncidence à conserver. Le bloc `actions` a gagné
   `site_skill_family = &"construction"`.
+- **L'équilibrage des ressources est le premier chantier ouvert.** Deux phases qui
+  résolvent, c'est **deux récoltes par jour pour un seul upkeep** : l'économie est
+  nettement plus généreuse qu'à `E1b`, qui mesurait un soir par jour. Sciemment laissé en
+  l'état — voir le harnais Économie, dont le verdict est resté calibré sur l'ancien
+  rythme.
 - Les caches de classes et d'uid ont été reconstruits pendant la session, et les `.gd.uid`
-  des seize scripts neufs — dix de code, six de tests — sont commités.
+  des scripts neufs sont commités.
 
 ---
 
