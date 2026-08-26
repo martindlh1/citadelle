@@ -177,6 +177,10 @@ Trois raisons : c'est diffable dans git, ça ne casse jamais au réenregistremen
 
 `dev_boot.gd` instancie le harnais dont l'identifiant est dans sa constante `HARNESS`, choisi dans `HARNESS_SCRIPTS`. **Ajouter un harnais, c'est ajouter un `.gd` et une ligne de table** — jamais une scène, jamais une intervention dans l'éditeur. `HARNESS` vide affiche le rapport de boot : version du moteur, contenu de `GameDatabase`, état de `RunManager`.
 
+**Un harnais qui mesure doit être lu, pas seulement lancé.** *(Écrit à `F1`.)* Un tableau de chiffres compile, s'aligne, ne lève aucune erreur et peut être **faux sur ce qu'il prétend montrer** — ce qui est pire qu'une panne, parce qu'on lui fait confiance. Deux cas trouvés le même jour : une ligne mesurée sur un roster trop petit faisait passer pour inutile le seul bâtiment du jalon, et une chronique annonçait une vague tombant sur un village entamé alors que ses trois vagues montaient en puissance et que les deux premières tenaient. Les deux passaient boot, parsing et tests.
+
+D'où la discipline : **chaque table du harnais annonce ce qu'elle doit montrer**, en toutes lettres, dans le rapport lui-même. C'est le rôle du verdict en fin de fichier, et il sert autant à celui qui écrit la table qu'à celui qui la relit six mois plus tard. Une table dont on ne sait pas dire ce qu'elle prouverait ne prouve rien.
+
 ---
 
 ## Propriété des fichiers
@@ -329,6 +333,16 @@ L'occlusion par le relief est un problème connu du système Terrain. V1 : la ro
 
 Le système Effectifs projette ses unités en `LaborForce` et `CombatForce`. Économie et Combat ne consomment que ces projections. Aucun code hors de `domain/workforce/` ne doit supposer que les deux viennent de la même liste, ni qu'elles viennent de deux listes distinctes.
 
+**Les deux projections portent tout le monde ; le filtre appartient au consommateur.** *(Écrit à `F1`.)* L'Économie reçoit le roster présent entier et n'en fait travailler que ce que l'`Assignment` place ; le Combat le reçoit entier et n'en engage que ce que la borne de déploiement tient. Projeter les seuls engagés donnerait aux Effectifs à connaître un plafond qui vient de la ville — une frontière qu'ils n'ont aucune raison de franchir.
+
+### Un système ne voit jamais le contenu d'un état voisin
+
+*(Écrit à `F1`.)* La règle de dépendance interdit déjà de dépendre des **internes** d'un autre système. Le corollaire qui se découvre à l'usage est plus serré : recevoir le *contenu* d'un état voisin en argument, même en copie, revient au même.
+
+Le cas qui l'a posée : « que pille une vague ? ». Répartir un pillage entre les ressources demande de lire le stock, donc le contenu du `Ledger`. Le `DamageReport` dit donc **combien**, jamais quoi, et `Ledger.take_share()` répond avec la règle de prorata de l'Économie — la même que l'écrêtage d'une récolte, écrite une seule fois. Le Combat ignore jusqu'à ce que le village stocke.
+
+Le test qui dit si l'on est du bon côté : **la question posée appartient-elle au système qui répond ?** « Combien la vague emporte » est une question du Combat ; « ce que la réserve perd quand on lui prend N » est une question de la réserve.
+
 ### Déterminisme
 
 Tout l'aléatoire passe par `RunState.rng`, un `RandomNumberGenerator` seedé à l'ouverture du run. Jamais `randi()` global. Un seed plus une liste d'actions doit rejouer un run à l'identique — c'est ce qui rend l'équilibrage et le débogage possibles.
@@ -351,6 +365,7 @@ Tous les nombres réglables vivent dans `data/balance/*.tres`. Modifier un équi
 - Aucun nombre magique dans `domain/` : constante nommée ou champ de `Resource`
 - Préconditions par `assert()`. Les erreurs récupérables retournent un DTO `{ ok: bool, reason: StringName }`, pas un `push_error`
 - Ne jamais trier un `Array[StringName]` avec `sort()` : comparer deux `StringName` compare leurs pointeurs internes, pas leur texte. L'ordre obtenu est arbitraire, stable le temps d'une session et différent à la suivante — un piège direct pour le déterminisme. Trier par `sort_custom` sur `String(...)`.
+- **Un `Array[T]` ne s'additionne pas à un tableau littéral non typé**, et le `as Array[T]` ne rattrape rien : `VILLAGE + [&"x"] as Array[StringName]` compile et casse à l'exécution. Passer par `duplicate()` puis `append()`. Constaté à `F1`, dans un harnais — donc hors de toute suite de tests, et invisible au parsing.
 
 ---
 

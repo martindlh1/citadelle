@@ -4,6 +4,238 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-26 — `F1` : le bouchon de combat, et la borne qui lui donne un enjeu
+
+**État : terminé.** Six commits sur `feat/f1-combat-stub`, tirée de `master`. Les trois
+commandes passent : boot sans erreur ni warning, tout `src/domain/` parse, **715 tests
+verts contre 625** à l'ouverture, 42 suites contre 39. Les sept autres harnais ont été
+bootés un par un — trois champs neufs sur `BuildingData` traversent tout le projet.
+
+### Ce qui a été livré
+
+- **Contrats** — `CombatUnit`, `CombatForce`, `DamageReport`. `WorkLine` gagne `NO_CELL`.
+- **Schéma et data** — `WaveDef`, `CombatBalance`, les colonnes **Déf.**, **PV** et
+  **Dépl.** de 4.1 dans treize `.tres`, `data/waves/` et son indexation par
+  `GameDatabase`.
+- **Domaine** — `InstantCombatResolver` sous `domain/combat/`, `BattleReport` sous
+  `domain/run/`, `RunOrchestrator.fight()`, `Roster.to_combat()`,
+  `Worker.to_combat_unit()`, `CityState.damage()`, `PlacedBuilding.take()`,
+  `Ledger.take_share()`.
+- **Harnais** — `scenes/dev/combat_harness.gd`, quatre tables et une chronique.
+- **Quatre-vingt-dix cas de plus**, dont trente-huit sur le résolveur.
+- `DESIGN.md` 3.3, 3.4, 3.6, 4.1 et 8 ; `CLAUDE.md`.
+
+### Le déploiement capé, qui vient de l'humain et change le jalon
+
+Le plan proposait que **tout le monde** se batte, en assumant le prix : à `F1` la vague
+n'aurait concurrencé la production en rien, donc la tension centrale du pitch n'aurait pas
+été exercée. C'était honnête pour un bouchon et ça restait un trou.
+
+La réponse — *« un nombre de slot serait pas mal, la phase de combat commence par une phase
+de déploiement capé qui pourra augmenter plus tard, peut-être avec la construction d'une
+caserne »* — est meilleure, et pour une raison qui se dit en une ligne : **sans borne, un
+ouvrier de plus est un défenseur de plus, donc « envoyer son meilleur récoltant en milice »
+ne coûte rien puisqu'on les envoie tous.** La borne rend une place rare, et une place rare
+rend le choix réel.
+
+Elle a aussi un effet qu'on n'attendait pas de ce jalon : **elle sort la caserne de sa
+coquille**, et avant l'action qu'elle débloquera à `X3`. On la bâtissait pour *S'entraîner*,
+qui n'existe pas ; on la bâtira d'abord pour tenir la ligne. C'est un renversement du
+tableau de 4.1, et il est délibéré — un bâtiment dont le seul intérêt est de débloquer une
+carte absente n'a rien à faire dans un MVP.
+
+Le design est donc passé **en premier**, dans le commit d'ouverture, comme le second axe de
+progression à `W1` et la rotation à `C2`. Il a coûté une colonne à 4.1, un champ plat de
+plus sur `BuildingData`, et zéro ligne au reste : `slots_for()` est le miroir exact de
+`ProductionResolver.capacity_for()` et de `Roster.capacity_for()`, filtre `completed()`
+compris.
+
+### Ce que `CombatForce` n'est pas, et pourquoi `W1` avait raison d'attendre
+
+`W1` refusait de l'écrire : « ou bien un clone strict de `LaborForce` qui ne prouve rien,
+ou bien une devinette sur des PV et de l'équipement ». Le refus était juste, et l'écart
+tient en un mot — **un** multiplicateur, pas un par famille. Un ouvrier récolte
+différemment au camp de bûcheron et à l'atelier, donc `LaborUnit` répond par métier ; il ne
+se bat que d'une seule façon. Ce qui en aurait fait un clone est précisément ce qui a
+disparu.
+
+Elle porte **tout le roster présent**, pas les engagés, et c'est le miroir strict de
+`LaborForce`, qui porte tout le monde et non les affectés. Le filtre appartient au
+consommateur : l'Économie n'emploie que ce que l'`Assignment` place, le Combat n'engage que
+ce que la borne tient. Projeter les seuls déployés aurait donné aux Effectifs à connaître un
+plafond qui vient de la ville.
+
+Et le vivier unique cesse d'être une phrase : `to_labor()` et `to_combat()` sont deux
+fonctions jumelles qui partent du même `present()`.
+
+### La ligne de dépendance que le pillage a révélée
+
+La règle de `CLAUDE.md` interdit de dépendre des **internes** d'un autre système. Le
+corollaire s'est découvert ici : **recevoir le contenu d'un état voisin, même en copie,
+revient au même.**
+
+Le plan prévoyait que le résolveur reçoive le stock et rende un pillage réparti par
+ressource. C'est faux : répartir demande de lire le `Ledger`, qui est un interne de
+l'Économie. Le `DamageReport` dit donc **combien**, jamais quoi, et `Ledger.take_share()`
+répond avec la règle de prorata de l'Économie — la même que l'écrêtage d'une récolte, écrite
+une seule fois et déjà testée. Le Combat ignore jusqu'à ce que le village stocke.
+
+Le test qui dit de quel côté on est : **la question posée appartient-elle au système qui
+répond ?** « Combien la vague emporte » est une question du Combat ; « ce que la réserve
+perd quand on lui prend N » est une question de la réserve. `take_share()` est nommée pour
+aucun combat en particulier, et un événement de 3.7 lui posera la même question.
+
+Conséquence en cascade : `BattleReport` est né de là. Le `DamageReport` est un ordre, et
+deux choses n'existent qu'à l'application — ce que la réserve a **vraiment** perdu, et ce
+que la ligne a valu. « Ils ont tout pris » et « ils sont repartis les mains vides » sont
+deux fins de vague différentes, et seul ce rapport connaît l'écart.
+
+### La règle de dégâts, écrite dans `DESIGN.md` parce qu'elle se discute
+
+**Une brèche casse d'abord ce qui la retenait, puis ce qui cède le plus vite.** Deux vertus,
+et une propriété qui n'était pas cherchée.
+
+La palissade sert vraiment à quelque chose, ce qui n'allait pas de soi pour un bâtiment
+entré « par la pratique et non par le design » à `C2`. Et le **Cœur se retrouve en dernier
+sans qu'une ligne de code n'écrive son nom**, puisqu'il est le plus solide du tableau de
+4.1 : c'est un identifiant de contenu en moins dans du GDScript, obtenu par accident et
+gardé exprès.
+
+L'ordre ignore la pose, et c'est le cas de test qui porte le jalon —
+`test_the_pose_order_decides_nothing`. Deux villes aux mêmes bâtiments posés dans deux
+ordres différents perdent exactement la même chose. Le risque est celui que `E1` avait déjà
+nommé pour l'écrêtage : silencieux, invisible à l'œil, et il ne se manifeste que sur deux
+parties qu'on compare.
+
+Tu as dit « on modifiera peut-être plus tard », et c'est écrit tel quel : 3.6 la range
+explicitement parmi ce que `F2` jettera en premier.
+
+### La blessure déménage, et la famine avec
+
+3.6 réclamait « pertes **et blessures** » depuis le premier jour. La blessure n'entre pas,
+et ce n'est pas un renoncement : **elle n'a nulle part où atterrir.** Un `Worker` porte une
+présence et de l'XP, rien qui dure et qui pèse. L'inventer dans le rapport d'un système neuf
+aurait décidé pour les Effectifs de ce qu'un état fait.
+
+Ta réponse a transformé un report en jalon. `X6` — **états d'ouvrier** — accueille la faim,
+la blessure, et ce qui viendra des événements de 3.7. Trois systèmes avaient buté sur le même
+manque et l'avaient chacun contourné : `E1` en laissant la famine « se constater sans se
+punir », l'`OUVERT` de 3.3 en listant quatre issues dont trois décrivent le même objet, et
+`F1` en sortant la blessure.
+
+Il est dans les différés, après `I2`, et pour une raison de méthode : **un système d'états se
+conçoit devant la liste de ceux qui existent vraiment**, et cette liste n'est complète
+qu'une fois la boucle jouable. Ce qu'il contraint en attendant tient en une ligne, et elle
+est dans `DESIGN.md` : **aucun rapport n'invente sa propre conséquence.** Un système qui
+rencontre un état le compte ; il ne décide pas de ce qu'il fait.
+
+C'est la troisième fois qu'un jalon **corrige** `DESIGN.md` au lieu de l'appliquer, après
+`D2` sur le geste atomique et `W2` sur le micro-management.
+
+### `WaveDef` sort de `contracts/`, et c'est une ligne de `CLAUDE.md` en moins
+
+Elle y figurait depuis `I0`. C'est une `Resource` de `src/schema/`, éditée dans
+`data/waves/`, exactement comme `PhaseDef` décrit la forme d'une journée. `contracts/` est
+l'endroit où deux systèmes **du code** se rencontrent ; un contenu qu'on règle dans un
+`.tres` voyage déjà partout — le domaine reçoit ses blocs d'équilibrage en argument depuis
+`E1`, et une `BuildingData` traverse tous les systèmes dans un `BuildingSnapshot`.
+
+Le Combat reçoit donc sa vague comme le résolveur de chantiers reçoit son `ActionBalance`.
+
+### Trois défauts que seule l'exécution a montrés — tous dans le harnais
+
+`E2` et `W2` ont appris qu'un écran trouve ce qu'aucun test ne cherche. `F1` ajoute une
+variante plus désagréable : **un tableau de chiffres peut être faux sur ce qu'il prétend
+montrer**, ce qui est pire qu'une panne parce qu'on lui fait confiance.
+
+**Un `Array[StringName]` ne s'additionne pas à un tableau littéral non typé**, et le
+`as Array[T]` ne rattrape rien. Ça compile, ça casse à l'exécution. Dans un harnais, donc
+hors de toute suite de tests.
+
+**La table des murs mesurait sur le plus petit roster**, si bien que la caserne ouvrait des
+places que personne ne venait occuper et que sa ligne était identique à la précédente. La
+table faisait passer pour inutile le seul bâtiment que ce jalon ajoute.
+
+**La chronique annonçait une vague tombant sur un village déjà entamé** en jouant les trois
+vagues par puissance croissante — que le village tenait deux fois sur trois. Elle rejoue
+maintenant la plus dure, et la quatrième ligne est le seul endroit du harnais qui montre ce
+qu'aucune table ne peut dire : les dégâts restent sur les murs, et les morts ne reviennent
+pas.
+
+D'où la discipline entrée dans `CLAUDE.md` : **chaque table annonce ce qu'elle doit
+montrer**, en toutes lettres, dans le rapport lui-même. Une table dont on ne sait pas dire
+ce qu'elle prouverait ne prouve rien.
+
+### Ce que le harnais dit de l'équilibrage
+
+Sur les chiffres de départ, et à prendre comme un premier relevé et non comme un verdict :
+
+- **La palissade est rentable et la tour l'est davantage.** Cinq bois pour trois de défense,
+  vingt-cinq pour huit — la progression est saine, la tour n'écrase pas.
+- **La piste Combat ne rattrape pas la pierre**, et c'est voulu. Du palier 0 au plafond, un
+  trio passe de 6 à 10 de défense ; une seule tour en donne 8. Bâtir reste le levier, monter
+  la piste est un complément. Si l'inverse s'était produit, la caserne n'aurait rien acheté.
+- **La borne mord franchement.** Trois, cinq ou huit ouvriers donnent la même défense sans
+  caserne, et cinq avec. C'est la démonstration en trois lignes de ce que 3.6 affirme.
+- **Un second siège est dévastateur.** Le village passe de six bâtiments à un et de huit
+  ouvriers à trois. C'est exactement la spirale qu'un roguelite veut, et c'est aussi le
+  chiffre le plus suspect du lot : `breach_per_casualty` est le réglage le plus fragile des
+  cinq, et `I3` le verra de près.
+
+### Ce qui n'a pas été fait, et qui était au plan
+
+**Rien du plan n'a été retiré.** Deux choses en ont été ajoutées en cours de route —
+`BattleReport` et `Ledger.take_share()` —, toutes deux conséquences de la ligne de
+dépendance ci-dessus.
+
+Ce qui est resté dehors était annoncé dehors :
+
+- **Rien ne déclenche une vague.** `RunOrchestrator.fight()` existe, le harnais l'appelle,
+  et personne d'autre. La fréquence est l'`OUVERT` de 2, et un calendrier que personne ne
+  lit serait la frontière que ce projet refuse depuis `E1`.
+- **La fin de run** — 5. veut un score et des conditions de défaite. `I2`.
+- **Le poste occupé de la tour de guet** — « +8 déf. si occupée ». `F1` était le jalon
+  nommé, et il n'entre pas : **aucun verbe de 4.2 ne tient un poste de défense.** Il en
+  faudrait un huitième, hors du tableau. Même refus que `E1b` a opposé à cinq `slots = 1`.
+- **La blessure** — `X6`.
+- **Le rendu d'un bâtiment endommagé** — `BuildingRenderer` ne montre rien des PV. Les
+  dégâts traversent `BuildingSnapshot`, la vue les lira quand il y aura un écran de combat.
+
+### Prochain jalon
+
+**`I2`** — la boucle complète. Tous les systèmes du MVP existent et tiennent debout seuls, et
+**aucun contrat ne bougera plus** : c'était la raison de passer `F1` d'abord, et elle est
+tenue. Il reste trois fils à brancher, chacun sur une prise déjà posée — la vague dans
+`close_the_day()`, où `DayReport` l'accueillera par un champ ; le calendrier des vagues, qui
+sera un bloc de `data/balance/` ; et la défaite, qui lit ce que la ville et le roster disent
+déjà.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'`InputMap`
+ajoutée.
+
+- `F5` lance le **harnais Combat** — `HARNESS` vaut `&"combat"`. `&"run"` rend le jeu.
+- **Une catégorie neuve dans `data/`** : `data/waves/`, trois vagues. Le rapport de boot
+  annonce désormais six catégories.
+- **Trois `.tres` neufs sans `uid://`** — les trois vagues, plus `combat_balance.tres`.
+  L'éditeur leur en ajoutera un au premier réenregistrement : c'est un diff à attendre, pas
+  un problème.
+- **Treize `.tres` de bâtiments rouverts.** Seules les valeurs non nulles y sont écrites,
+  puisque Godot n'écrit jamais un champ égal à son défaut — un `defense = 0` disparaîtrait
+  au premier réenregistrement de toute façon.
+- **Les chiffres du bloc `combat` sont à relire** : trois places de déploiement, deux de
+  défense par homme, un mort tous les six points de brèche, une unité pillée par point. Le
+  harnais mesure les quatre.
+- **L'équilibrage des ressources reste le premier chantier ouvert**, inchangé depuis `I1` :
+  deux récoltes par jour pour un seul upkeep. `F1` n'y a pas touché, et vient d'ajouter une
+  seconde source de pertes.
+- Les caches de classes et d'uid ont été reconstruits pendant la session, et les `.gd.uid`
+  des sept scripts neufs sont commités.
+- **La branche n'est pas fusionnée** : `feat/f1-combat-stub`, six commits.
+
+---
+
 ## 2026-08-26 — `W2` : choisir qui, et une phrase de design qu'il a fallu corriger
 
 **État : terminé.** Sept commits sur `feat/w2-assignment`, tirée de `master` — dont trois
