@@ -62,12 +62,15 @@ const PRODUCED_WIDTH := 42
 const REPORT_MARGIN := 16.0
 const REPORT_FONT_SIZE := 13
 
+var _terrain: TerrainQuery
 var _city: CitySnapshot
+var _plan: ActionPlan
 var _roster: Roster
 var _assign: Assignment
 var _ledger: Ledger
 var _economy: EconomyBalance
 var _workforce: WorkforceBalance
+var _actions: ActionBalance
 var _family: StringName
 var _lines := PackedStringArray()
 
@@ -79,7 +82,10 @@ func _ready() -> void:
 	var balance := GameDatabase.get_balance()
 	_economy = balance.economy
 	_workforce = balance.workforce
+	_actions = balance.actions
+	_terrain = _make_terrain()
 	_city = _make_city()
+	_plan = _make_plan()
 	_family = _reference_family()
 	_roster = _make_roster()
 	_assign = _make_assignment()
@@ -124,8 +130,13 @@ func _report_evenings() -> void:
 	_lines.append("soir  %-*s  mult.   XP  notes" % [PRODUCED_WIDTH, "produit (brut)"])
 	for evening in range(1, EVENINGS + 1):
 		_move_the_absent(evening)
-		var report := ProductionResolver.resolve(_city, _assign, _roster.to_labor(_workforce),
-			_ledger, _economy)
+		var labor := _roster.to_labor(_workforce)
+		var report := ProductionResolver.resolve(_terrain, _city, _plan, _assign,
+			labor, _ledger, _economy, _actions)
+		# La réserve et la famine sont hors sujet ici, mais l'upkeep doit tomber quand
+		# même : sans lui la nourriture s'accumulerait et la réserve commune plafonnerait
+		# la récolte au bout de quelques soirs, ce qui fausserait la courbe mesurée.
+		ProductionResolver.take_upkeep(labor, _ledger, _economy)
 		var multiplier := _reference_multiplier()
 		var progress := SkillResolver.award(_roster, report, _workforce)
 		_count_shifts(report)
@@ -300,22 +311,46 @@ func _make_roster() -> Roster:
 		workers.append(Worker.create(StringName(given_name.to_lower()), given_name))
 	return Roster.create(workers)
 
+## Une carte *Récolter* posée sur chaque bâtiment de la ville.
+##
+## Depuis D2, un bâtiment dont aucune action ne vise les postes ne rend rien. Le harnais
+## les pose toutes une fois pour toutes : ce fichier mesure la progression des ouvriers,
+## et faire varier ce qui est joué d'un soir à l'autre brouillerait la seule chose qu'il
+## cherche à voir monter.
+##
+## Rien n'est filtré avant d'appeler : le ciblage écarte de lui-même l'entrepôt et les
+## deux habitations.
+func _make_plan() -> ActionPlan:
+	var board := ActionBoard.new()
+	for building in _city.buildings():
+		board.post(ActionTargeting.CARD_HARVEST, building.anchor(), _terrain, _city,
+			_actions)
+	return board.to_plan()
+
 ## Les postes se remplissent dans l'ordre de la ville, et on s'arrête quand il n'y en a
 ## plus. Le reste du roster chôme, ce qui est exactement le témoin qu'on veut.
 func _make_assignment() -> Assignment:
-	var table: Dictionary[StringName, Vector2i] = {}
+	var table: Dictionary[StringName, int] = {}
 	var hired := 0
 	var workers := _roster.workers()
-	for building in _city.buildings():
-		var data := building.data()
-		if not data.produces():
-			continue
-		for _slot in data.production.slots:
+	for action in _plan.actions():
+		for _post in action.capacity():
 			if hired >= workers.size():
 				break
-			table[workers[hired].id()] = building.anchor()
+			table[workers[hired].id()] = action.id()
 			hired += 1
 	return Assignment.create(table)
+
+## Un relief plat, assez large pour couvrir les ancres de la ville.
+##
+## Ce harnais fabrique sa ville à la main et n'a jamais eu besoin de terrain. Le ciblage
+## en réclame un — une action se pose sur une cellule, qui doit exister —, et le
+## résolveur aussi depuis que les actions se jouent à cru.
+func _make_terrain() -> TerrainQuery:
+	var plain := GameDatabase.get_terrain(&"plain")
+	assert(plain != null, "terrain « plain » introuvable")
+	var width := CITY.size() * ANCHOR_STRIDE + ANCHOR_STRIDE
+	return HeightGrid.create(Vector2i(width, ANCHOR_STRIDE), 0, plain).to_query()
 
 func _slot_count() -> int:
 	var slots := 0

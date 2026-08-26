@@ -19,3 +19,22 @@ signal run_started(run_seed: int)
 
 ## Le run courant s'est terminé sur ce score.
 signal run_ended(score: int)
+
+## La phase courante a changé. Le jour, et l'identifiant de la phase entrante.
+##
+## L'identifiant et non la PhaseDef : un auditeur n'a besoin que de savoir que ça a
+## bougé, et faire voyager la Resource d'équilibrage sur le bus donnerait à n'importe
+## quel adapter une référence mutable sur de la data partagée. Le libellé se lit sur la
+## phase que RunManager expose.
+signal phase_changed(day: int, phase: StringName)
+
+## Une phase vient de se résoudre. La charge est le rapport, immuable.
+##
+## Un seul signal pour les deux sortes de résolution : le rapport porte la journée fermée
+## quand il y en a une, et `closes_the_day()` le dit. Un second signal serait une frontière
+## que personne ne franchit — aucun auditeur ne veut l'une sans l'autre.
+signal phase_resolved(report: PhaseReport)
+
+## Le run a franchi sa dernière phase. Ce qu'il advient ensuite — score, écran de
+## récompense — appartient à I2 ; ce signal existe pour que le harnais cesse de jouer.
+signal run_finished(day: int)

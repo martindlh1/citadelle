@@ -4,6 +4,748 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-25 — `I1` : la journée, la bourse, et les deux verbes enfin exécutés
+
+**État : terminé.** Dix commits sur `feat/d1-deck`, à la suite de `D2` — dont deux qui
+corrigent le jalon lui-même, l'un venu d'une partie jouée au clavier et l'autre d'une
+décision de design que j'avais prise seule. Les trois commandes passent : boot sans erreur
+ni warning, tout `src/domain/` parse, **585 tests verts contre 467** à l'ouverture. Sixième
+jalon d'affilée sur la même branche.
+
+### Ce qui a été livré
+
+- **DTO** — `PlayResult`, `SiteReport`, `PhaseReport`, `DayReport` dans `domain/run/` ;
+  `UpkeepReport` dans `domain/economy/`. `PlayedAction` et `TargetResult` gagnent un
+  **sens** ; `ProductionReport` perd son upkeep.
+- **Schéma** — `PhaseDef`, `RunBalance` ; `ActionBalance` gagne la piste des chantiers et
+  les deux bornes de terrassement.
+- **Domaine** — `DayCycle`, `RunState`, `SiteResolver`, `RunOrchestrator`.
+  `ProductionResolver` gagne une seconde porte, `SkillResolver` ouvre `award_lines()`.
+- **Six suites neuves, 118 cas de plus.**
+- `RunManager` réécrit, trois signaux sur `EventBus`, `run_harness.gd`.
+- `DESIGN.md` 2, 3.2, 3.3, 3.4, 3.5, 3.8, 4.1, 4.2 et 8 ; `CLAUDE.md` ; `README.md`.
+
+### La décision qui porte le jalon : ordonner plutôt que muter
+
+`D2` avait laissé *Construire* et *Terraformer* se poser et s'affecter sans rien faire, et
+son journal disait pourquoi : leur effet mute le `CityState` et la `HeightGrid`, donc
+l'état de deux autres systèmes. Un résolveur d'Économie qui les muterait violerait la
+règle de dépendance.
+
+Le chemin annoncé a été tenu tel quel. `SiteResolver` **ordonne** — tant de crans sur
+cette ancre, tant de hauteur sur cette cellule — et ne touche à rien ; `RunOrchestrator`
+**applique**, parce qu'il est le seul objet du projet à tenir les deux états à la fois, ce
+que `DESIGN.md` 3.8 autorise nommément. Le résolveur reste aussi pur que son jumeau, et il
+n'a même pas besoin du terrain : un terrassement rend un delta.
+
+Bénéfice non prévu : un soir devient rejouable. Appliquer deux fois le même rapport au
+même état donne le même état, ce qui n'aurait pas été vrai d'un résolveur qui mute en
+chemin.
+
+### Les quatre questions posées avant d'écrire, et leurs réponses
+
+Deux étaient des `OUVERT` de `DESIGN.md` explicitement renvoyés « au jalon qui exécute le
+verbe ». C'est celui-ci. Les deux autres sont nées de la première paire.
+
+**Le sens d'un terrassement se choisit à la pose.** Il y a une carte et deux sens ; le sens
+appartient au *jeu* de la carte, comme l'orientation d'un bâtiment appartient au placement
+et non à sa `BuildingData`. Le prix a été annoncé avant d'être payé : **deux DTO de
+`contracts/` changent de forme**. L'alternative — deux cartes en data, `terraform_raise` et
+`terraform_lower` — ne coûtait aucun contrat mais faisait dépendre d'un tirage la
+correction d'un relief. Une carte qu'on oriente vaut mieux qu'une carte qu'on subit.
+
+**La piste que crédite un chantier est une quatrième famille.** L'`OUVERT` de 3.2 traînait
+depuis `C4`, renvoyé à `D2` qui n'avait pas exécuté le verbe. Trois issues étaient sur la
+table ; c'est la plus chère des trois qui a été prise, et pour la bonne raison : bâtir doit
+être un métier. Le rattacher à l'Artisanat aurait rempli une piste que `X2` n'a pas
+ouverte, et l'XP de niveau seule aurait fait d'un chantier un pur coût.
+
+Le coût réel s'est révélé nul : **rien dans le code n'énumère les familles**. Les pistes se
+créent à l'usage, le nom vit dans `data/balance/`. La quatrième famille est une ligne de
+`.tres`.
+
+**Ce que ce multiplicateur multiplie**, question que la précédente a immédiatement
+ouverte. Sans réponse, la piste aurait accumulé de l'XP sans que rien ne la consomme —
+un métier dont la compétence ne change rien. Les crans d'un soir sont donc la **somme des
+efficacités de l'équipe, tronquée, plafonnée à ce qu'il reste à bâtir** : deux ouvriers
+chevronnés en posent trois là où deux bleus en posent deux. Même arithmétique que la
+production, et le plafond figé à la pose n'est jamais dépassé.
+
+**L'eau et le rocher ne se terrassent pas**, et la raison est mécanique et non thématique :
+terrasser déplace la **hauteur**, pas le `TerrainData`. Monter une case d'eau la laisserait
+eau — inconstructible, toujours tagguée — pour le prix d'une carte et d'un ouvrier. Le jour
+où l'on voudra changer le sol, ce sera un *Défricher*, et c'est un autre verbe.
+
+### Le modèle de journée — une décision que j'ai prise seule, et qu'il a fallu défaire
+
+**C'est la faute de méthode du jalon, et elle mérite d'être écrite en entier.**
+
+La première version en data suivait la lettre de `DESIGN.md` 2 — « construction puis
+résolution » — et donnait une seconde phase qui n'autorisait rien et résolvait à sa fin.
+Elle demandait donc **deux validations pour un soir** : une pour entrer dans une phase où
+il n'y a rien à faire, une pour en sortir. Un défaut réel, qui ne se voit qu'en essayant
+de jouer et qui n'aurait fait tomber aucun test.
+
+J'ai corrigé le mauvais bout. Au lieu de rendre la seconde phase permissive elle aussi,
+j'ai **séparé les deux gestes** — une phase pour poser les cartes, une pour y envoyer les
+ouvriers — et je l'ai annoncé en une phrase au passage au lieu de m'arrêter. C'était une
+question de design, pas une correction technique, et la consigne de session dit en toutes
+lettres de ne jamais en trancher une seul.
+
+La journée voulue est le **modèle symétrique** : deux phases identiques, chacune
+autorisant les deux gestes et se résolvant à sa fin. Elle ne souffre d'ailleurs pas du
+défaut que je cherchais à éviter — deux phases qui font toutes les deux quelque chose
+n'ont pas de temps mort.
+
+Le coût de la correction dit quelque chose sur ce qui avait été bien fait : **le code n'a
+rien eu à changer**. Le harnais lit ce que la phase autorise, il ne le suppose pas ; les
+tests fabriquent leurs propres journées et vérifient le *mécanisme* de garde, pas la
+journée livrée. C'est un `.tres` qui a bougé — et une conséquence bien plus intéressante,
+ci-dessous.
+
+### Ce que la correction a révélé : une journée compte deux résolutions
+
+Deux phases qui résolvent, c'est deux récoltes par jour. Mais on ne mange pas deux fois
+parce qu'on a récolté deux fois, et l'upkeep vivait dans le rapport de production depuis
+`E1`, donc il serait tombé à chaque phase.
+
+Ce n'était pas visible tant qu'une journée n'avait qu'un soir : la production et l'upkeep
+tombaient forcément ensemble, et cette **coïncidence** avait été prise pour une règle.
+`DESIGN.md` 2 les listait pourtant depuis le premier jour comme deux étapes distinctes de
+la séquence, avec l'événement entre les deux. La fusion était l'accident.
+
+Une journée compte donc deux sortes de résolution :
+
+- une **phase** produit — ce que les actions posées rapportent, les chantiers, l'XP ;
+- une **journée** coûte — l'upkeep, et demain l'événement de 3.7 et le combat de `F1`,
+  qui entreront par un champ chacun sur `DayReport` sans que rien d'autre bouge.
+
+Sans cette séparation, la structure de la journée deviendrait inséparable de son
+équilibrage : passer de deux phases à trois obligerait à rééquilibrer la nourriture, et
+l'`OUVERT` de 2 cesserait d'être testable en échangeant un `.tres` — c'est-à-dire qu'il
+cesserait d'être ouvert.
+
+`ProductionReport` perd donc quatre accesseurs au profit d'un `UpkeepReport`, ce qui est
+un **contrat qui change de forme** — annoncé et validé avant d'être écrit, cette fois.
+`EveningReport` devient `PhaseReport` dans la foulée : « soir » ne désigne plus une phase
+mais la fin de journée, que `DayReport` décrit.
+
+**La fin de journée n'est pas un champ de data**, et c'est le seul endroit du jalon où
+j'ai refusé d'en ajouter un : une journée se ferme après sa dernière phase, par
+définition, et un booléen pourrait dire le contraire de la liste qui le porte. Elle est
+aussi indépendante de `resolves` — une journée coûte à nourrir même si sa dernière phase
+ne produit rien, et un cas de test tient exactement ça.
+
+### Deux endroits où j'ai changé une règle du projet, plutôt que de la contourner
+
+**`ActionTargeting` n'est plus le seul fichier qui nomme des cartes.** `DESIGN.md` 4.2
+l'affirmait depuis `D2`, et `SiteResolver` en ouvre un second. Ce n'est pas une entorse :
+**où** un verbe se pose et **ce qu'il fait** sont deux questions, la seconde étant
+exactement celle que 4.2 refuse de mettre en data. Ce que la phrase protégeait vraiment —
+que le résolveur d'Économie ne nomme personne — tient toujours.
+
+La garantie « un seul fichier » a été remplacée par une plus forte et **vérifiée** : tout
+verbe que le ciblage accepte est soit productif selon `data/balance/`, soit exécuté par le
+résolveur de chantiers. Un cinquième verbe ne peut plus se poser, s'affecter et ne rien
+faire — ce qui était l'état de deux d'entre eux entre `D2` et `I1`. Un second cas tient le
+revers : aucun verbe n'est les deux à la fois, sans quoi une carte compterait double.
+
+**Les trois rapports du run ne sont pas des contrats.** `PhaseReport` porte un
+`ProgressReport`, dont le docstring de `W1` argumente qu'il reste dans
+`domain/workforce/` faute d'un second système qui le franchisse. Le mettre dans
+`contracts/` aurait fait entrer un interne des Effectifs par la porte de derrière. Les
+trois sont donc restés dans `domain/run/`, sur le même argument que `PickResult` — le
+critère est un second **système du domaine**, pas un adapter. La table des contrats de
+`CLAUDE.md` ne gagne aucune ligne, et la règle y est écrite pour la prochaine fois.
+
+### Le piège que les tests ont attrapé, et celui que le clavier aurait attrapé
+
+**`ProductionReport.idle()` s'est mis à mentir.** Le rapport de production ne connaît que
+les postes de production ; dès que les chantiers s'exécutent, un ouvrier parti bâtir y
+figure comme **oisif**. Les deux lectures sont chacune juste dans leur système et fausses
+dans la journée.
+
+Le corriger sur place aurait demandé au résolveur d'Économie de recevoir un rapport qu'un
+autre système produit — précisément la dépendance que la ligne de contrat de 3.3 refuse.
+C'est `PhaseReport.idle()` qui répond pour la phase entière, parce qu'il est le seul à voir
+les deux journaux de travail. Un cas de test épingle les deux lectures côte à côte : le
+bâtisseur est oisif dans l'une et pas dans l'autre, et c'est voulu.
+
+**Le rappel des ouvriers au retrait d'une action est du code qui ne s'exécute jamais avec
+la journée livrée.** Le retrait appartient à la phase qui *pose* ; on ne revient à une
+phase qui pose qu'après une résolution, qui a déjà tout vidé. Un cas de test écrit trop
+vite l'a montré en tombant.
+
+Ce n'est pas du code mort pour autant, et la nuance mérite d'être notée : il s'allume dès
+qu'une journée laisse poser et affecter dans la même phase — donc dès qu'un `.tres` change,
+ce qui est exactement le genre de variante que `I2b` mettra à l'épreuve. Le cas construit
+donc sa propre journée pour l'exercer, ce qui est aussi un rappel utile qu'une journée est
+de la data.
+
+### Le défaut que seul le clavier a trouvé — un refus sans cause
+
+*(Trouvé par l'humain juste après le jalon, corrigé dans la foulée.)* Espace sur une action
+posée répondait « refusé » sans dire pourquoi. La cause était entière et légitime : la
+phase **Construction** n'autorise que *poser*, et il faut Entrée pour atteindre
+la phase suivante. Le refus était juste ; c'est le silence qui ne l'était pas.
+
+L'origine est une justification que j'avais écrite un peu vite dans `RunOrchestrator` :
+`staff()` rendait un booléen nu, « les quatre refus possibles se voyant tous à l'écran
+avant le clic — la phase est affichée, la capacité est affichée, les ouvriers libres sont
+listés ». C'est vrai à la lettre et faux à l'usage. Le bandeau affiche bien la phase, mais
+rien ne reliait ce bandeau à une touche qui ne répond pas, et **un refus qui ne se nomme
+pas est indiscernable d'une panne** — exactement le diagnostic que `D2` avait posé sur les
+touches 4 et 5 qui « ne sélectionnaient pas ».
+
+La correction ne rajoute pas un DTO. `staffing_refusal()` devient le **seul juge** des cinq
+refus, `staff()` l'appelle, et l'écran l'appelle aussi pour traduire — le même partage que
+le fantôme de `C2` et la pose, qui interrogent tous deux `PlacementValidator`. Une seule
+liste de règles, donc rien qui puisse dériver. Sept cas de plus, dont un qui tient le
+revers : une affectation possible ne donne aucune raison, sans quoi une fonction qui
+refuserait tout passerait les six autres.
+
+Deux jalons de suite, le défaut que ni le parsing, ni les tests, ni une capture n'ont vu
+est venu d'une paire de mains. Le harnais ne se juge pas en le lisant.
+
+*(Une vérification annexe qui vaut d'être notée : le `match` de traduction est le premier
+du projet dont les motifs sont des constantes d'une **autre** classe. Une sonde jetable l'a
+confirmé plutôt que supposé — la forme est valide, y compris le repli par défaut.)*
+
+### Le cas qui rend vraie une promesse de `I0`
+
+`CLAUDE.md` promet depuis le premier jour qu'« un seed plus une liste d'actions doit
+rejouer un run à l'identique — c'est ce qui rend l'équilibrage et le débogage possibles ».
+Rien ne pouvait le vérifier, faute d'un objet qui tienne un run entier.
+
+`test_the_same_seed_and_the_same_gestures_replay_the_run` ouvre deux runs sur le même
+seed, y joue la même suite de gestes sur deux journées, et compare la réserve, les
+hauteurs, l'avancement du chantier, l'XP et la main. Un second cas tient le revers : un
+seed différent ne rejoue pas la même partie — sans lui, le premier passerait tout aussi
+bien sur un run parfaitement déterministe et vide.
+
+C'est ce qui a décidé du fait que **`RunState` porte son équilibrage** au lieu de le
+recevoir à chaque appel, à l'inverse de tout le reste du domaine. Un run ne rejoue que
+s'il rejoue sur les chiffres avec lesquels il s'est ouvert. Même geste que `Deck`, qui
+garde son catalogue.
+
+### Ce que la capture a montré
+
+Deux journées jouées en ligne de commande : un chantier ouvert et **payé**, avancé de deux
+crans et **achevé**, une cellule terrassée de +1, six postes tenus, aucun oisif, réserve à
+39/100. C'est la première capture du projet où le contrôle porte sur un *enchaînement* et
+non sur une image — le rapport imprimé est la seule preuve que la bourse a été débitée.
+
+Elle a aussi tranché une question que je m'étais posée à l'œil : le bâtiment au centre
+n'était pas le Cœur. Une sonde jetable l'a confirmé — le Cœur est en (15, 14), premier
+emplacement 2×2 plat depuis le centre, et **achevé d'office** parce que son
+`build_actions` vaut 0. C'est exactement ce que 4.1 annonçait à `C4` sans avoir pu le
+vérifier : un bâtiment qui ne réclame aucune action n'a pas besoin d'un chemin de pose
+particulier.
+
+### Ce qui reste
+
+Rien pour `I1`. Cinq choses volontairement laissées de côté :
+
+- **le combat** — `F1`. La séquence de 2 lui laisse sa place vide, et `DayReport`
+  l'accueillera par un champ de plus.
+- **l'événement quotidien** *(3.7)* — même chose, même place réservée.
+- **la fin de run** — `is_over()` existe et le harnais s'arrête, mais 5. veut un score et
+  des conditions de défaite qui demandent le combat. `I2`.
+- **le choix de *qui* l'on envoie** — le harnais prend toujours le premier ouvrier libre.
+  3.4 dit que c'est la décision de fond d'une phase ; la présenter est `W2`.
+- **le sort de la main non jouée** — elle est défaussée à chaque résolution. C'est l'état
+  par défaut de l'`OUVERT` de 3.5 et non une réponse, exactement comme « détruire un
+  chantier ne rend rien » l'était à `C4`.
+
+Un report de `D2` tient toujours : `data/terrain/` ne contient aucun filon, donc *Récolter*
+n'a pas de cible `ore` à cru.
+
+La mise en commun des `_make_label()` est passée de huit à **neuf** exemplaires. Elle
+n'appartient à aucun jalon, ce qui est précisément pourquoi elle ne se fait jamais.
+
+### Prochain jalon
+
+**`F1`** — le bouchon de combat, `CombatForce` et `DamageReport`. C'est le dernier système
+qui fera bouger un contrat, et le faire avant `I2` évite de câbler deux fois. `E2` et `W2`
+peuvent s'intercaler à tout moment : le harnais de `I1` montre exactement ce qu'ils auront
+à remplacer.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'`InputMap`
+ajoutée.
+
+- `F5` lance le **harnais Run** : `HARNESS` vaut désormais `&"run"` dans
+  `scenes/dev/dev_boot.gd`. Il remplace le harnais Cartes comme scène de travail par
+  défaut ; les autres restent atteignables en changeant cette constante.
+- **Les commandes** : une carte se prend au clavier — 1 à 9 — ou au clic dessus ; clic
+  gauche pour la jouer sur la case survolée, clic droit pour retirer, Espace pour envoyer
+  un ouvrier, Retour arrière pour les rappeler, **Tab pour pivoter un bâtiment ou
+  retourner un terrassement**, **Entrée pour finir la phase**. La caméra garde Q/E, la
+  molette, WASD et R.
+- **Un `.tres` neuf sans `uid://`** — `data/balance/run_balance.tres`. L'éditeur lui en
+  ajoutera un au premier réenregistrement : c'est un diff à attendre, pas un problème.
+  C'est aussi le premier `.tres` du projet à porter des **sous-ressources**, une par
+  phase.
+- **Les chiffres du bloc `run` sont à relire** : quinze journées, deux phases identiques,
+  et un terrassement borné à `[0, 6]` — les mêmes bornes que la génération, ce qui est un
+  point de départ et non une coïncidence à conserver. Le bloc `actions` a gagné
+  `site_skill_family = &"construction"`.
+- **L'équilibrage des ressources est le premier chantier ouvert.** Deux phases qui
+  résolvent, c'est **deux récoltes par jour pour un seul upkeep** : l'économie est
+  nettement plus généreuse qu'à `E1b`, qui mesurait un soir par jour. Sciemment laissé en
+  l'état — voir le harnais Économie, dont le verdict est resté calibré sur l'ancien
+  rythme.
+- Les caches de classes et d'uid ont été reconstruits pendant la session, et les `.gd.uid`
+  des scripts neufs sont commités.
+
+---
+
+## 2026-08-25 — `D2` : les deux gestes, la clé de l'affectation, et un bug trouvé en image
+
+**État : terminé.** Cinq commits sur `feat/d1-deck`, à la suite de `D1`. Les trois
+commandes passent : boot sans erreur ni warning, tout `src/domain/` parse, **467 tests
+verts contre 396** à l'ouverture. Cinquième jalon d'affilée sur la même branche, la
+chaîne empilée continue.
+
+### Ce qui a été livré
+
+- **Contrats** — `PlayedAction`, `ActionPlan`, `TargetResult`. `Assignment` **rekeyée**
+  sur l'action posée. `CitySnapshot` gagne son index par cellule.
+- **Domaine** — `ActionBoard`, `ActionTargeting`, et le `ProductionResolver` réécrit
+  pour partir des actions posées.
+- `ActionBalance` : septième bloc de `BalanceData`, plus `data/balance/action_balance.tres`.
+- **Quatre suites, 71 cas neufs.**
+- `TargetHighlight`, `ActionMarker`, `HandView` — trois adapters, premier dossier
+  `src/adapters/deck/`.
+- `deck_harness.gd` **réécrit** : plus un rapport, une scène. `--shot-evenings` dans
+  `dev_shot.gd`.
+- `DESIGN.md` 3.3, 3.5, 4.2 et 8 ; `CLAUDE.md` (table des contrats) ; `README.md`.
+
+### La décision qui porte le jalon : la carte n'est pas l'ouvrier
+
+`DESIGN.md` 8 annonçait que jouer une carte produirait un `Assignment` — ouvrier →
+(action, cible) —, donc un geste **atomique**. `D1` avait repéré en conversation que
+c'était faux et avait laissé la question ouverte exprès. Elle est tranchée.
+
+Si une carte valait un ouvrier, cartes et ouvriers se **doubleraient** : chaque action en
+consommant une de chaque, la contrainte réelle deviendrait `min(cartes, ouvriers)`, ce
+que 3.4 refuse en toutes lettres — « deux contraintes qui se croisent, et non deux
+ressources qui se doublent ». Le flux compte donc deux gestes : on joue la carte **sur une
+cible**, ce qui pose une action ; puis on y affecte **des** ouvriers.
+
+C'est cet objet manquant que `D1` avait diagnostiqué, et il porte trois choses figées à la
+pose : son identité, sa cible canonique, et sa **capacité**.
+
+### La question posée avant d'écrire, et sa réponse
+
+**À quoi un ouvrier s'affecte-t-il ?** Deux réponses étaient sur la table, et elles
+décidaient de la taille du jalon.
+
+Garder la **cellule** comme clé ne changeait aucun contrat et laissait le résolveur
+intact — mais tranchait « une case fait une chose par phase » par une structure de
+données, alors que `DESIGN.md` ne le dit nulle part. *Terraformer* et *Récolter* peuvent
+viser la même case nue, *Récolter* et *Chasser* la même forêt : ce sont deux métiers sur
+une même terre, et les interdire par accident est exactement la fermeture silencieuse que
+`D1` s'était félicité d'éviter.
+
+L'**identité propre** a été retenue. Elle coûte la rekeyage d'`Assignment` et la réécriture
+du `ProductionResolver`, et c'était le dernier moment où ça se payait peu — avant que `I1`
+ne câble tout. Elle rend les doublets *représentables* ; les interdire reste possible plus
+tard comme règle explicite du validateur, et l'inverse n'aurait pas été vrai.
+
+### Ce que la rekeyage a rendu vrai
+
+`DESIGN.md` 2 dit depuis le début que « la production n'est plus une étape passive qui
+balaye les bâtiments : c'est le résultat des actions que le joueur a posées ». **Ce n'était
+pas vrai.** Le résolveur de `E1` balayait les ancres de l'affectation et servait le
+rendement du bâtiment qu'il y trouvait, sans qu'aucune carte n'ait eu à être jouée. Il part
+maintenant du plan : rien ne produit qui n'y figure.
+
+Le contrat de 3.3 gagne deux entrées. L'`ActionPlan` est le pilote. Le `TerrainQuery` vient
+avec la seconde lecture de 3.5 — une action à cru rend ce que le **tag de sa cellule**
+dicte, donc l'Économie doit voir le relief. Elle voit le contrat, jamais la grille, ce que
+3.3 exigeait vraiment.
+
+**Le témoin que la réécriture n'a rien cassé** : les 396 tests sont restés verts, et les
+harnais Économie et Effectifs impriment **exactement** ce qu'ils imprimaient avant — mêmes
+récoltes, mêmes famines, mêmes paliers d'XP, soir par soir. Le pilote a changé, pas
+l'arithmétique.
+
+### Décisions
+
+**Le résolveur n'écrit aucun nom de carte.** Les deux lectures de 3.5 posent chacune leur
+question à `data/balance/` : « cette carte tient-elle un poste ? » dans un bâtiment,
+« cette carte tire-t-elle quelque chose de ce tag ? » à cru. *Construire* et *Terraformer*
+répondent non aux deux et sortent de la production **structurellement**, sans être nommés,
+de sorte qu'un cinquième verbe entre sans qu'on ait à venir l'exclure d'une liste.
+
+**Les noms de verbes vivent en un seul endroit**, `ActionTargeting`, et c'est légitime —
+4.2 pose qu'une nature d'action est du code. Un cas de test charge `data/cards/` et exige
+que toute carte du pool des actions y ait une règle, de sorte qu'une cinquième entrée dans
+`data/` sans règle de ciblage fasse tomber la suite au lieu de se poser nulle part.
+
+**`CitySnapshot` a reçu son index par cellule**, dont son propre docstring disait qu'on
+n'ouvrirait pas la porte tant que personne ne la pousserait. `D2` la pousse : une action se
+joue au clic sur une cellule quelconque de l'empreinte — on désigne un coin de la ferme, on
+vise la ferme. Il ne coûte **aucune entrée de plus** au contrat, les cellules se déduisant
+des `BuildingSnapshot` que `create()` reçoit déjà.
+
+**La cible est canonicalisée par le ciblage** et non par l'adapter. Deux clics sur deux
+coins d'une même cabane sont deux fois la même pose ; le faire dans la vue aurait laissé
+passer deux actions qui se croient différentes.
+
+**`WorkLine` n'a pas bougé de forme.** Son `Vector2i` cesse d'être « l'ancre du bâtiment »
+pour devenir « la cellule du poste », ce qui pour un bâtiment est le même nombre.
+L'accesseur a été renommé `cell()` — `anchor()` aurait menti sur toute action à cru.
+Y ajouter l'action posée aurait été une frontière que personne ne franchit : `SkillResolver`
+ne lit que l'ouvrier et la famille.
+
+**Le `ProductionResolver` fait deux passes sur le plan** — les lignes de travail, puis les
+rendements — au lieu d'une. C'est délibéré : une ligne de travail ne porte que sa cellule,
+et deux actions peuvent viser la même, donc repartir des lignes obligerait à retrouver de
+quelle action chacune vient. Les deux passes posent les mêmes questions aux mêmes fonctions
+pures sur les mêmes entrées ; elles ne peuvent pas répondre différemment.
+
+**La capacité voyage figée sur l'action.** La relire depuis la ville au moment de résoudre
+aurait rouvert la porte à ce que l'écran promette trois postes et que le soir n'en serve
+que deux.
+
+### Le bug que les tests ont trouvé, et celui que l'image a trouvé
+
+Deux défauts réels, aucun des deux visible au parsing.
+
+**Le premier est venu en écrivant les cas du résolveur.** Sur un bâtiment, il ne posait
+qu'une question — « ce bâtiment produit-il ? » — si bien que **toute** action posée sur une
+ferme achevée en tirait une récolte, *Construire* comprise. Le ciblage l'interdit
+aujourd'hui en refusant *Construire* sur un bâtiment fini, mais faire reposer la justesse
+du soir sur une règle écrite dans un autre système est la dette que `I1` aurait payée en
+avançant les chantiers pendant la résolution. `ActionBalance` nomme désormais les cartes
+qui tiennent un poste, symétrique de la table des sources à cru. Le cas qui l'épingle a été
+vérifié de la seule façon qui vaille : retirer la garde, regarder le test tomber, remettre
+la garde.
+
+**Le second est venu de la capture, et lui n'avait aucune chance d'être trouvé autrement.**
+Le harnais avait posé deux *Récolter* sur une même cabane à deux postes et y avait mis trois
+ouvriers. Une carte ouvrait les postes de sa cible **à chaque fois qu'elle était jouée** :
+la jouer deux fois doublait le bâtiment, et la carte cessait d'être une permission pour
+devenir un multiplicateur. Une carte les ouvre une fois ; deux cartes *différentes* sur une
+même cellule restent acceptées, ce qui est le cas même pour lequel les actions ont reçu une
+identité.
+
+Ce second bug ne se lisait ni dans l'image ni dans les tests, mais dans la **table des
+actions posées** que la capture imprime. Sixième jalon d'affilée où le harnais dit quelque
+chose qu'aucune des trois commandes ne pouvait dire — et le premier où ce qu'il dit est un
+défaut de règle et non un chiffre d'équilibrage.
+
+**Un troisième est venu du clavier, après coup**, et il fallait un humain pour le trouver :
+les touches 4 et 5 « ne sélectionnaient pas ». Elles étaient parfaitement liées. La
+sélection portait sur l'**identifiant** de la carte tenue, et une main tient couramment
+deux exemplaires du même nom — sur la main d'ouverture, le rang 4 double le rang 2 et le
+rang 5 double le rang 1. Les presser retombait donc sur la carte déjà tenue, ce que le
+code interprétait comme « on la repose ». Le cadre ne bougeait pas non plus, la vue
+encadrant le premier exemplaire du nom quel qu'ait été le rang pris.
+
+La sélection porte désormais sur le **rang**. Le docstring d'origine défendait
+l'identifiant en disant qu'un rang ne survivrait pas à une repioche : c'était le mauvais
+arbitrage, et la robustesse annoncée n'existait pas — l'accesseur relit la main à chaque
+appel et se vide dès que le rang n'y répond plus. Les cartes se prennent aussi au **clic**,
+ce que le jalon devait de toute façon : une main peut tenir plus de neuf cartes, et
+au-delà de neuf seul le clic les atteint.
+
+Trois défauts, trois contrôles différents — la suite de tests, la table d'une capture, et
+une paire de mains. Le troisième est celui qu'aucune discipline d'écriture n'aurait
+attrapé, parce qu'il ne se voit qu'en jouant.
+
+### Ce que le harnais est devenu
+
+Le rapport texte de `D1` a disparu, remplacé par la scène — le geste exact que `C2` a fait
+sur `C1`. Son verdict statistique avait fait son travail et n'avait pas à être rejoué à
+chaque lancement ; les chiffres restent dans l'entrée `D1`.
+
+C'est aujourd'hui le seul harnais où une **phase entière** se joue, et le premier à
+composer **trois** systèmes du domaine — Cartes, Économie, Effectifs — là où celui des
+Effectifs en composait deux.
+
+Deux corrections sont venues de deux captures successives, et méritent d'être notées parce
+qu'aucune n'est un bug de code. La première ne montrait **rien** : les trois bâtiments de
+démonstration s'étaient posés au coin de la carte, là où le rapport texte les recouvre, et
+la carte jouée était la seule de son nom en main, si bien qu'aucune cible ne restait
+allumée. La seconde résolvait trois soirs qui ne produisaient rien, parce que le script de
+capture ne posait qu'un *Construire*. Un contrôle par l'image qui ne montre pas ce que le
+jalon ajoute ne contrôle rien.
+
+### Ce qui reste
+
+Rien pour `D2`. Cinq choses volontairement laissées de côté :
+
+- **exécuter *Construire* et *Terraformer*** — `I1`. Les deux se posent et s'affectent ;
+  leur effet mute le `CityState` et la `HeightGrid`, donc l'état de deux autres systèmes.
+  Un résolveur d'Économie qui les muterait violerait la règle de dépendance, et le chemin
+  propre est qu'il les rapporte et que l'orchestrateur les applique. Le rapport du harnais
+  les nomme en attendant, plutôt que de laisser croire à une panne.
+- **le coût d'un bâtiment posé** — `I1`, et 3.2 le dit depuis `C1` : « ai-je les 15 bois ? »
+  est une seconde question. Une carte de bâtiment s'y pose gratuitement.
+- **la direction de *Terraformer*** — nouvel `OUVERT` en 3.5. Une seule carte, deux sens
+  possibles, donc un choix fait à la pose ; lui inventer un champ avant que quoi que ce soit
+  le lise reviendrait à deviner sa forme.
+- **le clic sur une carte de la main** — la sélection passe par les touches 1 à 9. C'est du
+  routage d'input entre une UI et un curseur 3D, donc du travail d'écran, et il appartient
+  au HUD de `E2` et au panneau d'affectation de `W2`.
+- **le choix de *qui* l'on envoie** — le harnais prend le premier ouvrier libre. 3.4 dit que
+  c'est la décision de fond d'une phase ; la présenter est `W2`, et un harnais ne tranchera
+  pas comment.
+
+Un constat de contenu, hors périmètre et consigné en 4.2 : **`data/terrain/` ne contient
+aucun filon**, alors que 3.1 le liste avec le tag `ore`. La règle de récolte à cru le nomme
+et n'a donc pas de cible sur une carte réelle ; le minerai ne s'obtient qu'à la mine. C'est
+une ligne de 3.1 que `data/` n'a jamais reçue, et elle entrera avec le terrain.
+
+Les reports de `W1`, `C4` et `D1` tiennent tous : la troncature du rendement à `I3`, la
+trame d'ombre sur le dessus des boîtes, et la mise en commun des rapports texte des
+harnais — `_make_label()` en est maintenant à **sept** exemplaires, et le harnais Cartes
+vient d'en ajouter un huitième sous forme de `HandView`, qui n'en est pas un.
+
+### Prochain jalon
+
+**`I1`** — la boucle minimale, et c'est elle qui hérite de tout ce que `D2` a posé : la
+journée en phases, la bourse au moment de bâtir, et l'exécution des deux verbes laissés en
+attente.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'`InputMap`
+ajoutée — le harnais lit les keycodes bruts comme `camera_rig.gd` et `city_harness.gd`.
+
+- `F5` lance le **harnais Cartes** : `HARNESS` vaut toujours `&"deck"` dans
+  `scenes/dev/dev_boot.gd`. Il **dessine** désormais, contrairement à `D1` : une carte, une
+  main en bas de l'écran, et un rapport en surimpression. `godot --headless --quit` ne
+  suffit plus à le lire.
+- **Les commandes** : une carte se prend au clavier — 1 à 9 — ou **au clic dessus** ; un
+  clic gauche sur le sol la joue sur la case survolée, un clic droit retire l'action posée
+  là, Espace y envoie un ouvrier, Retour arrière les rappelle tous, Tab pivote un bâtiment,
+  **Entrée résout le soir**. La caméra garde Q/E, la molette, WASD et R.
+- **Un `.tres` neuf sans `uid://`** — `data/balance/action_balance.tres`, comme les
+  dix-sept de `D1` avant lui. L'éditeur lui en ajoutera un au premier réenregistrement :
+  c'est un diff à attendre, pas un problème.
+- **Les chiffres du bloc `actions` sont à relire** : une case nue accepte **un** ouvrier et
+  rend **1**, contre 2 par poste à la cabane de bûcheron. C'est l'écart qui décide si l'on
+  construit ou si l'on gratte, et c'est une hypothèse au même titre que les coûts de 4.1.
+- Les caches de classes et d'uid ont été reconstruits pendant la session, et les `.gd.uid`
+  des onze scripts neufs — sept de code, quatre de tests — sont commités.
+
+---
+
+## 2026-08-25 — `D1` : trois pools, un mélange qui ne triche pas, et ce qu'un draft coûte
+
+**État : terminé.** Cinq commits sur `feat/d1-deck`, tirée de `master` — la chaîne
+empilée de trois jalons s'arrête ici, `C4` ayant été fusionné entre-temps. Les trois
+commandes passent : boot sans erreur ni warning, tout `src/domain/` parse, **396 tests
+verts contre 324** à l'ouverture.
+
+La branche a de nouveau été créée **à l'orientation**, avant la première ligne. Quatre
+jalons d'affilée.
+
+### Ce qui a été livré
+
+- `CardData` et `DeckBalance` ; **seize `.tres`** dans `data/cards/` — les quatre
+  actions MVP de `DESIGN.md` 4.2 et une carte par bâtiment de 4.1 sauf le Cœur ; le
+  sixième bloc de `BalanceData`.
+- `CardCatalogue`, `CardShuffle`, `Deck`, `Hand`, `DraftPool`.
+- **Sept suites, 72 cas neufs.**
+- `GameDatabase` — `get_card()`, `list_card_ids()`, et deux contrôles de boot de plus.
+- `deck_harness.gd`, cinquième harnais, troisième en rapport texte.
+- `DESIGN.md` 3.5, 4.1, 4.2 et 8 ; `README.md`.
+
+### Deux arbitrages avant d'écrire
+
+**La colonne « Débloque » de 4.1 est reportée**, alors que ce même tableau l'annonçait
+pour `D1`. Les trois actions qu'elle concerne — *S'entraîner*, *Fabriquer*, *Explorer* —
+portent `MVP : non` en 4.2, et leurs systèmes sont `X1`, `X2`, `X3`. En les laissant hors
+du catalogue, il **n'y a rien à débloquer** : le champ n'aurait aucun lecteur et la
+requête « qu'est-ce qui est débloqué ? » serait une frontière que personne ne franchit —
+le motif exact qui a sorti `CombatForce` de `W1`. Le prix du report a été chiffré avant
+de le prendre : un champ sur `BuildingData`, trois `.tres` à rouvrir, une quatrième
+lecture de `CitySnapshot.completed()`. C'est peu, et `C4` a déjà laissé la porte ouverte.
+
+**Le pool est un `StringName` et non un `enum`**, contre la convention générale du
+projet — « `enum` plutôt que `String` pour les états ». Deux raisons se cumulent et
+l'emportent. Un `enum` non renseigné vaut 0, donc `&"action"` **en silence** : la
+doctrine du zéro perdrait sa prise sur le seul champ qui décide de tout le classement
+d'une carte, alors qu'un `&""` se détecte. Et un pool n'est pas un état en mémoire, c'est
+un identifiant écrit dans `data/`, où la convention est déjà le `StringName` — `&"wood"`,
+`&"harvest"`. L'ensemble reste fermé : `CardData.POOLS` le tient, et `missing_fields()`
+refuse tout ce qui n'y est pas.
+
+### La décision qui porte le jalon : le Deck ne décide de rien
+
+Il refuse deux choses, et ces deux refus sont le jalon.
+
+**Il ne juge aucune jouabilité.** `DESIGN.md` 3.5 dit qu'un jeu de carte est une
+*intention* que le système concerné accepte ou refuse. Le Deck ne connaît ni la grille,
+ni la bourse, ni le placement, et jouer une carte, vu d'ici, c'est l'appelant qui la
+défausse une fois la réponse obtenue. Il n'y a donc pas de verbe `play()` : `discard()`
+suffit, et il ne ment pas.
+
+**Il ne décide d'aucun moment.** Les trois tailles de main vivent dans `data/balance/`,
+et *quand* on pioche appartient à la journée, donc à `I1`. `discard_hand()` est une
+**capacité et non une politique** : rien dans le domaine ne dit qu'une phase se termine
+ainsi.
+
+Ce second refus est ce qui laisse entier l'`OUVERT` de 3.5 — le sort de la main non
+jouée. Un `Deck` qui aurait pris l'habitude de défausser tout seul en fin de phase aurait
+tranché la question sans que personne ne le décide, et la trancher dans du GDScript
+l'aurait rendue coûteuse à retester. Là, les deux réponses candidates s'essaieront en
+échangeant un `.tres`, ce qui est précisément la promesse de `data/balance/`.
+
+### Ce que le harnais a trouvé, et ce qu'il a fallu jeter
+
+Le harnais a produit un chiffre juste, un chiffre faux, et un chiffre inutile. Les trois
+méritent d'être consignés, parce que le tri entre les deux derniers est tout le travail.
+
+**Le chiffre faux.** La première version mesurait le cycle de la pioche en divisant les
+phases jouées par le nombre de remélanges, et sortait 2,7 phases là où le régime établi
+est 2. Les premières phases d'un run vident une pioche pleine sans jamais la recycler :
+les compter allonge le cycle d'un tiers. Un chiffre qui dépend de l'endroit où l'on
+commence à compter ne mesure rien. Corrigé en comptant l'écart entre deux remélanges
+successifs, ce qui donne 2,0.
+
+**Le chiffre inutile.** Une fois juste, il s'est révélé **muet** : il vaut deux phases
+que le pool d'actions en tienne dix ou quatorze, parce qu'une pioche qu'on vient de
+recharger garde toujours de quoi faire exactement une main de plus. Il dit quelque chose
+de vrai sur les piles et rien sur le jeu. Remplacé par la question que le design pose
+vraiment : au bout de combien de phases une main **revoit** la carte qu'on attend. Le
+remélange, lui, n'a pas disparu du rapport — il a sa colonne dans la table, où il se voit
+au lieu de se moyenner.
+
+**Le chiffre juste, et il répond à une question de design.** Sur deux cents seeds,
+7,8 % des phases n'offrent aucune carte *Construire* — la tension que `DESIGN.md` 3.2
+annonce quand il dit qu'un chantier qui attend est une vraie situation. Et surtout :
+après quatre drafts d'action pris au hasard dans l'offre, ce chiffre monte à **11,2 %**
+et le délai de retour de 1,07 à 1,11 phase. **Grossir son deck le rend moins fiable.**
+C'est le classique du deckbuilder, mais il est ici mesuré sur les chiffres réels de
+`data/` et non supposé, et il dit quelque chose que `I3` devra équilibrer : si drafter
+est une récompense, il faudra que ce qu'on gagne compense ce que la dilution coûte.
+
+Cinquième jalon d'affilée où le harnais dit quelque chose qu'aucune des trois commandes
+ne pouvait dire — et le premier où c'est un **échantillon** qui parle, pas un run. Une
+fréquence lue sur un seul seed n'aurait rien valu.
+
+### Ce que la commande 2 a rattrapé, et que la commande 1 n'a pas vu
+
+`CardShuffle` ne compilait pas — `var held := mixed[index]` sur un `Array` typé ne
+s'infère pas. Le boot est passé **sans un mot** : rien à ce moment-là ne chargeait le
+fichier, et son code de sortie valait 0. C'est exactement le piège que `CLAUDE.md`
+documente en disant que la commande 1 ne dit rien de la santé du projet, et la première
+fois qu'il se manifeste pour de vrai. Trois commandes, pas une.
+
+### Décisions
+
+**`CardShuffle` a son propre fichier, pour une seule fonction.** `Array.shuffle()` tire
+sur le RNG global de Godot et non sur celui du run : un deck mélangé par lui rendrait un
+même seed non rejouable, sans rien signaler. Le piège devait être évité à deux endroits —
+la pioche et l'offre de draft —, et une règle qu'on recopie est une règle qu'on oublie à
+la troisième occurrence. Un cas de test le garde en reseedant le générateur global entre
+deux mélanges et en exigeant le même ordre : c'est le seul cas qu'un `Array.shuffle()`
+échouerait, donc le seul qui protège vraiment.
+
+**Le RNG est un argument, jamais un membre.** Le Deck ne possède pas de flux d'aléatoire,
+il consomme celui du run. Un Deck qui garderait le sien serait un second flux à seeder,
+donc un second endroit où un run cesserait d'être rejouable. C'est le choix inverse de
+`TerrainGen`, qui prend un seed et le sale — et la différence se justifie : une
+génération est un tirage isolé qu'on ne veut pas corréler, une pioche est un événement du
+run comme un autre.
+
+**`create()` ne mélange pas.** Composer un deck reste sans aléatoire, donc assertable
+sans rng, et `shuffle(pool, rng)` est un geste public que l'ouverture d'un run fait sur
+les trois pools. Le risque assumé est qu'on l'oublie ; il est documenté, et il n'y aura
+qu'un seul appelant à `I1`.
+
+**Une carte draftée entre par la défausse.** Elle ne doit pas s'intercaler dans une
+pioche déjà entamée, ce qui la ferait passer devant des cartes qui attendaient leur tour
+depuis deux phases. Entre deux runs la question ne se pose pas, tout est recomposé.
+
+**`remove()` cherche dans un ordre fixé** — pioche, puis défausse, puis main. L'ordre est
+arbitraire, mais un retrait qui dépendrait de l'endroit où la carte se trouve ferait
+diverger deux runs partis du même seed.
+
+**Les tailles de main sont une table et non trois champs plats.** C'est ce qui rend le
+zéro du pool des powers écrivable *et* un pool oublié détectable : la présence de la clé
+vaut déclaration. Trois champs plats auraient rendu les deux situations indiscernables —
+même geste que le bloc nullable de `E1b`, appliqué à un dictionnaire.
+
+**`list_card_ids()` trie, et ça compte plus ici qu'ailleurs.** C'est dans cet ordre que
+le `CardCatalogue` reçoit les cartes, et c'est cet ordre que les offres de draft
+mélangent : un catalogue chargé dans l'ordre d'un `DirAccess` tirerait différemment d'une
+machine à l'autre sur le même seed.
+
+**Une carte de bâtiment nomme son bâtiment**, même quand c'est le même mot. Rien
+n'oblige une carte à porter le nom de ce qu'elle pose, et deux cartes qui poseraient la
+même ferme à des conditions différentes sont exactement ce qu'un draft de
+méta-progression fera. `missing_fields()` réclame le lien **dans les deux sens** : une
+carte de bâtiment sans bâtiment n'aurait rien à poser, une carte d'action qui en nommerait
+un ferait croire à un lien que rien ne suivra.
+
+### Ce qui reste
+
+Rien pour `D1`. Cinq choses volontairement laissées de côté :
+
+- **jouer une carte, et la jouabilité** — `D2`. Le Deck rend une intention ; qui
+  l'accepte n'existe pas encore.
+- **les trois actions non-MVP et la colonne « Débloque »** — `X1`, `X2`, `X3`, argumenté
+  plus haut.
+- **le pool des powers** — il existe, il est vide, il se pioche sans rien rendre. `X4`.
+- **le moment de piocher et de défausser** — `I1`, et c'est ce qui garde l'`OUVERT` de
+  3.5 ouvert.
+- **la récompense alternative d'un draft** — choix d'écran, il viendra avec l'écran.
+
+Et un constat de design neuf, à porter à `D2` — le seul de la session, et il est venu de
+la conversation et non du code. La ligne de 8 dit aujourd'hui que jouer une carte produit
+un `Assignment` — ouvrier → (action, cible) —, donc un geste **atomique**. Le flux
+réellement voulu en compte deux : on joue la carte **sur une cible**, ce qui crée une
+*action posée*, puis on y affecte **des** ouvriers. La différence n'est pas ergonomique.
+Si une carte valait un ouvrier, cartes et ouvriers se **doubleraient** — chaque action en
+consommant une de chaque, la contrainte réelle deviendrait `min(cartes, ouvriers)` — et
+c'est exactement ce que 3.4 refuse en disant « deux contraintes qui se croisent, et non
+deux ressources qui se doublent ». Il manque donc un objet de domaine entre la carte et
+l'ouvrier. `Assignment` ne changerait presque pas de forme — il associe déjà
+`ouvrier → clé`, et la clé cesserait de désigner un bâtiment pour désigner une action
+posée —, mais une question resterait franchement ouverte : **si deux actions posées
+visent la même cellule**, l'ancre `Vector2i` ne suffit plus comme clé. Rien n'a été écrit
+ni dans `DESIGN.md` ni dans le code : la question se tranchera à `D2`, avec la main à
+l'écran sous les yeux, et c'est le choix explicite de la session.
+
+Les reports de `W1` et `C4` tiennent tous : la troncature du rendement à `I3`, la trame
+d'ombre sur le dessus des boîtes qui est du travail Terrain, et la mise en commun des
+rapports texte des harnais — toujours sans jalon attitré, `_make_label()` en est
+maintenant à **six** exemplaires.
+
+### Prochain jalon
+
+**`D2`** — la main à l'écran, et la question ci-dessus tranchée : ce qu'une carte jouée
+crée, et à quoi un ouvrier s'affecte. `I1` ensuite.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'input
+ajoutée — le harnais Cartes ne lit pas le clavier.
+
+- `F5` lance le **harnais Cartes** : `HARNESS` vaut `&"deck"` dans
+  `scenes/dev/dev_boot.gd`. Il n'affiche rien en 3D — un rapport texte, également
+  imprimé sur la sortie standard, donc `godot --headless --quit --path .` suffit à le
+  lire. `&"city"`, `&"economy"`, `&"workforce"` et `&"terrain"` restent à un mot près.
+- **les chiffres du deck de départ sont à relire.** Dix cartes d'action — 4 *Récolter*,
+  3 *Construire*, 2 *Chasser*, 1 *Terraformer* — et six de bâtiment, mains de 5 et 2,
+  draft à 3 choix. Ce sont des hypothèses au même titre que les coûts de 4.1, et ce sont
+  elles que le verdict du harnais mesure : les changer change les deux pourcentages.
+- **dix-sept `.tres` neufs**, sans `uid://` — comme les treize bâtiments écrits à la main
+  avant eux. L'éditeur leur en ajoutera un la première fois qu'il les réenregistrera ;
+  c'est un diff à attendre, pas un problème. Les caches de classes et d'uid ont été
+  reconstruits pendant la session, et les `.gd.uid` des quinze scripts neufs — huit de
+  code, sept de tests — sont commités.
+
+---
+
 ## 2026-08-25 — `C4` : le chantier, ses deux lectures, et un contrôle par l'image
 
 **État : terminé.** Cinq commits sur `feat/c4-construction-sites`, tirée de

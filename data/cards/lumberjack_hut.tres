@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="CardData" format=3]
+
+[ext_resource type="Script" path="res://src/schema/card_data.gd" id="1_card_data"]
+
+[resource]
+script = ExtResource("1_card_data")
+id = &"lumberjack_hut"
+label = "Camp de bûcheron"
+pool = &"building"
+building = &"lumberjack_hut"

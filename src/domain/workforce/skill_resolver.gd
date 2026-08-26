@@ -25,7 +25,7 @@ extends RefCounted
 ##
 ## Chaque ligne est créditée et rapportée séparément plutôt que regroupée par ouvrier.
 ## Aujourd'hui les deux reviennent au même — une Assignment envoie un ouvrier à une
-## seule ancre, donc il tient au plus un poste par soir —, mais rien ici n'en dépend :
+## seule action, donc il tient au plus un poste par soir —, mais rien ici n'en dépend :
 ## deux lignes du même ouvrier cumuleraient correctement, et leurs paliers seraient
 ## rapportés dans l'ordre où ils ont été franchis.
 ##
@@ -35,14 +35,28 @@ extends RefCounted
 ## pas. Un absent, lui, n'apparaît pas au journal : la projection ne l'a pas montré.
 static func award(roster: Roster, report: ProductionReport,
 		balance: WorkforceBalance) -> ProgressReport:
-	assert(roster != null, "distribution d'XP sans roster")
 	assert(report != null, "distribution d'XP sans rapport de production")
+	return award_lines(roster, report.work(), balance)
+
+## Même chose, à partir d'un journal de travail brut.
+##
+## `I1` a ouvert cette porte parce qu'un soir a désormais **deux** journaux : celui des
+## postes de production, que l'Économie tient, et celui des postes de chantier, que le
+## Cycle de jour tient. Les deux créditent de la même façon — une ligne vaut une soirée —
+## et les faire distribuer par deux chemins aurait été deux règles à tenir d'accord.
+##
+## Le docstring de ce fichier annonçait déjà que l'XP de combat « passera par le même
+## gain() » à `F1` : c'est par ici qu'elle passera, sans qu'un `DamageReport` ait à se
+## déguiser en rapport de production.
+static func award_lines(roster: Roster, lines: Array[WorkLine],
+		balance: WorkforceBalance) -> ProgressReport:
+	assert(roster != null, "distribution d'XP sans roster")
 	assert(balance != null, "distribution d'XP sans équilibrage")
 	assert(balance.xp_per_shift > 0,
 		"XP par poste non renseignée : %d" % balance.xp_per_shift)
 
 	var gains: Array[SkillGain] = []
-	for line in report.work():
+	for line in lines:
 		if not roster.has(line.worker()):
 			continue
 		gains.append(_award_one(roster.worker(line.worker()), line.family(), balance))

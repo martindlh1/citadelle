@@ -1,0 +1,23 @@
+[gd_resource type="Resource" script_class="DeckBalance" format=3]
+
+[ext_resource type="Script" path="res://src/schema/deck_balance.gd" id="1_deck_balance"]
+
+[resource]
+script = ExtResource("1_deck_balance")
+starting_deck = Dictionary[StringName, int]({
+&"harvest": 4,
+&"build": 3,
+&"hunt": 2,
+&"terraform": 1,
+&"lumberjack_hut": 2,
+&"farm": 1,
+&"quarry": 1,
+&"palisade": 1,
+&"house": 1
+})
+hand_size = Dictionary[StringName, int]({
+&"action": 5,
+&"building": 2,
+&"power": 0
+})
+draft_choices = 3

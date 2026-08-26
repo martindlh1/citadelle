@@ -70,6 +70,11 @@ func test_both_progression_axes_are_configured() -> void:
 	assert_int(workforce.worker_xp_per_level).is_greater(0)
 	assert_int(workforce.max_worker_level).is_greater(0)
 
+func test_balance_carries_a_run_block() -> void:
+	var balance := load(BALANCE_PATH) as BalanceData
+	assert_object(balance.run).is_not_null()
+	assert_object(balance.run).is_instanceof(RunBalance)
+
 func test_balance_carries_a_camera_block() -> void:
 	var balance := load(BALANCE_PATH) as BalanceData
 	assert_object(balance.camera).is_not_null()

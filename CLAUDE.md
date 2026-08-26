@@ -64,15 +64,40 @@ Les DTO échangés entre systèmes. C'est le seul endroit où deux systèmes se 
 
 | DTO | Producteur | Consommateur |
 |---|---|---|
-| `TerrainQuery` | Terrain | Construction, Combat |
-| `CitySnapshot` | Ville | Économie, Combat |
+| `TerrainQuery` | Terrain | Construction, Économie, Combat |
+| `CitySnapshot` | Ville | Économie, Cartes, Combat |
 | `PlacementResult` | Construction | adapters |
+| `PlayedAction` | Cartes | Économie, adapters |
+| `ActionPlan` | Cartes | Économie, adapters |
+| `TargetResult` | Cartes | adapters |
 | `Assignment` | Effectifs | Économie, Combat |
 | `LaborForce` | Effectifs | Économie |
 | `CombatForce` | Effectifs | Combat |
 | `ProductionReport` | Économie | Effectifs (XP), adapters |
 | `WaveDef` | Run | Combat |
 | `DamageReport` | Combat | Ville, Effectifs, adapters |
+
+L'Économie voit le relief depuis `D2`, et c'est la conséquence directe de la seconde
+lecture de `DESIGN.md` 3.5 : une action jouée **à cru** rend ce que le tag de sa cellule
+dicte, donc le résolveur doit pouvoir le lire. Il voit le contrat, jamais la grille.
+
+**`Assignment` associe un ouvrier à une action posée, pas à un lieu.** Une ancre ne
+suffisait plus à désigner sans ambiguïté ce qu'un ouvrier fait — *Terraformer* et
+*Récolter* peuvent viser la même case nue.
+
+**Un rapport reste chez son système tant qu'aucun autre ne le franchit.** `PickResult`
+vit dans `domain/terrain/`, `ProgressReport` dans `domain/workforce/`, et `I1` y a rangé
+`PlayResult`, `SiteReport`, `PhaseReport` et `DayReport` sous `domain/run/`. Le critère est un
+second **système du domaine**, pas un adapter : les adapters lisent le domaine, c'est
+leur métier. Le coût d'une promotion ultérieure est un déplacement de fichier ; le coût
+d'une frontière inventée trop tôt est une forme figée avant qu'on la connaisse. Et une
+frontière qui doit vraiment traverser se remarque : `PhaseReport` porte un
+`ProgressReport`, ce qui l'aurait fait entrer dans `contracts/` en traînant un interne
+des Effectifs derrière lui.
+
+**`domain/run/` est le seul dossier autorisé à connaître les autres**, et c'est
+`DESIGN.md` 3.8 qui l'autorise nommément. Il tient les états internes de tous les
+systèmes ; aucun ne le connaît en retour.
 
 **Changer l'intérieur d'un système est libre. Changer un contrat se discute.**
 
@@ -188,7 +213,7 @@ done
 addons/gdUnit4/runtest.sh -a tests --headless --ignoreHeadlessMode
 ```
 
-Sept pièges constatés en 4.7.2, à ne pas réapprendre :
+Huit pièges constatés en 4.7.2, à ne pas réapprendre :
 
 - `--headless --quit` **échoue tant qu'aucune scène principale n'est définie**. C'est un vrai défaut de configuration, pas un faux positif à contourner.
 - `--headless --editor --quit` ne signale les erreurs qu'au **premier** scan. Cache `.godot/` chaud, il repasse à 0 sur un projet cassé : inutilisable comme contrôle.
@@ -197,6 +222,7 @@ Sept pièges constatés en 4.7.2, à ne pas réapprendre :
 - L'éditeur écrit ses références en `uid://`, résolues via `.godot/uid_cache.bin`. Tant que ce cache est en retard sur l'éditeur — typiquement juste après avoir créé une scène, éditeur encore ouvert —, la commande 1 échoue sur `Unrecognized UID: "uid://…"`. Ce n'est pas un projet cassé : une passe `godot --headless --editor --quit --path .` reconstruit le cache et la commande repasse. Ne pas confondre avec les erreurs réelles, et ne pas se servir de cette passe comme d'un contrôle (voir ci-dessus).
 - Le même retard frappe **le cache des classes globales**, et plus souvent : `.godot/global_script_class_cache.cfg` n'est écrit que par le scan de l'éditeur. Un `class_name` créé hors éditeur n'existe donc pour personne tant que ce scan n'a pas eu lieu, et la commande 1 échoue sur `Could not find type "X" in the current scope` alors que le fichier est parfaitement correct. Même remède : une passe `godot --headless --editor --quit --path .`. À faire après **chaque** ajout de `class_name`, donc à chaque nouveau fichier de `src/domain/` ou de `src/schema/`.
 - **La commande 1 rend `0` même quand elle imprime des erreurs de script.** Son code de sortie ne dit rien de la santé du projet — un contrôle qui ne teste que `$?` laisse passer un projet dont un script ne compile pas. Il faut lire la sortie, toujours.
+- **Un script lancé par `-s` n'a pas les autoloads.** `godot --headless --path . -s res://sonde.gd` échoue sur « Identifier not found: GameDatabase », exactement comme `--check-only`. C'est le mode qui sert à écrire une sonde jetable pour inspecter du data ou instancier du domaine ; il faut alors charger les `.tres` par `load()` et `DirAccess` plutôt que par l'index. Constaté à `I1`.
 
 Si la sortie contient une erreur ou un warning de script, la tâche n'est pas finie. Ne jamais annoncer un travail terminé sur la seule base que le code « devrait » compiler.
 
@@ -265,6 +291,12 @@ L'occlusion par le relief est un problème connu du système Terrain. V1 : la ro
 ### Structure de la journée — pilotée par data
 
 `DayCycle` ne connaît ni « matin » ni « soir ». Une journée est une liste ordonnée de `PhaseDef` chargées depuis `data/balance/`, chacune déclarant ses types d'action autorisés et si une résolution se déclenche à sa fin. Aucun nom de phase ne doit apparaître en dur dans le code, ni dans le domaine ni dans les adapters — l'UI lit le libellé et les actions permises depuis la `PhaseDef` courante.
+
+*(Écrit à `I1`.)* La règle vaut aussi pour **les tests** : un cas qui écrirait `&"evening"` pour vérifier une règle figerait exactement ce que `DESIGN.md` 2 garde ouvert. Les suites fabriquent leurs propres journées, sur des noms qui n'existent dans aucun `.tres`.
+
+`resolves` est un booléen, donc le seul champ de tout `data/balance/` que la doctrine du zéro ne protège pas : effacé par un réenregistrement, il vaut faux sans que rien ne le dise. Le filet est posé un cran plus haut — `RunBalance` exige qu'**au moins une** phase de la journée résolve. Même geste que `C4` sur `build_actions`.
+
+**Une phase résout, une journée ferme, et ce sont deux choses.** Une phase produit ce que les actions posées rapportent ; une journée prélève l'upkeep, et demain l'événement et le combat. La fin de journée n'est **pas** un champ de `PhaseDef` : c'est la fin de la dernière phase, par définition, et un booléen en data pourrait dire le contraire de la liste qui le porte. Elle ne dépend pas non plus de `resolves` — une journée coûte à nourrir même si sa dernière phase ne produit rien. Écrire quoi que ce soit qui fasse manger une fois par phase reviendrait à rendre la structure de la journée inséparable de son équilibrage, ce que `DESIGN.md` 2 veut précisément pouvoir échanger séparément.
 
 ### Effectifs — un vivier ou deux, indécidé
 
