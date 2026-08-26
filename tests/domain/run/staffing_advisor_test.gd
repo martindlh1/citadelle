@@ -359,3 +359,63 @@ func _economy() -> EconomyBalance:
 	var nothing: Dictionary[StringName, int] = {}
 	economy.starting_stock = nothing
 	return economy
+
+# --- Le départage à multiplicateur égal ---------------------------------------------------
+
+## **Le cas qui vient d'une partie jouée à la main.** Un multiplicateur vient d'un palier,
+## donc six ouvriers frais rendent tous 1.00 : le classement n'avait alors plus rien à
+## comparer et retombait sur l'ordre du roster, c'est-à-dire pendant toutes les journées où
+## le bouton sert le plus. C'est l'XP de piste qui départage désormais, et elle est entrée
+## dans `LaborUnit` pour ça.
+func test_an_equal_multiplier_is_settled_by_the_track_xp() -> void:
+	var labor := LaborForce.create([
+		_graded(&"ana", {}, {}),
+		_graded(&"bo", {}, {HARVEST: 3}),
+	] as Array[LaborUnit])
+	var ranked := StaffingAdvisor.ranked_for(_ids([&"ana", &"bo"]), labor, HARVEST)
+	assert_str(String(ranked[0])).is_equal("bo")
+
+## L'XP ne renverse **jamais** un multiplicateur : un palier acquis vaut plus que n'importe
+## quel progrès vers le suivant, parce que c'est le seul des deux que la production
+## multiplie.
+func test_the_track_xp_never_outranks_a_tier() -> void:
+	var labor := LaborForce.create([
+		_graded(&"ana", {HARVEST: 1.3}, {}),
+		_graded(&"bo", {}, {HARVEST: 99}),
+	] as Array[LaborUnit])
+	var ranked := StaffingAdvisor.ranked_for(_ids([&"ana", &"bo"]), labor, HARVEST)
+	assert_str(String(ranked[0])).is_equal("ana")
+
+## L'XP se lit **par famille** : être avancé en Construction ne fait pas passer devant pour
+## une récolte. Sans ce cas, un seul dictionnaire d'XP par ouvrier passerait tout aussi bien.
+func test_the_track_xp_is_read_in_the_family_asked() -> void:
+	var labor := LaborForce.create([
+		_graded(&"ana", {}, {CONSTRUCTION: 99}),
+		_graded(&"bo", {}, {HARVEST: 1}),
+	] as Array[LaborUnit])
+	var ranked := StaffingAdvisor.ranked_for(_ids([&"ana", &"bo"]), labor, HARVEST)
+	assert_str(String(ranked[0])).is_equal("bo")
+
+## Le dernier recours n'a pas bougé : à multiplicateur **et** XP égaux, c'est l'ordre du
+## roster, et il est total — sans lui, deux runs du même seed n'enverraient pas les mêmes
+## gens.
+func test_a_full_tie_still_falls_back_on_the_roster_order() -> void:
+	var labor := LaborForce.create([
+		_graded(&"ana", {}, {}),
+		_graded(&"bo", {}, {}),
+	] as Array[LaborUnit])
+	var ranked := StaffingAdvisor.ranked_for(_ids([&"ana", &"bo"]), labor, HARVEST)
+	assert_str(String(ranked[0])).is_equal("ana")
+
+func _graded(id: StringName, efficiency: Dictionary,
+		track_xp: Dictionary) -> LaborUnit:
+	var multipliers: Dictionary[StringName, float] = {}
+	multipliers.assign(efficiency)
+	var progress: Dictionary[StringName, int] = {}
+	progress.assign(track_xp)
+	return LaborUnit.create(id, multipliers, progress)
+
+func _ids(names: Array) -> Array[StringName]:
+	var typed: Array[StringName] = []
+	typed.assign(names)
+	return typed
