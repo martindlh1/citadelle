@@ -257,6 +257,63 @@ func test_an_allowed_staffing_gives_no_reason() -> void:
 	assert_str(RunOrchestrator.staffing_refusal(state, &"ana", bare.id())).is_empty()
 	assert_bool(RunOrchestrator.staff(state, &"ana", bare.id())).is_true()
 
+# --- Le bouton ----------------------------------------------------------------------------
+
+## **Le cas qui porte `W2`.** Jusqu'ici l'écran envoyait « le premier ouvrier libre », et
+## `DESIGN.md` 3.4 dit que *qui* l'on envoie est la décision de fond d'une phase. Le
+## bouton met chacun sur son métier : la récoltante à la forêt, le bâtisseur au chantier.
+##
+## Il passe par un run entier, là où `staffing_advisor_test.gd` tient la règle sur des
+## objets nus — c'est le raccord entre les deux que ce cas vérifie, et notamment que la
+## famille lue sur une action posée par le vrai ciblage est celle qu'on croit.
+func test_the_button_sends_each_worker_to_his_trade() -> void:
+	var state := _open()
+	state.roster().worker(&"ana").gain(HARVEST, 100)
+	state.roster().worker(&"bo").gain(CONSTRUCTION, 100)
+	var bare := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST).action()
+	RunOrchestrator.play(state, CARD_HUT, SPOT)
+	var site := RunOrchestrator.play(state, SiteResolver.CARD_BUILD, SPOT).action()
+	RunOrchestrator.end_phase(state)
+
+	var placed := RunOrchestrator.auto_staff(state)
+	assert_array(placed).contains([&"ana", &"bo"])
+	assert_array(state.staffed_on(bare.id())).contains([&"ana"])
+	assert_array(state.staffed_on(site.id())).contains([&"bo"])
+
+## Hors d'une phase qui affecte, le bouton ne fait rien — et surtout ne contourne pas les
+## cinq refus, puisqu'il applique à travers `staff()`.
+func test_the_button_does_nothing_in_a_phase_that_does_not_assign() -> void:
+	var state := _open()
+	RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST)
+	assert_array(RunOrchestrator.auto_staff(state)).is_empty()
+	assert_int(state.to_assignment().size()).is_equal(0)
+
+## La surcharge manuelle : on place d'abord ceux dont on se soucie, le bouton complète.
+## L'ordre des deux gestes n'a aucune importance, et c'est ce qui rend le bouton sûr.
+func test_the_button_leaves_a_hand_placed_worker_where_he_is() -> void:
+	var state := _open()
+	var bare := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST).action()
+	RunOrchestrator.play(state, CARD_HUT, SPOT)
+	var site := RunOrchestrator.play(state, SiteResolver.CARD_BUILD, SPOT).action()
+	RunOrchestrator.end_phase(state)
+
+	RunOrchestrator.staff(state, &"ana", site.id())
+	RunOrchestrator.auto_staff(state)
+	assert_int(state.to_assignment().action_of(&"ana")).is_equal(site.id())
+	assert_array(state.staffed_on(bare.id())).contains([&"bo"])
+
+## Un second appel ne déplace personne et ne double personne : tout ce qui pouvait être
+## rempli l'est. C'est ce qui permet à l'écran de laisser le bouton cliquable en
+## permanence sans avoir à deviner s'il reste quelque chose à faire.
+func test_pressing_the_button_twice_places_nobody_new() -> void:
+	var state := _open()
+	RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST)
+	RunOrchestrator.end_phase(state)
+	assert_array(RunOrchestrator.auto_staff(state)).is_not_empty()
+	var settled := state.to_assignment().size()
+	assert_array(RunOrchestrator.auto_staff(state)).is_empty()
+	assert_int(state.to_assignment().size()).is_equal(settled)
+
 # --- Le soir ------------------------------------------------------------------------------
 
 ## Le cas qui referme la panne de `D2` : *Construire* avance vraiment un chantier.
@@ -495,6 +552,36 @@ func test_the_same_seed_and_the_same_gestures_replay_the_run() -> void:
 func test_another_seed_deals_another_run() -> void:
 	assert_array(_scripted().deck().hand().cards()) \
 		.is_not_equal(_scripted(SEED + 1).deck().hand().cards())
+
+## Le bouton est un geste, donc il entre sous la même promesse : un seed plus une suite
+## de gestes rejoue le run à l'identique. C'est la vraie raison pour laquelle
+## l'auto-affectation est dans le domaine — un classement dont le départage serait
+## arbitraire enverrait deux ouvriers différents d'un rejeu à l'autre, et ni le relief ni
+## la bourse ne le montreraient avant plusieurs journées.
+func test_the_same_seed_replays_an_auto_staffed_run() -> void:
+	var first := _auto_staffed()
+	var second := _auto_staffed()
+	assert_array(first.to_assignment().workers()) \
+		.is_equal(second.to_assignment().workers())
+	for worker in first.to_assignment().workers():
+		assert_int(first.to_assignment().action_of(worker)) \
+			.is_equal(second.to_assignment().action_of(worker))
+	assert_int(first.roster().worker(&"ana").xp()) \
+		.is_equal(second.roster().worker(&"ana").xp())
+
+## Une journée posée à la main puis remplie au bouton, sur des ouvriers déjà spécialisés.
+## Les pistes sont creusées d'avance : sans écart d'efficacité, le classement retomberait
+## sur l'ordre du roster et le cas ne prouverait plus rien du départage.
+func _auto_staffed(run_seed := SEED) -> RunState:
+	var state := _open(run_seed)
+	state.roster().worker(&"ana").gain(HARVEST, 100)
+	state.roster().worker(&"bo").gain(CONSTRUCTION, 100)
+	RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST)
+	RunOrchestrator.play(state, CARD_HUT, SPOT)
+	RunOrchestrator.play(state, SiteResolver.CARD_BUILD, SPOT)
+	RunOrchestrator.end_phase(state)
+	RunOrchestrator.auto_staff(state)
+	return state
 
 ## Deux journées jouées, dans l'ordre, avec les trois verbes.
 func _scripted(run_seed := SEED) -> RunState:
