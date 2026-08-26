@@ -4,6 +4,147 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-26 — le format de combat, tranché en discussion juste après `F1`
+
+**État : décidé, rien d'écrit.** Un commit sur `feat/f1-combat-stub`. Aucune ligne de `F2`
+n'existe ; ce qui change est `DESIGN.md`, plus **une correction de data** que la
+conversation a fait tomber. Les trois commandes passent, 715 tests toujours verts.
+
+C'est le plus gros `OUVERT` du document qui se referme — 3.6 gardait sept questions
+depuis `I0`. Il en reste trois, et ce sont des chiffres.
+
+### Le format
+
+**Tactique au tour par tour, sur la grille du village.** Un tour joueur où l'on déplace
+les déployés et où chacun agit ; un tour ennemi. Référence assumée : *The Last Spell*,
+avec beaucoup moins d'unités.
+
+Les trois pistes que 3.6 listait avaient le même contrat — c'était l'intérêt de les
+laisser ouvertes —, et c'est la troisième. Elle est aussi la plus testable des trois :
+tout y est discret, un plateau et des entiers, donc du domaine pur.
+
+### Ce que le projet avait déjà pour ça
+
+Beaucoup, et c'est ce qui a rendu la décision facile. `HeightGrid`, `CellPicker` en DDA,
+`CellHighlight`, `TargetHighlight`, la caméra orthographique qui pivote par quarts de
+tour, `BuildingRenderer` : un combat sur la grille du village n'en réécrit **rien**.
+
+Et la **borne de déploiement**, ajoutée à `F1` il y a une heure, devient littéralement la
+phase de déploiement d'un jeu tactique. Elle était une rareté stratégique ; elle est aussi,
+maintenant, le régulateur du rythme tactique — trois places, trois pions à jouer. Une
+propriété qu'on n'avait pas cherchée et qu'il faut connaître : **desserrer la borne ne
+rend pas le combat plus riche, ça le rend plus long.**
+
+### La collision entre deux bonnes réponses
+
+Prises séparément, « garder la carte entière » et « tenir N tours » sont justes. Ensemble,
+elles donnaient la stratégie dominante la plus bête possible : **courir en rond dans les
+vingt-huit colonnes vides** jusqu'au compteur. Zéro perte, zéro décision.
+
+La réponse n'a pas été de recadrer la carte, mais de fixer **ce que les ennemis veulent** :
+les ouvriers à portée, les bâtiments sinon. Fuir devient un troc — on garde ses gens, ils
+mangent les murs — et le rapport de sortie sait déjà dire exactement ça, depuis `F1`.
+
+Ce qui a en retour transformé la condition de victoire : **une vague est une razzia, pas un
+duel.** Tenir N tours suffit à ce qu'elle reparte, nettoyer donne un bonus. Il n'y a plus
+de défaite au combat, seulement une facture. La défaite d'un run reste celle de 5.
+
+Second effet de garder le 32×32 : **la vague entre à la lisière du bâti**, pas au bord de
+la carte. Le Cœur est au centre, donc seize cases de marche — quatre tours où personne ne
+décide rien.
+
+### La phrase de `DESIGN.md` qui est tombée
+
+3.6 promettait depuis toujours : « Le jour où il est prêt, on échange l'implémentation dans
+l'orchestrateur : **une ligne**. » C'est faux pour un format au tour par tour, et ça
+n'aurait aucune importance si on l'avait découvert ailleurs qu'à `I2`, l'écran à moitié
+câblé.
+
+Un résolveur rend un rapport ; un combat tactique **attend le joueur**, et le domaine n'a
+pas le droit d'`await`. Le producteur cesse donc d'être une fonction pour devenir un
+**état** — un plateau mutable dans `domain/combat/`, des fonctions pures qui appliquent un
+geste à la fois, un `DamageReport` au bout.
+
+Ce qui est vrai en revanche, et `F1` l'a livré sans le chercher : `fight()` sépare déjà
+**produire** — une ligne — et **appliquer** aux trois systèmes — tout le reste.
+L'applicateur ne bouge pas d'un pouce. La promesse était bonne, elle portait juste sur la
+mauvaise moitié.
+
+### La conséquence qui touche du code déjà écrit
+
+Le combat clôt la journée, après l'upkeep, à la place que la séquence de 2 lui garde. Mais
+`end_phase()` est aujourd'hui **indivisible** — résoudre, vider, avancer — et la rupture
+interactive tombe au milieu.
+
+Le cycle devra refuser d'avancer tant qu'une bataille est en attente. C'est une demi-heure
+aujourd'hui contre un écran à défaire plus tard, et c'est entré dans 3.8 **avant** d'en
+avoir besoin, ce qui est la première fois que ce document écrit une contrainte
+d'implémentation en avance. Corollaire : `DayReport` n'accueillera pas un rapport de
+bataille mais **la vague en attente**.
+
+### Deux `OUVERT` qui se referment par ricochet
+
+**Le relief joue enfin autrement** *(3.1)*. Monter coûte, une marche trop haute bloque.
+L'« avantage défensif en hauteur » qu'on imaginait est remplacé par mieux : une contrainte
+de déplacement, donc quelque chose qui **se joue** au lieu de se subir. Le terrassement
+devient un geste militaire autant qu'économique.
+
+**`X5` a une forme.** « Ce qu'un palier de niveau offre » était en blanc depuis `W1` : une
+**capacité de combat**. C'est ce qui a permis de ne donner que deux verbes à `F2` — se
+déplacer, attaquer — sans condamner le combat à rester plat, et ça enracine les capacités
+dans le roster nominatif au lieu d'un catalogue hors-sol. Un système de capacités
+générique dans `F2` aurait été un jeu entier, et il aurait tué le jalon avant qu'on sache
+si le format tient.
+
+### Ce que `X6` devient
+
+Un ouvrier à zéro point de vie **meurt**. C'est le choix qui sert le pitch, et il a un
+revers qu'il valait mieux nommer tout de suite : **sans blessure, un combat n'a que deux
+issues, rien ou définitif.** Le joueur qui a bien joué ne sent rien du tout, et la courbe de
+difficulté est une falaise.
+
+Les points de vie sont donc la ressource d'une **manche** ; ce qu'un survivant en emporte
+est un effet progressif **selon la part de vie perdue**. `X6`, écrit ce matin comme un
+rangement, devient structurant — et c'est le premier état dont on connaisse à la fois la
+source et la graduation.
+
+### Ce que la conversation a corrigé dans `data/`
+
+**La caserne valait +2 places de déploiement, elle vaut +1.** Sur une base de trois, un
+seul bâtiment ajoutait deux tiers de la ligne d'un coup. Une place se gagne très
+progressivement — c'est un pion de plus à jouer chaque tour.
+
+Le chiffre datait de `F1`, écrit ce matin, et c'est le harnais Combat qui rend la
+correction lisible : la table « ce que la borne retient » montre maintenant trois, quatre
+et quatre engagés au lieu de trois, cinq et cinq.
+
+### Ce qui reste ouvert en 3.6
+
+Trois choses, toutes des chiffres ou du contenu : **la nature des vagues** — qui vient,
+combien, avec quelles portées —, **la borne de tours** d'une manche, et **le bonus** que
+vaut un nettoyage complet. Aucune ne remet en cause le format.
+
+L'éclaireur de 3.7 a changé de métier au passage : la direction d'une vague est désormais
+une information de base, annoncée par une flèche, parce que 3.2 veut qu'on pense à la
+bataille en posant un bâtiment et qu'une direction révélée le soir même transformerait
+cette prévoyance en loterie. Ce qu'un éclaireur révélerait est donc ce qui vient **en
+plus** — composition, portée, nombre —, ce qui en fait un meilleur événement.
+
+### Prochain jalon
+
+**`I2`** — inchangé. Cette discussion ne l'avance ni ne le retarde ; elle lui dit quelle
+place réserver, ce qui est exactement ce qu'on lui demandait. Le seul travail qu'elle lui
+ajoute est la coupure de `end_phase()`, et il vaut mieux la faire là que dans `F3`.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien.** Aucune `.tscn`, aucun `project.godot`, aucun champ neuf.
+
+- `data/buildings/barracks.tres` a changé d'un chiffre. Rien d'autre dans `data/`.
+- `HARNESS` vaut toujours `&"combat"` ; `&"run"` rend le jeu.
+
+---
+
 ## 2026-08-26 — `F1` : le bouchon de combat, et la borne qui lui donne un enjeu
 
 **État : terminé.** Six commits sur `feat/f1-combat-stub`, tirée de `master`. Les trois
