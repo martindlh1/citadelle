@@ -4,6 +4,211 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-26 — `I2` : le run se fonde, se bat et se termine
+
+**État : terminé.** Cinq commits sur `feat/i2-full-loop`, tirée de `master`. Les trois
+commandes passent : boot sans erreur ni warning, tout `src/domain/` parse, **768 tests
+verts contre 715** à l'ouverture, 44 suites contre 42. Les huit harnais ont été bootés un
+par un. Quatre captures — la fondation, une vague en approche, la même après coup, et la
+fin d'un run entier.
+
+Le jeu se joue du premier geste au dernier. C'est ce que le titre du jalon promettait
+depuis `I0`.
+
+### Ce qui a été livré
+
+- **Schéma et data** — `WaveSlot`, le calendrier et les quatre poids du score dans
+  `RunBalance`, `run_balance.tres` réécrit.
+- **Domaine** — `RunOutcome`, `DayCycle.end()`, `RunOrchestrator.found()`,
+  `close_the_day()` qui arme, `end_phase()` coupée en deux, `fight()` qui consomme une
+  vague en attente, `Roster.total_level()`, `DayReport.wave()`, trois refus nommés de plus
+  sur `PlayResult`.
+- **Adapters** — `BattlePanel` sous `src/adapters/hud/`, `RunManager.found()` et
+  `fight()`, `EventBus` qui gagne `battle_pending` et `battle_resolved` et dont
+  `run_finished` porte l'issue.
+- **Cinquante-trois cas de plus**, dont une suite neuve sur `RunOutcome`.
+- `DESIGN.md` 2, 3.6, 3.8, 5 et 8 ; `CLAUDE.md` ; `README.md`.
+
+### Ce que le jalon n'a pas eu à faire, et c'est le plus important
+
+**Aucun DTO de `contracts/` n'a bougé.** `DESIGN.md` 8 le promettait — « aucun contrat ne
+bougera plus, ce qui était la raison de passer `F1` avant » — et c'était une promesse
+vérifiable, pas une intention. Tout ce que `I2` crée vit dans `domain/run/` ou dans
+`src/schema/`, par le critère habituel : aucun second système du domaine ne le franchit.
+
+Un jalon d'intégration qui aurait fait bouger un contrat aurait été un jalon qui découvre
+trop tard ce qu'il branche. L'ordre `F1` puis `I2` a coûté un jalon de plus et il valait
+exactement son prix.
+
+### La coupure écrite à l'avance, et ce qu'elle a coûté
+
+`DESIGN.md` 3.8 a été écrit après `F1`, avant qu'on en ait besoin : « le cycle devra
+refuser d'avancer tant qu'une bataille est en attente », et le rapport de journée
+« n'accueillera pas un rapport de bataille mais **la vague en attente** ». Le prix annoncé
+était d'une demi-heure contre un écran à moitié câblé à défaire ensuite.
+
+L'estimation était juste, et la forme aussi. Ce qui est différé n'est pas la résolution —
+elle a bien lieu, le plateau se vide, la main part à la défausse — mais l'**ouverture de
+la phase suivante**, que `fight()` fait à sa place. Les deux portes passent par la même
+fonction privée, ce qui garantit qu'une journée fermée par un combat s'ouvre sur la
+suivante dans le même état qu'une journée paisible.
+
+**Et le run n'a coûté qu'un champ.** L'idée était de porter la vague *et* de se souvenir
+que la phase interrompue résolvait, pour savoir s'il faudrait repiocher. C'est inutile :
+quand une bataille attend, **le cycle pointe encore sur la phase qui vient de finir**,
+donc `resolves()` dit encore ce que cette phase faisait. Un état qu'on peut relire n'a pas
+besoin d'être retenu.
+
+### Le calendrier : une liste, et pas une période
+
+La question était réelle et j'ai demandé avant d'écrire. Une période — « une vague tous
+les N jours » — rendrait l'`OUVERT` de 2 plus facile à tourner, puisqu'un seul entier
+bouge.
+
+C'est la liste, pour deux raisons dont la seconde tranche. Une liste **dit** une période
+en l'écrivant, alors qu'une période ne sait exprimer ni un creux ni deux vagues
+rapprochées. Et surtout la **vague finale** de 2 tombe sur le dernier jour parce qu'on l'y
+a mise ; avec une période elle n'y tomberait que par coïncidence arithmétique, et changer
+`days` la déplacerait sans qu'on le veuille.
+
+Elle vit dans `RunBalance` et non dans `CombatBalance`, qui s'en défausse en toutes
+lettres depuis `F1`. L'argument qui décide n'est pas thématique : le seul contrôle qui
+compte croise le calendrier avec `days`, et seul le bloc qui tient la durée du run peut
+dire qu'une vague datée au jour vingt ne tombera jamais.
+
+### Ce que la fin de run a demandé de plus que sa ligne de design
+
+`DESIGN.md` 5 tient en trois puces depuis le premier jour. L'écrire en a demandé trois
+précisions qu'aucune des trois ne portait :
+
+- **Une défaite ne s'attend pas.** Elle tombe au jour sept, donc « le run est fini » doit
+  pouvoir devenir vrai au milieu. Une seule vérité pour ça — le cycle des jours —, et la
+  cause à côté ; deux drapeaux qui peuvent se contredire auraient été pires que le cas
+  qu'ils couvrent. Le bénéfice se lit en une ligne : tous les gardes déjà écrits se
+  ferment sur une défaite sans qu'un seul ait bougé.
+- **Le Cœur se reconnaît à son ancre**, retenue à la fondation, et non à son identifiant.
+  C'est ce qui garde `heart` dans `data/balance/` et hors de tout `.gd`.
+- **« Victoire » se lit « dernière journée franchie »** plutôt que « dernière vague
+  survécue ». Les deux disent la même chose tant que le calendrier pose sa dernière vague
+  sur le dernier jour, et la première n'a pas à inventer une règle pour un calendrier qui
+  s'arrêterait avant.
+
+**Il n'y a pas de `RunScorer`**, et c'est la seule chose du plan que j'ai retirée en
+écrivant. Un score est une somme pondérée de quatre nombres ; ce qui méritait un fichier
+n'était pas la somme mais le fait d'aller chercher les quatre au bon endroit — or c'est
+exactement le métier de l'orchestrateur, qui « n'ajoute que ce qu'aucun résolveur ne peut
+faire seul ». Un fichier de plus n'aurait fait que retransporter quatre entiers.
+`Roster.total_level()` répond pour le roster comme `Ledger.total()` répond pour la
+réserve : aucun contenu d'état ne traverse, ce qui est la ligne que `F1` a tracée sur le
+pillage.
+
+### Trois défauts, tous trouvés en capture
+
+`E2` et `W2` ont appris qu'un écran trouve ce qu'aucun test ne cherche, et `F1` que le
+pire est un affichage **faux sur ce qu'il prétend montrer**. `I2` en donne le meilleur
+exemple du projet.
+
+**Le panneau de bataille annonçait « Pertes : bo, cy »** — les identifiants internes. La
+traduction interroge le roster, et au moment où le signal arrive **les morts n'y sont
+plus** : `fight()` les retire avant de rendre son rapport, ce qui est précisément l'ordre
+qui fait qu'un mort ne gagne pas d'XP. Rien ne plantait, tout compilait, les 768 tests
+passaient, et la seule ligne du jeu qui raconte quelque chose disait des matricules. Le
+relevé se prend maintenant avant que la vague tombe.
+
+**Trois panneaux ne tiennent pas dans une colonne qui en portait deux.** `W2` avait appris
+que deux vues qui grandissent l'une vers l'autre doivent vivre dans le même conteneur ; le
+cran suivant est que ce conteneur a lui aussi une hauteur. Le jour de la dernière vague,
+la dernière fiche d'ouvrier sortait de l'écran par le bas — et rétrécir une marge
+aggraverait la chose. Le panneau de bataille est parti dans la colonne de gauche, où la
+place est, et la lecture y gagne : la vague est voisine de la réserve qu'elle va piller.
+
+**Le bandeau de fin passait sous les panneaux de droite**, si bien que la seule chose
+qu'il devait annoncer se lisait « Victoire — la dernière journée est passée au jour 15.
+Score 431 — 71 en ré ». Le raccourcir une fois n'a pas suffi : la moitié gauche de l'écran
+fait sept cents pixels et un bandeau ne se replie pas. Ce qui tient est **un mot** ; la
+cause et les quatre termes du score sont des lignes du rapport, où le texte va à la ligne.
+
+**Et un quatrième qui n'en était pas un, mais qui aurait été le pire.** L'écran de
+fondation n'était atteignable par aucune capture, puisque toute journée jouée commence par
+poser le Cœur — donc le seul écran neuf du jalon aurait été le seul que personne n'aurait
+regardé. `--shot-evenings 0` le capture désormais. Le contrôle a d'ailleurs servi tout de
+suite : la première ligne du jeu conseillait encore « prendre une carte », geste que le
+domaine refuse tant que le Cœur n'est pas posé.
+
+### Ce qu'un run entier dit de l'équilibrage
+
+Une partie complète, seed 20260825, quinze journées, trois vagues, victoire à 431 points :
+71 en réserve, 23 bâtiments debout, 4 ouvriers sur 6, 10 niveaux cumulés.
+
+- **La famine s'installe et ne repart pas.** Elle tombe à la cinquième journée et tient
+  jusqu'au bout — « 6 dû, 2 mangé, 4 à jeun » au quinzième jour. C'est le déséquilibre le
+  plus visible du run, et il est cohérent avec ce que `I1` avait noté sans pouvoir le
+  mesurer : deux récoltes par jour pour un seul upkeep, mais une main qui pioche
+  rarement une ferme. Elle ne punit encore rien — `X6` —, ce qui est la seule raison pour
+  laquelle le run se gagne quand même.
+- **Le village grossit beaucoup.** Vingt-cinq bâtiments à la fin, dont vingt-trois
+  achevés. Le bois ne manque jamais ; la nourriture, toujours.
+- **Le siège final mord.** Quarante contre vingt-sept de défense, treize de brèche, trois
+  bâtiments détruits, deux morts et treize unités pillées. C'est la seule vague dont on se
+  souvienne, ce qui est le bon dosage pour une dernière — mais les deux premières sont
+  peut-être trop douces.
+- **Le score est dominé par les ouvriers**, ce qui sert le pitch : quatre survivants
+  valent quatre-vingts points là où soixante-et-onze unités de réserve en valent
+  soixante-et-onze. Un chiffre de départ, pas une cible.
+
+### Ce qui reste
+
+Rien pour `I2`. Ce qui est resté dehors était annoncé dehors :
+
+- **Le vrai combat** — `F2` et `F3`. La vague se résout encore instantanément ; ce que ce
+  jalon livre est le **moment** où elle tombe et l'attente autour.
+- **L'événement quotidien** *(3.7)* — la dernière case vide de la séquence de 2.
+- **Les états d'ouvrier** — `X6`. La famine se constate toujours sans punir.
+- **Le poste occupé de la tour de guet**, la colonne **Débloque**, les bonus d'adjacence
+  de `C3` : inchangés, et chacun attend son jalon.
+
+La mise en commun des `_make_label()` est passée de neuf à **dix** exemplaires. Elle
+n'appartient toujours à aucun jalon.
+
+### Prochain jalon
+
+**`I2b`** — le playtest. La boucle est jouable de bout en bout, donc la question n'est plus
+« qu'est-ce qui manque » mais « est-ce que ça se joue ». Les deux arbitrages — la structure
+de la journée en 2, le sort de la main non jouée en 3.5 — se testent en échangeant un
+`.tres`, et c'est le premier jalon du projet qui ne demande pas d'écrire une ligne de
+GDScript.
+
+`I3` suit avec les chiffres, et il en a désormais une liste précise plutôt qu'une
+intention : la nourriture d'abord, puis le calendrier des vagues, le barème du score, et le
+`breach_per_casualty` que `F1` avait déjà signalé comme le plus fragile de ses cinq.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'`InputMap`
+ajoutée.
+
+- `F5` lance le **harnais Run** : `HARNESS` vaut de nouveau `&"run"`.
+- **Les commandes ont un ajout** : **Entrée** fait avancer le run quoi qu'il attende — elle
+  fonde le village, elle mène la bataille, ou elle finit la phase. Le reste est inchangé.
+  Le Cœur se pose au **clic gauche** sur la carte ; Entrée le met sur la case suggérée.
+- **`data/balance/run_balance.tres` a changé de forme** : il porte trois sous-ressources
+  `WaveSlot` de plus, qui **référencent** les `.tres` de `data/waves/`, et quatre poids de
+  score. C'est le premier `.tres` du projet dont une sous-ressource pointe sur un fichier
+  externe — l'éditeur devrait le réenregistrer sans broncher, mais c'est le diff à
+  surveiller.
+- **Les chiffres à relire** : trois vagues aux jours 5, 10 et 15 — escarmouche, razzia,
+  siège — et un score à 1 par unité de réserve, 10 par bâtiment achevé, 20 par ouvrier
+  vivant, 5 par niveau.
+- **Les captures** : `--shot-evenings 0` montre la fondation, `10` une vague en approche,
+  `16` la fin d'un run entier.
+- **L'équilibrage de la nourriture est le premier chantier ouvert**, et il l'est maintenant
+  avec une mesure plutôt qu'un soupçon : famine du jour 5 au jour 15.
+- Les caches de classes et d'uid ont été reconstruits pendant la session, et les `.gd.uid`
+  des trois scripts neufs sont commités.
+- **La branche n'est pas fusionnée** : `feat/i2-full-loop`, cinq commits.
+
+---
+
 ## 2026-08-26 — le format de combat, tranché en discussion juste après `F1`
 
 **État : décidé, rien d'écrit.** Un commit sur `feat/f1-combat-stub`. Aucune ligne de `F2`

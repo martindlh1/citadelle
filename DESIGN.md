@@ -49,13 +49,21 @@ Quel que soit le modèle retenu, l'ordre est : **actions jouées** → événeme
 
 *(Précisé à `I1`.)* Ces étapes ne tombent pas toutes au même moment. **Les actions jouées et l'XP appartiennent à la phase** ; **l'événement, l'upkeep et le combat appartiennent à la journée**, et ne se déclenchent qu'à la fin de la dernière phase. La séquence les listait déjà séparément — leur simultanéité n'était vraie que tant qu'une journée n'avait qu'une seule résolution.
 
+*(Occupé à `I2`.)* Le combat tombe vraiment, et **après** l'upkeep : un village affamé le soir d'un siège l'est toujours pendant, et l'inverse ferait payer à manger à des morts qui viennent de tomber. La seule case encore vide de la séquence est l'événement de 3.7.
+
 La production n'est plus une étape passive qui balaye les bâtiments : c'est le résultat des actions que le joueur a posées. Un bâtiment dont aucun slot n'a reçu d'action ne rend rien.
 
 **Les actions jouées se résolvent en deux temps, et l'ordre est imposé.** *(Tranché à `I1`.)* La production se calcule sur la ville **d'avant le soir** ; les chantiers et les terrassements s'appliquent ensuite. Sans cette règle, un entrepôt achevé le soir même relèverait la réserve du même soir, et l'ordre dans lequel les cartes ont été posées déciderait du résultat — ce que 3.3 refuse déjà pour l'écrêtage, et pour le même motif : deux villes identiques bâties dans un ordre différent doivent rendre la même chose.
 
 Conséquence à connaître pour lire un rapport : le rapport de production ne connaît que les postes de production, donc il **compte un bâtisseur parmi les oisifs**. Chacun des deux rapports est juste dans son système ; c'est le rapport de la soirée, qui voit les deux journaux de travail, qui répond pour le soir entier.
 
-**`OUVERT`** — durée d'un run, fréquence des vagues, sort de la main non jouée.
+**Une vague tombe à la fermeture d'une journée, et le calendrier est de la data.** *(Écrit à `I2`.)* Un `WaveSlot` associe un jour à une vague, et `RunBalance` en porte la liste — au même endroit que `days`, parce que le seul contrôle qui compte croise les deux : une vague datée au-delà de la dernière journée est une vague que personne ne verra tomber.
+
+C'est une **liste explicite** et non une période — « une vague tous les N jours » —, et pour deux raisons. Une liste dit une période en l'écrivant, alors qu'une période ne sait exprimer ni un creux ni deux vagues rapprochées. Et surtout la **vague finale** ci-dessus tombe sur le dernier jour parce qu'on l'y a mise ; avec une période elle n'y tomberait que par coïncidence arithmétique, et changer la durée du run la déplacerait sans qu'on le veuille.
+
+Un calendrier **vide** reste légitime : c'est le run paisible d'un harnais qui mesure une économie sans qu'on lui casse ses murs, exactement comme un `starting_building` vide donne une carte nue.
+
+**`OUVERT`** — durée d'un run, fréquence des vagues, sort de la main non jouée. Les deux premières se tournent désormais en éditant un `.tres` — quinze journées, trois vagues aux jours 5, 10 et 15 — ce qui est tout ce qu'on leur demande jusqu'à `I3`. La troisième reste entière.
 
 ---
 
@@ -350,6 +358,8 @@ Les états — poison, étourdissement, saignement — sont `X6` et rien d'autre
 
 **Stratégie de développement.** Une première implémentation `InstantCombatResolver`, purement arithmétique et sans vue, sert de bouchon pour boucler la boucle de jeu au plus tôt — c'est `F1`, et c'est fait. Le vrai système se développe ensuite en parallèle, alimenté par des `CitySnapshot` fabriqués à la main.
 
+*(Branché à `I2`.)* Le bouchon est en place dans la boucle : les vagues du calendrier de 2 tombent à leur date, et le run se joue du premier jour au dernier. Ce qui reste à `F2` est le **milieu** — le plateau, les deux verbes, les intentions — et non les deux bouts, qui sont écrits et exercés.
+
 *(Corrigé après `F1`.)* Ce paragraphe promettait que l'échange serait « une ligne dans l'orchestrateur ». **C'est faux pour un format au tour par tour**, et le savoir maintenant coûte moins cher que de le découvrir à `I2`. Un résolveur rend un rapport ; un combat tactique **attend le joueur**, pendant des dizaines de frames et de clics, et le domaine n'a pas le droit d'`await`.
 
 Ce qui est vrai en revanche, et c'est ce que `F1` a livré sans le chercher : `RunOrchestrator.fight()` sépare déjà **produire** le rapport — une ligne — et **l'appliquer** aux trois systèmes — tout le reste. L'applicateur ne bouge pas. Le producteur, lui, cesse d'être une fonction pour devenir un **état** : un plateau mutable dans `domain/combat/`, des fonctions pures qui appliquent un geste à la fois, et un `DamageReport` au bout. L'adapter pilote le milieu, comme il pilote déjà une phase.
@@ -409,6 +419,10 @@ C'est ce qui a permis à deux choses annoncées de longue date de devenir vraies
 Or la fin d'une phase est aujourd'hui **un seul geste indivisible** — résoudre, vider le plateau, avancer. La rupture interactive tombe au milieu. Le cycle devra donc **refuser d'avancer tant qu'une bataille est en attente**, ce qui est un état de plus sur le run et une porte de moins qui fait tout d'un coup.
 
 C'est écrit ici plutôt que découvert à `I2` parce que le coût des deux n'est pas le même : une demi-heure aujourd'hui, un écran à moitié câblé à défaire ensuite. Le rapport de journée n'accueillera d'ailleurs pas un rapport de bataille mais **la vague en attente** ; ce que la bataille a coûté revient par la seconde porte.
+
+*(Fait à `I2`, et la prévoyance a été payante.)* La coupure existe, exactement dans ces termes. Une journée qui se ferme sur une vague **arme** au lieu de frapper ; la fin de phase résout, vide le plateau, défausse la main, et s'arrête là ; c'est la seconde porte qui ouvre la phase suivante quand la bataille est passée. Le run a donc un état de plus, et il n'en a coûté **qu'un** : quand une bataille attend, le cycle pointe encore sur la phase qui vient de finir, si bien que « fallait-il repiocher ? » se relit au lieu de se retenir.
+
+Le prix annoncé — une demi-heure — était juste, et il aurait été bien plus élevé après coup : les deux moitiés de la coupure ont chacune leur cas de test, et l'écran n'a eu qu'à lire un état de plus.
 
 ### 3.9 Expéditions — `HORS MVP`
 
@@ -494,6 +508,18 @@ Ce qu'une action **fait** n'est pas dans `data/` non plus, et ne le sera pas : l
 - **Victoire** — dernière vague survécue
 - **Score** — ressources, bâtiments intacts, ouvriers vivants et leur niveau
 
+*(Écrit à `I2`.)* Les trois tiennent dans un `RunOutcome` — une cause, un jour, quatre comptes et un total — et **une défaite ne s'attend pas** : elle peut tomber au jour sept, donc « le run est fini » devient vrai au milieu. C'est le cycle des jours qui porte cette vérité et lui seul ; la cause vit à côté. Deux drapeaux qui pourraient se contredire auraient été pires que le cas qu'ils couvrent.
+
+Trois précisions que l'écriture a demandées, et aucune n'était dans la ligne ci-dessus :
+
+- **Le Cœur se reconnaît à son ancre**, retenue quand on le pose, et non à son identifiant. C'est ce qui garde `heart` dans `data/balance/` et hors de tout `.gd`, comme depuis `I1`.
+- **« Victoire » se lit « dernière journée franchie »** plutôt que « dernière vague survécue ». Les deux disent la même chose dès lors que le calendrier pose sa dernière vague sur le dernier jour — ce qu'il fait —, et la première n'a pas besoin d'inventer une règle pour un calendrier qui s'arrêterait avant la fin. Un run paisible se gagne en le survivant, ce qui reste vrai.
+- **Un bâtiment intact est un bâtiment achevé.** Un chantier laissé en plan à la dernière journée ne compte pas, par la règle qui vaut depuis `C4`.
+
+Les quatre poids du score vivent dans `data/balance/`, et un poids nul y est un choix lisible — « la thésaurisation ne rapporte rien ». Le filet est un cran plus haut, comme pour `resolves` : **au moins un des quatre doit compter**. Une défaite vaut d'ailleurs son score : un run perdu au douzième jour a duré plus longtemps qu'un run perdu au deuxième, et rien ci-dessus ne réserve le score aux vainqueurs.
+
+**Et un run commence par la pose du Cœur**, au clic, ce que 2 annonce depuis le premier jour et que `I1` bouchonnait en le posant au centre. La main n'est tirée qu'à ce moment : une main tirée devant une carte nue serait une main qu'on ne peut pas jouer. Le balayage du centre survit comme **suggestion** — la règle automatique devient le bouton par défaut, ce que `F1` avait annoncé mot pour mot du déploiement.
+
 ---
 
 ## 6. Méta-progression *(après le MVP)*
@@ -560,7 +586,9 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 - **I0** ✅ — Squelette : projet, arborescence, autoloads, `EventBus`, `GameDatabase`.
 - **I1** ✅ — **Boucle minimale.** `PhaseDef`, `DayCycle`, `RunState`, `SiteResolver`, `RunOrchestrator`, le bloc `run_balance`, et les rapports du run — `PlayResult`, `SiteReport`, `PhaseReport`, `DayReport`, plus l'`UpkeepReport` que l'Économie a sorti du rapport de production. `RunManager` cesse d'être la coquille de `I0`. Une journée en deux phases identiques, en data, **deux sortes de résolution**, et aucun nom de phase dans le code. La **bourse au moment de bâtir** que 3.2 annonçait depuis `C1`, et l'**exécution** de *Construire* et *Terraformer* que `D2` avait laissée en attente. Trois `OUVERT` refermés : la piste que crédite un chantier *(3.2)*, le sens d'un terrassement et les terrains qu'il accepte *(3.5)*.
   Le jalon touche **deux DTO de `contracts/`**, ce qui est rare et a été décidé avant d'écrire : le sens du terrassement voyage sur l'action posée et sur le verdict de ciblage. Les trois rapports neufs, eux, restent dans `domain/run/` — aucun second système du domaine ne les franchit, ce qui est l'argument que `PickResult` et `ProgressReport` portaient déjà.
-- **I2** — Boucle complète : Cartes + Effectifs + Combat bouchon, run jouable du début à la fin.
+- **I2** ✅ — **Boucle complète.** Un run se fonde, se joue quinze journées, encaisse trois vagues et se termine sur un verdict. `WaveSlot` et le calendrier dans `RunBalance`, les quatre poids du score, `RunOutcome` et `DayCycle.end()`, `RunOrchestrator.found()` et `fight()` qui consomme une vague **armée**, `DayReport` qui porte la vague en attente, `BattlePanel` sous `src/adapters/hud/`. `EventBus` gagne `battle_pending` et `battle_resolved`, et `run_finished` porte l'issue plutôt que le jour.
+  **Aucun DTO de `contracts/` n'a bougé**, ce qui était la promesse tenue en passant `F1` avant : tout ce que le jalon crée vit dans `domain/run/` ou dans `src/schema/`. La coupure de la fin de journée que 3.8 avait écrite d'avance a coûté ce qu'elle annonçait.
+  Trois défauts trouvés **en capture**, aucun cherché par un test : le panneau de bataille nommait les morts par leur identifiant, parce qu'ils quittent le roster avant que le rapport n'arrive ; trois panneaux dans la colonne de droite débordaient de l'écran là où deux tenaient ; et le bandeau de fin passait sous ces panneaux. `--shot-evenings 0` capture désormais l'écran de fondation, qu'aucune journée jouée ne peut montrer.
 - **I2b** — Playtest : arbitrage de la **structure de journée** (2.) et du sort de la main non jouée (3.5). Les deux se testent en échangeant un `.tres`.
 - **I3** — Passe de contenu et d'équilibrage, **arbitrage des `OUVERT`** restants.
 
@@ -580,7 +608,9 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
   Ce qu'il contraint en attendant, et c'est sa seule raison d'être écrit maintenant : **aucun rapport ne doit inventer sa propre conséquence.** Un système qui rencontre un état le **compte** et le rapporte ; il ne décide pas de ce qu'il fait. C'est ce que `UpkeepReport` fait déjà des non-nourris, et ce que `DamageReport` fait des pertes.
   *(Relevé après `F1`.)* Le format de combat de 3.6 le fait passer de confortable à **structurant**, et lui donne sa première forme concrète : les points de vie sont la ressource d'une manche, un ouvrier à zéro meurt, et ce qu'un **survivant** emporte est un effet progressif selon la part de vie perdue. Sans lui, un combat n'a que deux issues — rien, ou définitif —, et le joueur qui a bien joué ne sent rien du tout. C'est le premier état dont on connaisse déjà et la source et la graduation.
 
-**Ordre suivant** — `I2`. Tous les systèmes du MVP existent et tiennent debout seuls ; **aucun contrat ne bougera plus**, ce qui était la raison de passer `F1` avant. Il ne reste qu'à brancher : dater les vagues sur la journée, poser le Cœur au clic plutôt qu'au centre, et écrire la fin de run de 5. `I2b` suit, sur un `.tres`.
+**Ordre suivant** — `I2b`. La boucle est jouable du début à la fin, donc la question n'est plus « qu'est-ce qui manque » mais « est-ce que ça se joue ». Les deux arbitrages de ce jalon — la structure de la journée en 2, le sort de la main non jouée en 3.5 — se testent en échangeant un `.tres`, et c'est la première fois du projet qu'un jalon ne demande pas d'écrire une ligne de GDScript.
+
+`I3` suit avec les chiffres, et il en a désormais une liste précise plutôt qu'une intention : **la nourriture d'abord**, qui est le déséquilibre le plus visible d'un run entier — la famine tombe dès la cinquième journée et ne s'arrête plus —, puis le calendrier des vagues, le barème du score, et le `breach_per_casualty` que `F1` avait déjà signalé comme le plus fragile de ses cinq.
 
 *(Écrit à `F1`.)* Ce qui reste à câbler tient en trois fils, et chacun a déjà sa prise. La vague entre dans `close_the_day()`, où `I1` lui a gardé sa place et où `DayReport` l'accueillera par un champ. Le calendrier des vagues est un bloc de `data/balance/` qui n'existe pas encore, exprès — un champ que personne ne lit serait la frontière que ce document refuse depuis `E1`. Et la défaite lit ce que la ville et le roster disent déjà.
 
