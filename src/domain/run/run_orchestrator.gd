@@ -153,6 +153,10 @@ static func unstaff(state: RunState, action: int) -> Array[StringName]:
 ## posées déciderait du résultat. C'est exactement ce que `E1` a refusé pour l'écrêtage, et
 ## pour la même raison : deux villes identiques bâties dans un ordre différent doivent
 ## rendre la même chose.
+##
+## La capacité est reposée juste après cette application, et ce n'est **pas** une entorse
+## à ce qui précède : la récolte est déjà calculée quand elle bouge. Voir
+## `_restore_capacity()`, qui existe pour que la jauge cesse de mentir entre deux phases.
 static func resolve(state: RunState) -> PhaseReport:
 	assert(state != null, "résolution sans run")
 	assert(not state.cycle().is_over(), "résolution d'un run terminé")
@@ -174,6 +178,7 @@ static func resolve(state: RunState) -> PhaseReport:
 			labor, state.ledger(), balance.economy, balance.actions)
 		sites = SiteResolver.resolve(snapshot, plan, assign, labor, balance.actions)
 		completed = _apply(state, sites)
+		_restore_capacity(state, balance.economy)
 		lines = production.work()
 		lines.append_array(sites.work())
 		progress = SkillResolver.award_lines(state.roster(), lines, balance.workforce)
@@ -298,6 +303,32 @@ static func _apply(state: RunState, sites: SiteReport) -> Array[Vector2i]:
 	for cell in shifts:
 		state.grid().set_height(cell, state.grid().height_at(cell) + shifts[cell])
 	return completed
+
+## Relève la réserve de ce qu'un entrepôt achevé à l'instant vient de lui ajouter.
+##
+## `ProductionResolver.resolve()` pose déjà la capacité, mais il la pose sur la ville
+## d'**avant** le soir. C'est la règle d'ordre de `resolve()` et elle ne bouge pas d'un
+## pouce : un entrepôt fini ce soir ne sauve toujours pas la récolte de ce soir. Ce que
+## cette règle ne dit pas, c'est ce que la jauge affiche **entre deux phases**.
+##
+## Sans cette ligne, un entrepôt achevé reste sur la carte toute une phase pendant que le
+## HUD annonce l'ancienne capacité : le joueur voit le bâtiment et ne voit pas ses cent
+## unités. Le défaut a traversé `I1` sans se faire remarquer parce qu'aucun écran ne
+## montrait la capacité en continu, et parce que la résolution suivante la reposait de
+## toute façon — un mensonge qui se corrige tout seul reste un mensonge le temps qu'il
+## dure. C'est `E2` qui l'a rendu visible.
+##
+## Le harnais Économie contournait la même chose à sa façon depuis `E1`, en reposant la
+## capacité à la main après ses poses, et son commentaire renvoyait la question « là où le
+## HUD de `E2` le fera aussi ». Elle est ici et non dans une vue : un adapter qui muterait
+## la réserve serait la faute d'architecture que `CLAUDE.md` refuse en premier.
+##
+## Elle ne peut que monter — achever un chantier n'a jamais détruit d'entrepôt. Le jour où
+## le `DamageReport` de `F1` en détruira un, c'est cette même ligne qui écrêtera, par la
+## règle proportionnelle de `Ledger.set_capacity()`.
+static func _restore_capacity(state: RunState, balance: EconomyBalance) -> void:
+	state.ledger().set_capacity(
+		ProductionResolver.capacity_for(state.city().to_snapshot(), balance))
 
 ## Le roster moins tous ceux qui ont tenu un poste, quel qu'il soit.
 ##
