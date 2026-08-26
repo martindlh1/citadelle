@@ -280,6 +280,12 @@ Elle porte aussi sa **capacité**, figée à la pose : les postes du bâtiment v
 
 **Une carte ouvre les postes de sa cible une fois.** Une seconde du même nom au même endroit les rouvrirait, et trois ouvriers produiraient dans une cabane qui n'en tient que deux — la carte cesserait d'être une permission pour devenir un multiplicateur. Deux cartes *différentes* sur une même cellule restent acceptées ; c'est le doublon qui est refusé, pas le partage.
 
+**Retirer une action rend sa carte.** *(Tranché à `W2`.)* Le retrait est une **annulation**, pas un sacrifice : il n'est possible que dans la phase qui a posé, et à ce moment rien n'a été consommé — aucun ouvrier n'a travaillé, la réserve n'a pas bougé. Il n'y a donc rien à faire payer, et une carte qui ne reviendrait pas punirait une cible mal visée plutôt qu'une décision.
+
+Ce n'est **pas** une réponse à l'`OUVERT` ci-dessous, et la distinction vaut d'être écrite parce que le code les avait confondues de `D2` à `W2` : cet `OUVERT` porte sur les cartes **non jouées en fin de phase**, celle-ci a été jouée et reprise dans la phase même. Deux gestes, deux moments, deux questions. Le scumming qu'on pourrait craindre — poser pour lire la capacité, retirer, reposer ailleurs — n'existe pas : le ciblage annonce déjà la capacité avant le jeu.
+
+Une **carte de bâtiment** ne s'annule pas, puisqu'elle ouvre un chantier et qu'aucun geste ne le retire. Ce que rendrait un chantier annulé reste l'`OUVERT` de 3.2.
+
 **Le sens d'un terrassement se choisit à la pose.** *(Tranché à `I1`.)* Il y a **une** carte *Terraformer* et deux sens, et le sens appartient au **jeu** de la carte, exactement comme l'orientation d'un bâtiment appartient au placement et non à sa `BuildingData`. La carte reste un outil que l'on oriente plutôt qu'un tirage dont on subit le sens.
 
 Le prix est connu et il a été payé sciemment : deux DTO de `contracts/` — l'action posée et le verdict de ciblage — portent désormais un sens, et le ciblage le reçoit en argument. Un défaut le rend invisible aux trois verbes qui ne déplacent rien.

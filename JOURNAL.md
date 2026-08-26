@@ -6,8 +6,9 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ## 2026-08-26 — `W2` : choisir qui, et une phrase de design qu'il a fallu corriger
 
-**État : terminé.** Quatre commits sur `feat/w2-assignment`, tirée de `master`. Les trois
-commandes passent : boot sans erreur ni warning, tout `src/domain/` parse, **619 tests
+**État : terminé.** Sept commits sur `feat/w2-assignment`, tirée de `master` — dont trois
+qui corrigent le jalon après coup, sur un défaut trouvé au clavier. Les trois
+commandes passent : boot sans erreur ni warning, tout `src/domain/` parse, **625 tests
 verts contre 589** à l'ouverture, 39 suites contre 38.
 
 ### Ce qui a été livré
@@ -17,10 +18,11 @@ verts contre 589** à l'ouverture, 39 suites contre 38.
 - **Adapters** — `WorkerCard` et `AssignmentPanel` sous `src/adapters/workforce/`, le
   dossier que l'arborescence réservait depuis `I0` et que rien n'habitait.
 - **Aucun DTO de `contracts/` créé ni modifié**, pour la deuxième fois d'affilée.
-- **Une suite neuve et 30 cas de plus**, dont sept sur l'orchestrateur.
+- **Une suite neuve et 36 cas de plus**, dont dix sur l'orchestrateur.
+- `Deck.take_back()`, et le retrait qui rend enfin sa carte — voir plus bas.
 - `run_harness` perd ses deux dernières lignes de plateau et de roster ; `RunManager`
   gagne un passe-plat.
-- `DESIGN.md` 3.4 et 8 ; `CLAUDE.md` ; `README.md`.
+- `DESIGN.md` 3.4, 3.5 et 8 ; `CLAUDE.md` ; `README.md`.
 
 ### La phrase de `DESIGN.md` qu'il a fallu corriger, et pourquoi je ne l'ai pas contournée
 
@@ -184,6 +186,45 @@ voir aux paliers 3 et 4, que quinze journées n'atteignent pas.
   `I1`. Le jour où ça comptera, ce sera un champ de `.tres`.
 - **la sortie sous `scenes/ui/`** — `I2`, comme les trois vues de `E2`. C'est là aussi que
   la borne de trois lignes du panneau devra être traitée pour de bon.
+
+### Le défaut que le clavier a trouvé, deux jalons de suite
+
+*(Trouvé par l'humain juste après le jalon, corrigé dans la foulée. **625 tests verts
+contre 619.**)* Retirer une action ne rendait pas sa carte.
+
+Le comportement était **documenté comme volontaire** dans `RunOrchestrator.withdraw()` —
+« elle est à la défausse depuis qu'on l'a jouée, c'est l'état par défaut et non une
+réponse » — et renvoyé à l'`OUVERT` de 3.5. Le docstring avait tort, et sur un point
+précis : **il confondait deux gestes.** Cet `OUVERT` porte sur les cartes *non jouées en
+fin de phase* ; un retrait reprend une carte *jouée*, dans la phase même, avant que quoi
+que ce soit n'ait été consommé — aucun ouvrier n'a travaillé, la réserve n'a pas bougé.
+Deux moments, deux questions, et `I2b` garde la sienne entière.
+
+Le prix de l'ancienne lecture ne se voyait qu'au clavier : le clic droit n'était pas une
+annulation mais un sacrifice, et il punissait une cible mal visée plutôt qu'une décision.
+Le scumming qu'on aurait pu craindre en retour — poser pour lire la capacité, retirer,
+reposer ailleurs — n'existe pas, la ligne de survol annonçant déjà « accepté, N poste(s) »
+avant le jeu.
+
+**Aucun test ne figeait l'ancien comportement**, et c'est la différence avec le cas que
+`E2` avait dû réécrire : les trois cas de retrait ne vérifiaient que le plateau et les
+ouvriers. Rien n'avait été prouvé, seulement supposé.
+
+`Deck.take_back()` est l'inverse exact de `discard()`, et reprend le **dernier exemplaire
+tombé** — sans conséquence observable, deux exemplaires étant interchangeables, mais ça
+fixe l'ordre et garde deux runs du même seed identiques jusque dans les piles.
+
+Le cas qui compte est que la carte rendue **se rejoue** : sans lui, les autres passeraient
+sur une carte rendue à une main dont plus rien ne pourrait la sortir. Son revers aussi —
+un retrait que la phase refuse ne rend rien, sans quoi un clic droit dans la mauvaise
+phase serait une source de cartes gratuites.
+
+**Et un second défaut est tombé avec, que personne n'avait signalé.** Le harnais garde un
+**rang** dans la main, jamais un identifiant — la leçon de `D2`, deux exemplaires d'une
+même carte étant indistinguables. Une carte rendue s'insère dans son pool et décale tout
+ce qui suit : tenir une carte de bâtiment et retirer une action changeait donc
+silencieusement ce qu'on tenait. `_play_here()` reposait déjà la sélection pour cette
+raison exacte ; `_withdraw_here()` le fait maintenant aussi.
 
 ### Prochain jalon
 
