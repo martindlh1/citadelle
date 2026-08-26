@@ -1,5 +1,5 @@
 extends Node
-## Harnais de dev du système Run — jalon I1 : la boucle minimale.
+## Harnais de dev du système Run — la boucle minimale de `I1`, le HUD de `E2`.
 ##
 ## C'est le premier harnais qui ne montre pas un système mais **une journée**. Le harnais
 ## Cartes de `D2` composait déjà trois systèmes du domaine ; celui-ci les compose tous, et
@@ -17,6 +17,18 @@ extends Node
 ##     gratuitement et le disait en toutes lettres.
 ##   - **les deux verbes exécutés.** Un chantier monte vraiment d'un cran, et le relief se
 ##     creuse vraiment sous un terrassement. Le rapport de phase les nomme.
+##
+## Ce que `E2` y a ajouté, et surtout ce qu'il en a **retiré** : la réserve et le compte
+## rendu de résolution ne sont plus deux morceaux du pavé de texte, ce sont deux vues —
+## `ResourceBar` en haut à gauche, `ProductionPanel` en haut à droite. Le harnais ne
+## fabrique plus une seule ligne de leur mise en forme ; il leur passe un `Ledger` et un
+## `PhaseReport`. Les deux endroits où le même chiffre se lisait ont disparu avec, ce qui
+## est le vrai bénéfice : un chiffre affiché à deux endroits est un chiffre qui finira par
+## différer de lui-même.
+##
+## Ce qui reste en texte est ce dont aucun jalon d'écran n'a encore la charge — les piles,
+## le plateau, le roster, le survol. Le plateau et le roster iront à `W2`, qui doit
+## présenter *qui* l'on envoie.
 ##
 ## Il ne décide rien. Il traduit un clic en appel de `RunManager` et une réponse en
 ## couleur, comme les harnais Construction et Cartes avant lui. Aucun « if » sur le
@@ -64,6 +76,9 @@ var _ghost: PlacementGhost
 var _targets: TargetHighlight
 var _marker: ActionMarker
 var _hand_view: HandView
+var _palette: CommodityPalette
+var _bar: ResourceBar
+var _panel: ProductionPanel
 var _label: Label
 
 ## Rang de la carte tenue dans Hand.cards(), ou NO_SLOT. Un **rang** et non un
@@ -79,7 +94,19 @@ var _turns := 0
 var _direction := PlayedAction.DIRECTION_UP
 
 var _last_action := "Prendre une carte : 1 à 9, ou un clic dessus."
-var _last_report := ""
+
+## Le libellé de la phase qu'on est en train de finir.
+##
+## Retenu **avant** d'appeler `RunManager.end_phase()`, parce que le cycle a déjà avancé
+## quand `phase_resolved` arrive : à ce moment-là `RunManager.phase()` désigne la
+## suivante, et le rapport ne porte que l'identifiant de celle qui vient de finir. C'est
+## la seule chose que le harnais sache et que le panneau ne puisse pas retrouver.
+var _ending_label := ""
+
+## Ce que la dernière résolution a changé à la réserve, annoté sur la barre jusqu'à la
+## prochaine. Il se vide dès qu'on repose une carte : un « +5 » qui survivrait à une
+## dépense annoterait le mauvais chiffre.
+var _last_delta: Dictionary[StringName, int] = {}
 
 func _ready() -> void:
 	var balance := GameDatabase.get_balance()
@@ -103,8 +130,12 @@ func _ready() -> void:
 	_hand_view = HandView.create(_state().catalogue())
 	_hand_view.card_picked.connect(_hold)
 	add_child(_hand_view)
+	_palette = CommodityPalette.from_database()
+	_bar = ResourceBar.create(_palette)
+	_panel = ProductionPanel.create(_palette)
 	_label = _make_label()
-	add_child(_label)
+	add_child(_hud_slot(_make_left_column(), Control.SIZE_SHRINK_BEGIN))
+	add_child(_hud_slot(_panel, Control.SIZE_SHRINK_END))
 
 	EventBus.phase_resolved.connect(_on_phase_resolved)
 	_refresh_targets()
@@ -113,8 +144,15 @@ func _ready() -> void:
 ## Le survol change sans que rien ne soit joué — la souris bouge, la caméra tourne — donc
 ## le fantôme et le rapport se refont à chaque image. Les cibles, elles, ne bougent qu'à un
 ## changement de carte, de sens, de pose ou de phase.
+##
+## La barre de ressources y est aussi, et c'est délibéré : elle met ses nœuds à jour sur
+## place plutôt que de se reconstruire, donc elle ne coûte rien par image. La rafraîchir
+## sur événement aurait demandé de lister tous les gestes qui touchent la bourse — poser
+## un bâtiment, résoudre, et demain piller —, et un oubli dans cette liste se serait vu
+## comme une réserve qui ne bouge pas.
 func _process(_delta: float) -> void:
 	_refresh_ghost()
+	_bar.show_ledger(_state().ledger(), _last_delta)
 	_label.text = _report()
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -202,8 +240,13 @@ func _play_here() -> void:
 			_label_of(held), result.anchor(), result.action().capacity()]
 	else:
 		_renderer.rebuild(_state().city())
+		# La bourse vient d'être débitée : le delta de la dernière résolution n'annote
+		# plus le chiffre qu'il commentait, et un « +5 » à côté d'une réserve qui vient
+		# de baisser de 20 se lirait à l'envers.
+		_last_delta = {}
 		_last_action = "Chantier ouvert : %s en %s, %s — payé %s." % [
-			_label_of(held), result.anchor(), _orientation(), _bundle(result.paid())]
+			_label_of(held), result.anchor(), _orientation(),
+			_cost_text(result.paid())]
 	_release()
 
 func _withdraw_here() -> void:
@@ -279,6 +322,7 @@ func _end_phase() -> void:
 		_last_action = "Run terminé."
 		return
 	var finished := _phase_label()
+	_ending_label = finished
 	RunManager.end_phase()
 	_held_slot = NO_SLOT
 	_refresh_targets()
@@ -289,8 +333,14 @@ func _end_phase() -> void:
 
 ## Le seul endroit du harnais qui réagit à un signal plutôt qu'à une touche, et c'est ce
 ## que `I0` avait dessiné : le domaine retourne, `RunManager` publie, l'écran écoute.
+##
+## `E2` a sorti d'ici le pavé de texte que `I1` fabriquait à la main : c'est le panneau
+## qui met en forme le rapport, et le harnais ne fait plus que le lui passer. Il ne
+## calcule qu'une chose, le delta de la réserve, et par une fonction de la vue.
 func _on_phase_resolved(report: PhaseReport) -> void:
-	_last_report = _phase_text(report)
+	_panel.show_report(report, _ending_label)
+	_last_delta = ResourceBar.delta_of(report,
+		_state().balance().economy.upkeep_resource)
 	# Le relief a pu bouger sous un terrassement, et la ville sous un chantier. Refaire
 	# les deux plutôt que de deviner lequel : deux résolutions par jour, le coût est nul.
 	_world.show_grid(_state().grid())
@@ -345,6 +395,12 @@ func _refresh_ghost() -> void:
 
 # --- Le rapport ------------------------------------------------------------------------
 
+## Ce qui reste du rapport texte de `I1` après que `E2` en a pris deux morceaux.
+##
+## La réserve est partie sur la barre, la résolution sur le panneau. Ce qui demeure est ce
+## qu'aucun des deux jalons d'écran n'a encore de vue pour : les piles, le plateau, le
+## roster, le survol. Le roster et le plateau iront à `W2`, qui doit présenter *qui* l'on
+## envoie ; le survol et les piles attendront `I2`.
 func _report() -> String:
 	var lines := PackedStringArray()
 	lines.append(_banner())
@@ -357,22 +413,22 @@ func _report() -> String:
 	lines.append("")
 	lines.append(_hover_line())
 	lines.append(_last_action)
-	if not _last_report.is_empty():
-		lines.append("")
-		lines.append(_last_report)
 	lines.append("")
 	lines.append(CONTROLS)
 	return "\n".join(lines)
 
 ## Le bandeau de phase. Le libellé et les gestes viennent de la `PhaseDef`, jamais d'un
 ## nom écrit ici : c'est ce qui fera de l'arbitrage de `I2b` un échange de `.tres`.
+##
+## La réserve en est sortie à `E2`. Elle y était parce qu'il n'y avait nulle part
+## ailleurs où la mettre ; la garder en double aurait donné deux endroits où lire le même
+## chiffre, donc un endroit où le lire faux le jour où l'un des deux dériverait.
 func _banner() -> String:
 	var cycle := _state().cycle()
 	if cycle.is_over():
 		return "Run terminé — %d jour(s) joués, seed %d." % [cycle.days(), SEED]
-	return "Jour %d/%d   |   %s   |   réserve %d/%d   |   %s" % [
-		cycle.day(), cycle.days(), _phase_label(), _state().ledger().total(),
-		_state().ledger().capacity(), _permissions()]
+	return "Jour %d/%d   |   %s   |   %s" % [
+		cycle.day(), cycle.days(), _phase_label(), _permissions()]
 
 ## Ce que la phase courante autorise, en clair. L'écran ne suppose rien : il pose les
 ## deux questions au domaine et affiche les réponses.
@@ -386,13 +442,19 @@ func _permissions() -> String:
 		allowed.append("résout en partant")
 	return "—" if allowed.is_empty() else ", ".join(allowed)
 
+## Les trois pioches, une par ligne.
+##
+## Elles tenaient sur une seule jusqu'à `E2`, qui a posé le panneau de production dans le
+## coin où cette ligne finissait : le troisième pool passait dessous et se lisait à
+## moitié. Trois lignes courtes valent mieux qu'une longue tronquée, et la colonne ainsi
+## formée se lit de toute façon mieux qu'une file de séparateurs.
 func _piles_line() -> String:
-	var parts := PackedStringArray()
+	var lines := PackedStringArray()
 	for pool in CardData.POOLS:
-		parts.append("%s %d en main, %d pioche, %d défausse" % [pool,
+		lines.append("Piles %-9s %d en main, %d pioche, %d défausse" % [pool,
 			_state().deck().hand_size(pool), _state().deck().draw_size(pool),
 			_state().deck().discard_size(pool)])
-	return "Piles — %s" % "   |   ".join(parts)
+	return "\n".join(lines)
 
 func _board_lines() -> String:
 	if _state().board().count() == 0:
@@ -438,54 +500,12 @@ func _hover_line() -> String:
 	var data := _building_of(held)
 	if data != null:
 		return "%s   ->   %s, %s, coût %s%s" % [line, _label_of(held), _orientation(),
-			_bundle(data.cost),
+			_cost_text(data.cost),
 			"" if _state().ledger().can_afford(data.cost) else "   ← réserve insuffisante"]
 	var verdict := _validate(held, cell)
 	return "%s   ->   %s : %s" % [line, _label_of(held),
 		"accepté, %d poste(s)" % verdict.capacity() if verdict.is_ok()
 			else String(verdict.reason())]
-
-## Le compte rendu de la dernière phase résolue.
-##
-## Il nomme ce que `D2` ne pouvait qu'annoncer : les crans posés, la terre déplacée, les
-## chantiers achevés. Et il compte les oisifs sur le **rapport de phase** et non sur celui
-## de la production, qui compterait un bâtisseur parmi eux.
-##
-## La ligne d'upkeep n'apparaît que sur la phase qui **ferme la journée**, parce qu'on
-## mange une fois par jour quel que soit le nombre de fois qu'on a récolté. Une ligne à
-## zéro les autres phases se lirait comme un soir où personne n'a mangé.
-func _phase_text(report: PhaseReport) -> String:
-	var production := report.production()
-	var lines := PackedStringArray()
-	lines.append("Jour %d, %s — %d poste(s) tenu(s), %d oisif(s)%s" % [report.day(),
-		report.phase(), report.manned_count(), report.idle().size(),
-		"   ← fin de journée" if report.closes_the_day() else ""])
-	lines.append("  produit  %s" % _bundle(production.produced()))
-	lines.append("  stocké   %s   perdu au plafond %d" % [_bundle(production.stored()),
-		production.total_wasted()])
-	lines.append("  XP       %d distribuée, %d palier(s) de piste" % [
-		report.progress().total_xp(), report.progress().skill_level_ups().size()])
-	lines.append("  chantiers %s" % _sites_text(report))
-	if report.closes_the_day():
-		var upkeep := report.day_report().upkeep()
-		lines.append("  upkeep   %d dû, %d mangé, %d à jeun%s" % [upkeep.due(),
-			upkeep.consumed(), upkeep.unfed(),
-			"   ← famine" if upkeep.is_famine() else ""])
-	return "\n".join(lines)
-
-func _sites_text(report: PhaseReport) -> String:
-	var sites := report.sites()
-	if sites.is_empty():
-		return "—"
-	var parts := PackedStringArray()
-	var advances := sites.advances()
-	for anchor in advances:
-		parts.append("%s +%d cran(s)%s" % [anchor, advances[anchor],
-			" ← achevé" if report.completed().has(anchor) else ""])
-	var shifts := sites.shifts()
-	for cell in shifts:
-		parts.append("%s terrassé de %+d" % [cell, shifts[cell]])
-	return ", ".join(parts)
 
 # --- Les petites lectures ---------------------------------------------------------------
 
@@ -554,22 +574,13 @@ func _building_of(card: StringName) -> BuildingData:
 		return null
 	return _state().building(data.building)
 
-## Un lot de ressources en clair, trié par identifiant. Trié parce que l'ordre d'un
-## Dictionary suit les insertions, et par sort_custom sur String, jamais par sort() —
-## comparer deux StringName compare leurs pointeurs.
-func _bundle(amounts: Dictionary[StringName, int]) -> String:
-	if amounts.is_empty():
+## Un coût en clair. La palette met un lot en forme et rend « — » pour un lot vide ; un
+## coût vide, lui, se dit « gratuit ». C'est la phrase du harnais et non celle de la
+## palette : la même absence ne se raconte pas pareil selon qu'on paie ou qu'on reçoit.
+func _cost_text(cost: Dictionary[StringName, int]) -> String:
+	if cost.is_empty():
 		return "gratuit"
-	var ids: Array[StringName] = []
-	ids.assign(amounts.keys())
-	ids.sort_custom(func(first: StringName, second: StringName) -> bool:
-		return String(first) < String(second))
-	var parts := PackedStringArray()
-	for id in ids:
-		var commodity := GameDatabase.get_commodity(id)
-		parts.append("%d %s" % [amounts[id],
-			commodity.label if commodity != null else String(id)])
-	return ", ".join(parts)
+	return _palette.bundle_text(cost)
 
 # --- La mise en place ---------------------------------------------------------------------
 
@@ -591,12 +602,58 @@ func _make_buildings() -> Dictionary[StringName, BuildingData]:
 		table[id] = GameDatabase.get_building(id)
 	return table
 
+## Colle une vue de HUD dans un coin de l'écran, à la marge du rapport.
+##
+## Une bande plein écran à marges, dont l'enfant se rétracte vers le coin voulu — et non
+## des ancres et des décalages calculés à la main. `E2` a essayé de les calculer, et la
+## capture a montré les deux pièges l'un après l'autre.
+##
+## Le premier est que `set_anchors_preset()` prend un **booléen** en second argument, là
+## où `set_anchors_and_offsets_preset()` prend un mode de redimensionnement : lui passer
+## `PRESET_MODE_MINSIZE` revient à lui dire « garde tes décalages », donc à laisser la vue
+## à zéro. Un `PanelContainer` de taille nulle ne dessine pas son fond, et ses libellés
+## débordent par-dessus la carte.
+##
+## Le second survit à la correction du premier : une taille minimale lue juste après avoir
+## ajouté des enfants est encore celle d'avant, Godot la recalculant à la passe suivante.
+## Le panneau se plaçait donc toujours sur la taille du rapport **précédent**.
+##
+## Un conteneur ne se trompe sur aucun des deux, et il ne se trompe pas non plus à la
+## dixième résolution : c'est lui qui refait la mise en page quand le contenu change.
+func _hud_slot(view: Control, horizontal: int) -> MarginContainer:
+	var slot := MarginContainer.new()
+	slot.set_anchors_preset(Control.PRESET_FULL_RECT)
+	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "top", "right", "bottom"]:
+		slot.add_theme_constant_override("margin_%s" % side, int(REPORT_MARGIN))
+	view.size_flags_horizontal = horizontal
+	view.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	slot.add_child(view)
+	return slot
+
+## La barre, puis le rapport texte dessous.
+##
+## Empilés dans un `VBoxContainer` plutôt que posés à des hauteurs écrites à la main : le
+## texte démarre sous la barre parce qu'il la suit, et non parce qu'un chiffre recopié se
+## trouve valoir la bonne hauteur. Régler la barre ne peut donc pas faire repasser le
+## texte dessous.
+##
+## La barre se rétracte à sa largeur ; sans ça, la colonne l'étirerait sur la largeur du
+## bloc de texte, qui est bien plus large.
+func _make_left_column() -> VBoxContainer:
+	var column := VBoxContainer.new()
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_theme_constant_override("separation", int(REPORT_MARGIN))
+	_bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	column.add_child(_bar)
+	column.add_child(_label)
+	return column
+
+## Le rapport texte. Il n'a plus ni ancre ni décalage depuis `E2` : il est empilé sous la
+## barre de ressources par la colonne de gauche, qui les place l'un après l'autre.
 func _make_label() -> Label:
 	var label := Label.new()
 	label.name = "RunReport"
-	label.set_anchors_preset(Control.PRESET_FULL_RECT)
-	label.offset_left = REPORT_MARGIN
-	label.offset_top = REPORT_MARGIN
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var font := SystemFont.new()
 	font.font_names = PackedStringArray(["Consolas", "Courier New", "monospace"])
@@ -616,6 +673,12 @@ func _make_label() -> Label:
 ## l'écran : cette capture est le contrôle principal du jalon. Elle joue donc une journée
 ## entière plutôt qu'un geste — un chantier ouvert, payé, avancé, et un terrassement
 ## exécuté —, sans quoi elle ne montrerait rien de ce que `I1` ajoute.
+##
+## Elle n'imprime plus le compte rendu de la dernière phase : il est devenu un panneau, et
+## un panneau se regarde. Le réécrire en texte à côté aurait donné deux mises en forme du
+## même rapport, dont une seule serait vérifiée par la capture — donc l'autre dériverait.
+## Ce qui reste imprimé est ce qu'aucune image ne rend lisible d'un coup d'œil : la réserve
+## chiffrée, qui dit si la bourse a bien été débitée.
 func _capture_if_asked() -> void:
 	var path := DevShot.path()
 	if path.is_empty():
@@ -627,9 +690,11 @@ func _capture_if_asked() -> void:
 	for _frame in DevShot.WARMUP_FRAMES:
 		await get_tree().process_frame
 	print("[run_harness] %s" % _banner())
+	print("[run_harness] réserve %s — %d/%d" % [
+		_palette.bundle_text(_state().ledger().amounts()),
+		_state().ledger().total(), _state().ledger().capacity()])
 	print("[run_harness] %s" % _hover_line())
 	print("[run_harness] %s" % _board_lines())
-	print("[run_harness] %s" % _last_report)
 	var error := get_viewport().get_texture().get_image().save_png(path)
 	print("[run_harness] capture vers %s : %s" % [path, error_string(error)])
 	get_tree().quit(OK if error == OK else FAILED)

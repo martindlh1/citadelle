@@ -54,6 +54,7 @@ var _city: CityState
 var _ledger: Ledger
 var _economy: EconomyBalance
 var _actions: ActionBalance
+var _palette: CommodityPalette
 var _lines := PackedStringArray()
 
 ## Ce que la bourse a refusé à l'ouverture, dans l'ordre. Se vide un soir à la fois.
@@ -67,6 +68,10 @@ func _ready() -> void:
 	_terrain = _grid.to_query()
 	_city = CityState.new()
 	_ledger = Ledger.from_stock(_economy.starting_stock, _economy.base_storage_cap)
+	# La mise en forme d'un lot est partie chez la palette à E2. Ce fichier en portait
+	# sa propre copie, identique à celle du harnais Run à un tri près — deux copies qui
+	# rendaient déjà les ressources dans un ordre que personne n'avait choisi.
+	_palette = CommodityPalette.from_database()
 
 	_report_opening()
 	_report_construction()
@@ -82,7 +87,7 @@ func _report_opening() -> void:
 	_lines.append("Carte seed %d, %s" % [SEED, _grid.size()])
 	_lines.append("")
 	_lines.append("Réserve d'ouverture : %s — %d/%d"
-		% [_bundle_text(_ledger.amounts()), _ledger.total(), _ledger.capacity()])
+		% [_palette.bundle_text(_ledger.amounts()), _ledger.total(), _ledger.capacity()])
 	_lines.append("")
 
 ## Chaque pose enchaîne les deux questions dans cet ordre : la bourse d'abord, la carte
@@ -97,13 +102,18 @@ func _report_construction() -> void:
 			continue
 		_lines.append("  %-16s %s" % [id, _build(data)])
 	# Un entrepôt compte dès qu'il est bâti et non au prochain soir : sans cette ligne,
-	# le rapport annoncerait la capacité d'avant juste au-dessus de celle d'après. La
-	# résolution la repose de toute façon, ce qui rend l'oubli silencieux — donc à
-	# écrire ici, là où le HUD de E2 le fera aussi.
+	# le rapport annoncerait la capacité d'avant juste au-dessus de celle d'après.
+	#
+	# Cette ligne renvoyait la question « là où le HUD de E2 le fera aussi ». Elle a été
+	# répondue autrement, et mieux : c'est RunOrchestrator qui relève la réserve dès
+	# qu'un chantier d'entrepôt est achevé, parce qu'un adapter qui muterait la bourse
+	# serait la faute d'architecture que CLAUDE.md refuse en premier. Ce harnais-ci n'a
+	# pas d'orchestrateur — il est d'avant I1 et n'a pas de cartes —, donc il continue
+	# de le faire lui-même, dans son rôle de couche qui orchestre.
 	_ledger.set_capacity(_capacity())
 	_lines.append("")
 	_lines.append("Réserve après construction : %s — %d/%d"
-		% [_bundle_text(_ledger.amounts()), _ledger.total(), _ledger.capacity()])
+		% [_palette.bundle_text(_ledger.amounts()), _ledger.total(), _ledger.capacity()])
 	_lines.append("  capacité %d = %d de base + %d d'entrepôt"
 		% [_capacity(), _economy.base_storage_cap, _capacity() - _economy.base_storage_cap])
 	_lines.append("")
@@ -114,12 +124,13 @@ func _build(data: BuildingData) -> String:
 		return "aucune ancre ne l'accepte sur cette carte"
 	if not _ledger.can_afford(data.cost):
 		_deferred.append(data.id)
-		return "posable en %s, impayable : %s — mis en file" % [anchor, _bundle_text(data.cost)]
+		return "posable en %s, impayable : %s — mis en file" % [anchor,
+			_palette.bundle_text(data.cost)]
 	if not _place(data, anchor):
 		return "refus inattendu en %s" % anchor
 	if data.cost.is_empty():
 		return "posé en %s, gratuit" % anchor
-	return "posé en %s pour %s" % [anchor, _bundle_text(data.cost)]
+	return "posé en %s pour %s" % [anchor, _palette.bundle_text(data.cost)]
 
 ## Pose, dépense, et **achève le chantier sur-le-champ**, la bourse ayant déjà répondu
 ## oui. Partagée entre la construction d'ouverture et la file, pour que les deux paient
@@ -244,7 +255,7 @@ func _report_evenings() -> void:
 		if evening == first_famine:
 			notes.append("← famine")
 		_lines.append(("%4d  %-*s %4d/%-4d %6d %6d %6d   %s"
-			% [evening, PRODUCED_WIDTH, _bundle_text(report.produced()), _ledger.total(),
+			% [evening, PRODUCED_WIDTH, _palette.bundle_text(report.produced()), _ledger.total(),
 				_ledger.capacity(), upkeep.due(), upkeep.consumed(), upkeep.unfed(),
 				", ".join(notes)]).rstrip(" "))
 	_lines.append("")
@@ -272,24 +283,6 @@ func _worker(index: int) -> StringName:
 
 func _capacity() -> int:
 	return ProductionResolver.capacity_for(_city.to_snapshot(), _economy)
-
-## Lot rendu lisible, trié par identifiant.
-##
-## Le tri se fait sur le texte et non sur le StringName : deux affichages du même lot
-## doivent donner la même ligne, or comparer deux StringName compare des pointeurs.
-func _bundle_text(bundle: Dictionary[StringName, int]) -> String:
-	if bundle.is_empty():
-		return "—"
-	var ids: Array[StringName] = []
-	ids.assign(bundle.keys())
-	ids.sort_custom(func(first: StringName, second: StringName) -> bool:
-		return String(first) < String(second))
-	var parts := PackedStringArray()
-	for id in ids:
-		var commodity := GameDatabase.get_commodity(id)
-		var label := commodity.label if commodity != null else String(id)
-		parts.append("%d %s" % [bundle[id], label])
-	return ", ".join(parts)
 
 func _make_label(text: String) -> Label:
 	var label := Label.new()

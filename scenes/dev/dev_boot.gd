@@ -23,6 +23,7 @@ const HARNESS_SCRIPTS: Dictionary[StringName, String] = {
 	&"workforce": "res://scenes/dev/workforce_harness.gd",
 	&"deck": "res://scenes/dev/deck_harness.gd",
 	&"run": "res://scenes/dev/run_harness.gd",
+	&"hud": "res://scenes/dev/hud_harness.gd",
 }
 
 func _ready() -> void:
