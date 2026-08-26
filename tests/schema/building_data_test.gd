@@ -284,10 +284,15 @@ func _l_shape() -> Array[Vector2i]:
 	var offsets: Array[Vector2i] = [Vector2i.ZERO, Vector2i(1, 0), Vector2i(0, 1)]
 	return offsets
 
+## Les PV sont renseignés ici et pas la défense ni les places de déploiement, et l'écart
+## est la doctrine elle-même : F1 réclame les premiers et laisse les deux autres
+## légitimement nuls. Un bâtiment de test qui les porterait tous les trois ne dirait plus
+## rien de ce que missing_fields() exige vraiment.
 func _building(offsets: Array[Vector2i]) -> BuildingData:
 	var building := BuildingData.new()
 	building.id = &"test_hut"
 	building.color = Color(0.5, 0.4, 0.3)
 	building.height = 0.6
+	building.hit_points = 4
 	building.footprint = offsets
 	return building

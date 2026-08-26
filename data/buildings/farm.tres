@@ -22,3 +22,4 @@ cost = Dictionary[StringName, int]({
 &"wood": 10
 })
 production = SubResource("Resource_farm_production")
+hit_points = 4

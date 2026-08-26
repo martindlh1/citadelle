@@ -74,8 +74,16 @@ Les DTO échangés entre systèmes. C'est le seul endroit où deux systèmes se 
 | `LaborForce` | Effectifs | Économie |
 | `CombatForce` | Effectifs | Combat |
 | `ProductionReport` | Économie | Effectifs (XP), adapters |
-| `WaveDef` | Run | Combat |
-| `DamageReport` | Combat | Ville, Effectifs, adapters |
+| `DamageReport` | Combat | Ville, Effectifs, Économie, adapters |
+
+**`WaveDef` a quitté cette table à `F1`, et c'est une correction.** Elle y figurait depuis
+`I0` comme un DTO de `contracts/` ; c'est une `Resource` de `src/schema/`, éditée dans
+`data/waves/`, exactement comme `PhaseDef` décrit la forme d'une journée et `BuildingData`
+un bâtiment. `contracts/` est l'endroit où deux systèmes **du code** se rencontrent ; un
+contenu que l'on règle dans un `.tres` voyage déjà partout — le domaine reçoit ses blocs
+d'équilibrage en argument depuis `E1`, et une `BuildingData` traverse tous les systèmes
+dans un `BuildingSnapshot`. Le Combat reçoit donc sa vague comme le résolveur de chantiers
+reçoit son `ActionBalance`.
 
 L'Économie voit le relief depuis `D2`, et c'est la conséquence directe de la seconde
 lecture de `DESIGN.md` 3.5 : une action jouée **à cru** rend ce que le tag de sa cellule

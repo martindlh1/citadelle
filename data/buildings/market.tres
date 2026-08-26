@@ -13,3 +13,4 @@ cost = Dictionary[StringName, int]({
 &"wood": 30,
 &"ore": 10
 })
+hit_points = 6
