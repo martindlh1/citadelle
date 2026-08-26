@@ -16,7 +16,8 @@ extends GdUnitTestSuite
 const BALANCE_PATH := "res://data/balance/run_balance.tres"
 
 func test_a_blank_block_reports_everything() -> void:
-	assert_array(RunBalance.new().missing_fields()).contains(["days", "phases"])
+	assert_array(RunBalance.new().missing_fields()).contains(
+		["days", "phases", "score.none_counts"])
 
 func test_a_complete_block_reports_nothing() -> void:
 	assert_array(_working().missing_fields()).is_empty()
@@ -61,6 +62,104 @@ func test_the_resolving_phases_come_out_in_order() -> void:
 	assert_array(resolving).has_size(2)
 	assert_str(String(resolving[0].id)).is_equal(String(balance.phases[0].id))
 
+# --- Le calendrier des vagues -----------------------------------------------------------
+
+## Un calendrier vide est une réponse, pas un oubli : c'est le run paisible d'un harnais
+## qui mesure une économie sans qu'on lui casse ses murs. Même statut que
+## `starting_building` vide, et le cas est ici pour que personne ne « corrige » l'absence
+## de contrôle en croyant à un trou.
+func test_an_empty_calendar_is_legitimate() -> void:
+	var balance := _working()
+	var none: Array[WaveSlot] = []
+	balance.waves = none
+	assert_array(balance.missing_fields()).is_empty()
+
+func test_a_wave_falls_on_its_day_and_on_no_other() -> void:
+	var balance := _working()
+	var slots: Array[WaveSlot] = [_slot(2, &"tide")]
+	balance.waves = slots
+	assert_object(balance.wave_on(2)).is_not_null()
+	assert_object(balance.wave_on(1)).is_null()
+	assert_object(balance.wave_on(3)).is_null()
+
+## Une vague datée au-delà de la dernière journée ne tomberait jamais. C'est le seul
+## contrôle qui ait besoin de voir à la fois le calendrier et la durée, et c'est la raison
+## pour laquelle le calendrier vit dans ce bloc plutôt que dans `CombatBalance`.
+func test_a_wave_beyond_the_last_day_is_reported() -> void:
+	var balance := _working()
+	var slots: Array[WaveSlot] = [_slot(balance.days + 1, &"tide")]
+	balance.waves = slots
+	assert_array(balance.missing_fields()).contains(["waves.0.day.beyond_the_run"])
+
+## Deux vagues le même jour rendraient la seconde inatteignable : une seule peut attendre
+## à la fois, donc la seconde disparaîtrait sans qu'aucune erreur ne soit levée.
+func test_two_waves_sharing_a_day_are_reported() -> void:
+	var balance := _working()
+	var slots: Array[WaveSlot] = [_slot(2, &"tide"), _slot(2, &"surge")]
+	balance.waves = slots
+	assert_array(balance.missing_fields()).contains(["waves.1.day.duplicate"])
+
+## Le jour courant compte comme « prochain » : une vague qui tombe ce soir est ce que le
+## joueur doit voir venir en premier, pas celle d'après.
+func test_the_next_slot_includes_today() -> void:
+	var balance := _working()
+	var slots: Array[WaveSlot] = [_slot(2, &"tide")]
+	balance.waves = slots
+	assert_int(balance.next_slot_from(2).day).is_equal(2)
+	assert_int(balance.next_slot_from(1).day).is_equal(2)
+	assert_object(balance.next_slot_from(3)).is_null()
+
+## Le plus petit jour, et non le premier écrit : le calendrier est une liste d'édition, et
+## rien dans `data/` n'oblige à la ranger. Sans ce cas, un `.tres` écrit à l'envers
+## annoncerait la mauvaise vague — ce qui compilerait, passerait le boot, et ne se verrait
+## qu'à l'écran.
+func test_the_next_slot_ignores_the_order_of_the_list() -> void:
+	var balance := _working()
+	var slots: Array[WaveSlot] = [_slot(3, &"surge"), _slot(2, &"tide")]
+	balance.waves = slots
+	assert_int(balance.next_slot_from(1).day).is_equal(2)
+
+func test_an_empty_calendar_never_announces_a_wave() -> void:
+	var balance := _working()
+	var none: Array[WaveSlot] = []
+	balance.waves = none
+	assert_object(balance.next_slot_from(1)).is_null()
+
+func test_a_null_slot_is_reported_under_its_index() -> void:
+	var balance := _working()
+	var slots: Array[WaveSlot] = [null]
+	balance.waves = slots
+	assert_array(balance.missing_fields()).contains(["waves.0"])
+
+## Les défauts d'un créneau remontent préfixés de son rang, comme ceux d'une phase.
+func test_a_broken_slot_is_reported_under_its_index() -> void:
+	var balance := _working()
+	var slot := _slot(2, &"tide")
+	slot.wave = null
+	var slots: Array[WaveSlot] = [slot]
+	balance.waves = slots
+	assert_array(balance.missing_fields()).contains(["waves.0.wave"])
+
+# --- Le barème de score ------------------------------------------------------------------
+
+## Un poids nul est un choix d'équilibrage lisible — « la thésaurisation ne rapporte
+## rien » — donc aucun des quatre n'est réclamé isolément.
+func test_a_single_zero_weight_is_legitimate() -> void:
+	var balance := _working()
+	balance.score_per_resource = 0
+	assert_array(balance.missing_fields()).is_empty()
+
+## Le pendant exact de `phases.none_resolves` : quatre poids nuls sont un run qui vaut zéro
+## quoi qu'on y fasse, donc la disparition du barème entier et non un réglage. C'est le
+## filet qu'un contrôle champ par champ ne peut pas poser.
+func test_a_score_that_counts_nothing_is_reported() -> void:
+	var balance := _working()
+	balance.score_per_resource = 0
+	balance.score_per_building = 0
+	balance.score_per_worker = 0
+	balance.score_per_worker_level = 0
+	assert_array(balance.missing_fields()).contains(["score.none_counts"])
+
 ## Le .tres réel se charge-t-il avec ses sous-ressources ?
 ##
 ## Un `Array[PhaseDef]` est le premier tableau typé sur une classe de script du projet, et
@@ -83,13 +182,73 @@ func test_the_block_is_wired_into_the_balance_root() -> void:
 	assert_object(balance.run).is_not_null()
 	assert_object(balance.run).is_instanceof(RunBalance)
 
-## Un bloc renseigné à la main, sur des noms de phase qui n'existent dans aucun .tres.
+## Le calendrier réel voyage-t-il avec ses vagues ?
+##
+## Même piège que pour les phases, en pire d'un cran : un `Array[WaveSlot]` mal écrit se
+## chargerait **vide**, ce qui est un format légitime — un run paisible. La disparition du
+## calendrier serait donc silencieuse et se lirait comme un choix, alors qu'un `.tres` de
+## vague déplacé la provoquerait. C'est aussi le premier tableau du projet dont les
+## éléments référencent une `Resource` externe.
+func test_the_real_file_carries_its_calendar() -> void:
+	var balance := load(BALANCE_PATH) as RunBalance
+	assert_array(balance.waves).is_not_empty()
+	for slot in balance.waves:
+		assert_object(slot).is_instanceof(WaveSlot)
+		assert_array(slot.missing_fields()).is_empty()
+		assert_object(slot.wave).is_instanceof(WaveDef)
+
+## Le bâtiment d'ouverture sort-il **achevé** ?
+##
+## `DESIGN.md` 4.1 le promet depuis `C4` : « le "—" du Cœur dans la colonne Chantier est un
+## zéro, ce qui lui évite un chemin de pose particulier ». Le domaine n'écrit aucun cas
+## spécial pour ça, donc la promesse ne tient que par la data — un `build_actions` glissé
+## sur ce bâtiment ouvrirait un chantier que rien ne pourrait avancer, puisque *Construire*
+## se joue avec une main qui n'est tirée qu'après la fondation.
+##
+## Le nom n'est pas écrit ici : il est lu sur le `.tres`, comme partout ailleurs.
+func test_the_starting_building_needs_no_site_work() -> void:
+	var balance := load(BALANCE_PATH) as RunBalance
+	if balance.starting_building.is_empty():
+		return
+	var building := load("res://data/buildings/%s.tres" % balance.starting_building) \
+		as BuildingData
+	assert_object(building) \
+		.override_failure_message("starting_building nomme un bâtiment absent de data/") \
+		.is_not_null()
+	assert_int(building.build_actions).is_equal(0)
+
+## Le fichier livré est-il exploitable de bout en bout ?
+##
+## Il double le contrôle de `GameDatabase` au boot, et c'est voulu : le boot refuse de
+## démarrer, donc il ne dit jamais *quoi* dans une suite de tests. Celui-ci le nomme.
+func test_the_real_file_reports_nothing() -> void:
+	assert_array((load(BALANCE_PATH) as RunBalance).missing_fields()).is_empty()
+
+## Un bloc renseigné à la main, sur des noms de phase et de vague qui n'existent dans aucun
+## .tres — la même discipline que `DayCycleTest` : figer un nom livré rendrait plus coûteux
+## l'arbitrage de `I2b`.
 func _working() -> RunBalance:
 	var balance := RunBalance.new()
 	balance.days = 3
 	var phases: Array[PhaseDef] = [_phase(&"first", false), _phase(&"second", true)]
 	balance.phases = phases
+	var slots: Array[WaveSlot] = [_slot(3, &"tide")]
+	balance.waves = slots
+	balance.score_per_resource = 1
+	balance.score_per_building = 2
+	balance.score_per_worker = 3
+	balance.score_per_worker_level = 4
 	return balance
+
+func _slot(day: int, id: StringName) -> WaveSlot:
+	var slot := WaveSlot.new()
+	slot.day = day
+	var wave := WaveDef.new()
+	wave.id = id
+	wave.label = String(id).capitalize()
+	wave.power = 12
+	slot.wave = wave
+	return slot
 
 func _phase(id: StringName, resolves: bool) -> PhaseDef:
 	var phase := PhaseDef.new()

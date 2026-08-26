@@ -64,6 +64,28 @@ func present_count() -> int:
 			here += 1
 	return here
 
+## Somme des niveaux d'ouvrier de tout le roster, absents compris.
+##
+## Le **niveau** de `DESIGN.md` 3.4 — « ce qu'il a vécu » — et non les pistes de
+## compétence : c'est le compteur qui agrège toute l'XP quelle qu'en soit la source, donc
+## le seul qui dise d'un roster ce qu'il a traversé sans qu'on ait à additionner quatre
+## métiers dont le nombre n'est pas clos.
+##
+## Il répond ici plutôt que d'être recalculé chez celui qui demande, par la règle que `F1`
+## a posée sur le pillage : « ce que la réserve perd quand on lui prend N » est une question
+## de la réserve, et « ce que ce roster a vécu » est une question du roster. Le score de
+## `DESIGN.md` 5 reçoit donc un nombre et ne voit jamais un `Worker` — ce que rien hors de
+## `domain/workforce/` n'a le droit de voir depuis `W1`.
+##
+## Les absents comptent, à l'inverse de l'upkeep : ils sont vivants, et 5. compte des
+## vivants.
+func total_level(balance: WorkforceBalance) -> int:
+	assert(balance != null, "niveaux sans équilibrage")
+	var levels := 0
+	for worker in _workers:
+		levels += worker.level(balance)
+	return levels
+
 ## Cet ouvrier est-il au roster ?
 func has(id: StringName) -> bool:
 	return _by_id.has(id)

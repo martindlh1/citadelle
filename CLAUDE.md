@@ -76,6 +76,8 @@ Les DTO échangés entre systèmes. C'est le seul endroit où deux systèmes se 
 | `ProductionReport` | Économie | Effectifs (XP), adapters |
 | `DamageReport` | Combat | Ville, Effectifs, Économie, adapters |
 
+**`I2` n'a touché aucune ligne de cette table**, et c'est la promesse de `DESIGN.md` 8 tenue : c'était la raison de passer `F1` avant lui. Un jalon d'intégration qui fait bouger un contrat est un jalon qui a découvert trop tard ce qu'il branchait. La fin de run, le calendrier des vagues et la bataille en attente vivent tous dans `domain/run/` ou dans `src/schema/`, par le critère habituel — aucun second système du domaine ne les franchit.
+
 **`WaveDef` a quitté cette table à `F1`, et c'est une correction.** Elle y figurait depuis
 `I0` comme un DTO de `contracts/` ; c'est une `Resource` de `src/schema/`, éditée dans
 `data/waves/`, exactement comme `PhaseDef` décrit la forme d'une journée et `BuildingData`
@@ -290,6 +292,10 @@ Un `MarginContainer` plein écran dont l'enfant porte `SIZE_SHRINK_BEGIN` ou `SI
 **Deux vues qui grandissent l'une vers l'autre vivent dans le même conteneur.** `W2` a posé le panneau d'affectation en bas à droite et laissé le compte rendu de phase en haut à droite : les deux tiennent tant que le plateau est vide, et se **recouvrent** dès qu'il porte cinq actions. Ce n'est pas une marge à régler — c'est un chevauchement qui n'attend que la phase la plus chargée, donc qui se manifeste le plus tard possible. Empilées dans un `VBoxContainer`, elles se poussent au lieu de se croiser.
 
 **Et une liste qui suit la partie se borne.** Un HUD a une hauteur fixe, une phase peut poser un nombre quelconque d'actions : une liste sans plafond finit dehors. On en affiche un nombre nommé et on compte le reste sur une ligne. Corollaire : augmenter une marge basse **aggrave** le débordement au lieu de le corriger, parce qu'un conteneur trop petit pour son contenu le laisse déborder par le bas au lieu de le remonter.
+
+**Une colonne qui tient à deux vues ne tient pas forcément à trois, et la réponse est un autre coin.** *(Écrit à `I2`.)* `W2` a appris que deux vues qui grandissent l'une vers l'autre doivent vivre dans le même conteneur ; le cran suivant est que ce conteneur a lui aussi une hauteur. Trois panneaux empilés plus la marge que la main réclame ne tiennent pas dans huit cents pixels, et ce qui déborde est le **dernier** — donc la vue la plus longue, donc celle qu'on regarde le plus. Rétrécir une marge ne rachète rien ; déplacer la vue la plus transitoire vers le côté où il reste de la place, si. C'est d'ailleurs ce que les jalons d'écran font depuis `E2` sans le dire : une vue est dans un coin « parce que rien d'autre ne l'occupait ».
+
+**Une vue qui nomme des disparus reçoit leurs noms, elle ne va pas les chercher.** *(Écrit à `I2`.)* Un adapter traduit couramment un identifiant en prénom en interrogeant le roster. Ça marche pour tout le monde sauf pour ceux dont il est justement question : l'orchestrateur retire les morts **avant** de rendre son rapport — c'est l'ordre qui fait qu'un mort ne gagne pas d'XP —, si bien que l'écran affiche des matricules là où il devrait raconter une perte. Rien ne plante, rien ne compile de travers, et la seule ligne du jeu qui raconte quelque chose ment. Le relevé se prend avant le geste qui détruit.
 
 **Une vue sur laquelle on clique porte `MOUSE_FILTER_STOP`**, à l'inverse des vues de lecture, qui laissent passer en `IGNORE` pour que le curseur de cellule continue de piocher dessous. Le geste tombe alors dans le `gui_input` de la vue et n'atteint jamais `_unhandled_input` du harnais, ce qui est exactement le partage voulu — sans quoi un clic sur une fiche jouerait aussi la carte tenue sur la case cachée derrière.
 

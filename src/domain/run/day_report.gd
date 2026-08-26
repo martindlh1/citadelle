@@ -13,10 +13,14 @@ extends RefCounted
 ## d'ailleurs déjà comme des étapes distinctes : « actions jouées → **événement** →
 ## **upkeep** → **combat** → gain d'XP → rapport ».
 ##
-## Il ne porte qu'un membre aujourd'hui, et c'est voulu : les trois autres arrivent avec
-## leurs systèmes. L'**événement** de 3.7 et le **combat** de `F1` entreront ici, chacun par
-## un champ, sans que la forme de la journée ait à bouger. C'est la place que la séquence
-## leur garde depuis le premier jour.
+## Il portait un seul membre jusqu'à `I2`, la place étant gardée « pour l'événement de 3.7
+## et le combat de `F1` ». Le combat l'a prise, et sous la forme que 3.8 avait écrite
+## d'avance : **la vague en attente**, jamais un rapport de bataille. Un combat tactique
+## attend le joueur pendant des dizaines de tours, donc ce qu'il aura coûté ne peut pas
+## revenir dans le rapport qui l'annonce — « ce que la bataille a coûté revient par la
+## seconde porte », et cette porte est `RunOrchestrator.fight()`.
+##
+## Reste l'**événement** de 3.7, qui entrera par un champ de plus sans que rien ne bouge.
 ##
 ## Immuable.
 
@@ -26,13 +30,17 @@ var _day: int
 ## Ce que le roster a coûté à nourrir.
 var _upkeep: UpkeepReport
 
+## La vague que le calendrier fait tomber ce soir, ou null si la journée est paisible.
+var _wave: WaveDef = null
+
 ## Rapport d'une journée. Appelé une seule fois, à la fin de sa dernière phase.
-static func create(day: int, upkeep: UpkeepReport) -> DayReport:
+static func create(day: int, upkeep: UpkeepReport, wave: WaveDef = null) -> DayReport:
 	assert(day > 0, "rapport de journée sans jour : %d" % day)
 	assert(upkeep != null, "rapport de journée sans upkeep")
 	var report := DayReport.new()
 	report._day = day
 	report._upkeep = upkeep
+	report._wave = wave
 	return report
 
 ## Jour qui s'est fermé.
@@ -42,3 +50,19 @@ func day() -> int:
 ## Ce que le roster a coûté à nourrir.
 func upkeep() -> UpkeepReport:
 	return _upkeep
+
+## La vague qui attend, ou null si la journée s'est fermée sans combat.
+##
+## Elle est **en attente** et non résolue : la journée ne s'achève pas tant qu'elle n'est
+## pas tombée, et le cycle refuse d'avancer d'ici là. C'est ce que `DESIGN.md` 3.8 réclame
+## depuis la discussion qui a suivi `F1`, écrit avant d'en avoir besoin.
+func wave() -> WaveDef:
+	return _wave
+
+## La journée attend-elle une bataille ?
+##
+## Une question plutôt qu'un `wave() != null` recopié partout, même geste que
+## `DamageReport.is_held()` : c'est la phrase que l'écran dira, et le jour où une journée
+## pourra attendre autre chose qu'une vague, elle se redéfinira ici.
+func awaits_a_battle() -> bool:
+	return _wave != null

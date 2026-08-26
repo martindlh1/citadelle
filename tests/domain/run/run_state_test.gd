@@ -58,24 +58,45 @@ func test_two_runs_on_one_seed_open_on_the_same_hand() -> void:
 func test_two_seeds_do_not_open_on_the_same_rng() -> void:
 	assert_int(_open().rng().randi()).is_not_equal(_open(SEED + 1).rng().randi())
 
-## `DESIGN.md` 2 fait de la pose du Cœur une étape du run. Le bâtiment est nommé dans
-## `data/balance/` et non dans du GDScript, ce qui est la seule raison pour laquelle ce
-## cas peut se passer d'écrire « heart ».
-func test_the_starting_building_is_placed_near_the_middle() -> void:
+## `DESIGN.md` 2 fait de la pose du Cœur une **étape** du run — « génération de carte →
+## pose du Cœur → suite de journées ». `I1` l'avait bouchonnée en le posant au centre à
+## l'ouverture ; depuis `I2` le run l'attend, et c'est `RunOrchestrator.found()` qui pose.
+##
+## Le bâtiment est nommé dans `data/balance/`, ce qui est la seule raison pour laquelle ces
+## cas peuvent se passer d'écrire « heart ».
+func test_a_run_awaits_its_heart_before_anything() -> void:
 	var state := _open(SEED, CARD_HUT)
-	assert_int(state.city().count()).is_equal(1)
-	var placed := state.city().buildings()[0]
-	assert_str(String(placed.data().id)).is_equal(String(CARD_HUT))
-	assert_vector(placed.anchor()).is_equal(MAP / 2)
+	assert_bool(state.awaits_its_heart()).is_true()
+	assert_int(state.city().count()).is_equal(0)
+	assert_vector(state.heart_anchor()).is_equal(RunState.NO_CELL)
+
+## La main est tirée à la fondation et non à l'ouverture, sans quoi le premier écran
+## promettrait des cartes que rien ne permet encore de jouer.
+func test_a_run_that_awaits_its_heart_has_not_drawn() -> void:
+	assert_int(_open(SEED, CARD_HUT).deck().hand().size()).is_equal(0)
 
 ## Vide est une réponse et non un oubli : c'est le run d'un harnais qui veut une carte
-## nue.
+## nue. Celui-là n'attend rien et démarre sa journée aussitôt.
 func test_a_run_without_a_starting_building_opens_on_an_empty_city() -> void:
-	assert_int(_open().city().count()).is_equal(0)
+	var state := _open()
+	assert_bool(state.awaits_its_heart()).is_false()
+	assert_int(state.city().count()).is_equal(0)
 
-func test_the_starting_building_lands_on_the_same_cell_every_time() -> void:
-	assert_vector(_open(SEED, CARD_HUT).city().buildings()[0].anchor()) \
-		.is_equal(_open(SEED + 7, CARD_HUT).city().buildings()[0].anchor())
+## La pose automatique de `I1` survit en **suggestion**, ce que `F1` annonçait mot pour mot
+## du déploiement automatique : « la règle automatique lui survivra comme bouton par
+## défaut ». Elle propose toujours la case que `I1` posait.
+func test_the_suggested_anchor_is_the_one_I1_used_to_place() -> void:
+	assert_vector(_open(SEED, CARD_HUT).suggested_heart_anchor()).is_equal(MAP / 2)
+
+## Elle ne dépend pas du seed : c'est un balayage géométrique, pas un tirage.
+func test_the_suggestion_lands_on_the_same_cell_every_time() -> void:
+	assert_vector(_open(SEED, CARD_HUT).suggested_heart_anchor()) \
+		.is_equal(_open(SEED + 7, CARD_HUT).suggested_heart_anchor())
+
+## Un run sans bâtiment d'ouverture n'a rien à suggérer, et le dit plutôt que de proposer
+## une case au hasard.
+func test_a_run_without_a_starting_building_suggests_nothing() -> void:
+	assert_vector(_open().suggested_heart_anchor()).is_equal(RunState.NO_CELL)
 
 # --- Le brouillon d'affectation --------------------------------------------------------
 
@@ -285,6 +306,10 @@ func _run(starting: StringName) -> RunBalance:
 	var run := RunBalance.new()
 	run.days = DAYS
 	run.starting_building = starting
+	run.score_per_resource = 1
+	run.score_per_building = 1
+	run.score_per_worker = 1
+	run.score_per_worker_level = 1
 	var phases: Array[PhaseDef] = [
 		_phase(&"first", [PhaseDef.ACTION_PLAY], false),
 		_phase(&"second", [PhaseDef.ACTION_ASSIGN], true)]

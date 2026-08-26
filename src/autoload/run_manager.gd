@@ -52,13 +52,51 @@ func phase() -> PhaseDef:
 		return null
 	return _state.cycle().phase()
 
+## La vague qui attend, ou null. C'est d'elle que l'UI tire le libellé qu'elle annonce.
+func pending_wave() -> WaveDef:
+	if _state == null:
+		return null
+	return _state.pending_wave()
+
+## Comment le run s'est terminé, ou null tant qu'il tourne.
+func outcome() -> RunOutcome:
+	if _state == null:
+		return null
+	return _state.outcome()
+
 ## Ouvre ce run et l'annonce.
+##
+## Il n'annonce **pas** de phase quand le run attend son Cœur : la première journée n'a pas
+## commencé, et dire le contraire allumerait un bandeau de phase au-dessus d'une carte
+## nue. C'est `found()` qui l'annoncera.
 func open(state: RunState) -> void:
 	assert(state != null, "ouverture d'un run nul")
 	assert(not is_running(), "un run est déjà ouvert")
 	_state = state
 	EventBus.run_started.emit(state.run_seed())
-	EventBus.phase_changed.emit(state.cycle().day(), state.cycle().phase().id)
+	if not state.awaits_its_heart():
+		EventBus.phase_changed.emit(state.cycle().day(), state.cycle().phase().id)
+
+## Pose le Cœur et ouvre la première journée. Rend le verdict du domaine, tel quel.
+func found(cell: Vector2i, turns := 0) -> PlayResult:
+	assert(is_running(), "fondation hors run")
+	var result := RunOrchestrator.found(_state, cell, turns)
+	if result.is_ok():
+		EventBus.phase_changed.emit(_state.cycle().day(), _state.cycle().phase().id)
+	return result
+
+## Fait tomber la vague en attente et publie ce qu'elle a coûté.
+##
+## La **seconde porte** de `DESIGN.md` 3.8 : la fin de journée s'arrête sur une bataille,
+## et c'est celle-ci qui la reprend. Les trois signaux qui suivent sont les mêmes qu'une
+## fin de phase, dans le même ordre et pour la même raison — le rapport d'abord, parce
+## qu'il décrit ce qui vient de se passer et non ce qui commence.
+func fight() -> BattleReport:
+	assert(is_running(), "vague hors run")
+	var report := RunOrchestrator.fight(_state)
+	EventBus.battle_resolved.emit(report)
+	_announce_what_comes_next()
+	return report
 
 ## Joue une carte et rend le verdict du domaine, tel quel.
 func play(card: StringName, cell: Vector2i, turns := 0,
@@ -89,22 +127,45 @@ func unstaff(action: int) -> Array[StringName]:
 ## Termine la phase courante et publie ce qui en sort.
 ##
 ## Trois signaux possibles pour un seul geste, et c'est la seule logique de ce fichier :
-## une phase résolue, une phase entrante, et une fin de run. Ils sont émis dans cet ordre —
-## le rapport d'abord, parce qu'il décrit la phase qui vient de finir et non celle qui
-## commence.
+## une phase résolue, puis ce qui vient ensuite. Ils sont émis dans cet ordre — le rapport
+## d'abord, parce qu'il décrit la phase qui vient de finir et non celle qui commence.
+##
+## « Ce qui vient ensuite » a trois formes depuis `I2`, et non plus deux : la phase
+## suivante, la fin du run, ou **une bataille qui attend**. La troisième est la coupure de
+## `DESIGN.md` 3.8, et elle se voit ici en une ligne — le cycle n'a pas avancé, donc
+## annoncer une phase entrante serait annoncer celle qui vient de finir.
 func end_phase() -> PhaseReport:
 	assert(is_running(), "fin de phase hors run")
 	var report := RunOrchestrator.end_phase(_state)
 	if report != null:
 		EventBus.phase_resolved.emit(report)
-	if _state.cycle().is_over():
-		EventBus.run_finished.emit(_state.cycle().day())
-	else:
-		EventBus.phase_changed.emit(_state.cycle().day(), _state.cycle().phase().id)
+	_announce_what_comes_next()
 	return report
 
-## Referme le run courant sur ce score.
-func close(score: int) -> void:
+## Referme le run courant.
+##
+## Le score n'est plus un argument : il est dans l'issue que le domaine a posée, et le
+## faire venir de l'appelant laisserait un écran libre d'annoncer un chiffre que personne
+## n'a calculé.
+func close() -> void:
 	assert(is_running(), "aucun run n'est ouvert")
+	var ending := _state.outcome()
 	_state = null
-	EventBus.run_ended.emit(score)
+	EventBus.run_ended.emit(ending)
+
+## Annonce ce qui suit une résolution : une bataille, une fin, ou la phase suivante.
+##
+## Écrit une fois pour les deux portes qui ferment quelque chose — la fin d'une phase et la
+## fin d'une bataille —, parce que ces deux-là mènent exactement aux mêmes trois suites.
+## Les dédoubler laisserait dériver l'ordre des signaux entre une journée paisible et une
+## journée qui se bat, ce qu'aucun écran ne pourrait rattraper.
+func _announce_what_comes_next() -> void:
+	if _state.awaits_its_heart():
+		return
+	if _state.awaits_a_battle():
+		EventBus.battle_pending.emit(_state.pending_wave().id)
+		return
+	if _state.cycle().is_over():
+		EventBus.run_finished.emit(_state.outcome())
+		return
+	EventBus.phase_changed.emit(_state.cycle().day(), _state.cycle().phase().id)

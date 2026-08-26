@@ -67,6 +67,20 @@ obligatoire ; les autres sont optionnels :
 | `--shot-turns n` | quarts de tour appliqués à la **caméra** |
 | `--shot-rotate n` | quarts de tour appliqués au **bâtiment** à poser *(harnais Construction)* |
 | `--shot-evenings n` | soirs résolus avant de capturer *(harnais Cartes)*, journées jouées *(harnais Run)*, scène à montrer *(harnais HUD)* |
+| `--shot-view v` | cran d'affichage du HUD : `complet`, `essentiel`, `masque`, ou `aucun` *(harnais Run)* |
+
+`--shot-view` existe pour la raison qui a valu son drapeau à `--shot-evenings`, et que
+`I2` a reformulée en une phrase : **un écran qu'aucune capture ne peut atteindre est celui
+que personne ne regardera.** Replier le rapport et masquer le HUD sont deux gestes qui ne
+changent que l'image, donc les deux seuls dont ni le parsing ni les tests ne diront jamais
+rien. `aucun` rend la carte entière sans rien dessus, ce qui est aussi la façon de
+regarder un village de quinze journées.
+
+Sur le harnais **Run**, `--shot-evenings 0` est un cas à part : il capture l'écran de
+**fondation**, avant que le run n'ait commencé. C'est le seul état que les autres valeurs
+ne peuvent pas atteindre, puisque toute journée jouée commence par poser le Cœur. La
+valeur est comparée en texte et non convertie, pour distinguer un zéro écrit exprès d'un
+drapeau absent.
 
 `--shot-hover` a une valeur par défaut plutôt que rien, parce qu'une capture qui ne
 montre pas la surbrillance ne prouve rien à son sujet, et que souris à `(0, 0)` le
@@ -108,6 +122,15 @@ affectée qu'elle ne finit pas. Prise juste après une résolution, elle montrai
 vide et six fiches oisives — c'est-à-dire tout sauf ce que le panneau d'affectation fait.
 Elle remplit ces postes par le **bouton**, ce qui fait passer le chemin neuf du jalon sous
 le seul contrôle qui regarde l'écran.
+
+Depuis `I2`, elle joue le **run entier** et non plus une journée : `--shot-evenings 16`
+fonde le village, traverse quinze journées, encaisse les trois vagues du calendrier et
+s'arrête sur le bandeau de fin. Une vague qui tombe sur la dernière journée demandée reste
+**en approche**, de sorte que les deux moitiés de la fin de journée — l'attente et la
+facture — soient chacune atteignables en une commande. Elle imprime aussi une ligne
+d'armées, pour la raison qui vaut déjà pour la réserve : un panneau de bataille masqué et
+un panneau qui annonce zéro brèche se ressemblent beaucoup en capture, et ne disent pas du
+tout la même chose.
 
 Elle **n'imprime plus** le rapport du dernier soir : depuis `E2` c'est un panneau, et un
 panneau se regarde. Le réécrire en texte à côté aurait donné deux mises en forme du même

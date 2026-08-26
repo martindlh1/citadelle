@@ -17,9 +17,21 @@ extends RefCounted
 ## `Deck`, qui garde son catalogue.
 ##
 ## Il ne contient **aucune règle**. Ouvrir, projeter, tenir un brouillon d'affectation :
-## ce qui décide appartient à `RunOrchestrator`, ce qui calcule aux résolveurs. La seule
-## chose qui ressemble à une règle ici est la pose du Cœur, et c'est parce qu'un run sans
-## son Cœur n'est pas un état valide de run.
+## ce qui décide appartient à `RunOrchestrator`, ce qui calcule aux résolveurs.
+##
+## La pose du Cœur en était l'exception jusqu'à `I2`, au motif qu'« un run sans son Cœur
+## n'est pas un état valide de run ». Elle n'en est plus une : `DESIGN.md` 2 fait de la
+## fondation une **étape** — « génération de carte → pose du Cœur → suite de journées » —,
+## donc un geste, donc quelque chose que l'orchestrateur pose et que ce fichier se contente
+## d'attendre. Ce qui reste ici est le balayage du centre, devenu une **suggestion** : la
+## règle automatique survit comme choix par défaut, exactement ce que `F1` promettait au
+## déploiement automatique.
+##
+## `I2` lui ajoute deux attentes et une fin. Un run **attend son Cœur** avant sa première
+## journée ; il **attend une bataille** entre la fermeture d'une journée et l'ouverture de
+## la suivante, ce que `DESIGN.md` 3.8 réclame depuis la discussion qui a suivi `F1` ; et il
+## porte son `RunOutcome` une fois fini. Aucune des trois ne décide de quoi que ce soit —
+## ce sont des états, et c'est l'orchestrateur qui les pose et les lève.
 
 ## Valeur qu'aucune action posée ne porte, reprise d'`Assignment` et d'`ActionBoard`.
 const NO_ACTION := 0
@@ -50,6 +62,28 @@ var _buildings: Dictionary[StringName, BuildingData] = {}
 ## adapter depuis `I1`, ce qui le rend testable — et ce qui garantit que l'ordre
 ## d'affectation, dont dépend le remplissage des postes, est le même à chaque rejeu.
 var _staffing: Dictionary[StringName, int] = {}
+
+## Ancre du Cœur, ou NO_CELL tant qu'il n'est pas fondé.
+##
+## Retenue plutôt que retrouvée en balayant la ville à la recherche d'un identifiant : le
+## nom du bâtiment d'ouverture vit dans `data/balance/`, et le chercher demanderait de le
+## comparer bâtiment par bâtiment à chaque question de défaite. Une ancre suffit, et elle
+## est ce que `CityState.has_anchor()` sait vérifier en une ligne.
+var _heart := NO_CELL
+
+## La vague qui attend, ou null.
+##
+## L'« état de plus sur le run » que `DESIGN.md` 3.8 annonçait avant d'en avoir besoin. Un
+## seul champ, et non deux : quand une bataille attend, **le cycle pointe encore sur la
+## phase qui vient de finir**, si bien que `cycle().resolves()` dit encore ce que cette
+## phase faisait. Rien n'a donc à se souvenir de ce qu'il restait à faire.
+var _pending_wave: WaveDef = null
+
+## Comment le run s'est terminé, ou null tant qu'il tourne.
+##
+## Le **pourquoi** d'une fin ; le **si** est `cycle().is_over()`, et il n'y en a qu'un. Les
+## deux sont posés d'un seul geste par `RunOrchestrator`, jamais séparément.
+var _outcome: RunOutcome = null
 
 ## Ouvre un run sur ce seed, ce relief et ce roster.
 ##
@@ -90,8 +124,8 @@ static func open(run_seed: int, grid: HeightGrid, roster: Roster,
 	state._deck = Deck.create(catalogue, balance.deck.starting_deck)
 	for pool in CardData.POOLS:
 		state._deck.shuffle(pool, state._rng)
-	state._place_starting_building()
-	state.draw_phase()
+	if not state.awaits_its_heart():
+		state.draw_phase()
 	return state
 
 ## Seed du run. Ce seed plus la même suite de gestes rejoue le run à l'identique.
@@ -216,32 +250,42 @@ func free_workers() -> Array[StringName]:
 func to_assignment() -> Assignment:
 	return Assignment.create(_staffing)
 
-## Pose le bâtiment d'ouverture au plus près du centre, s'il y en a un.
+## Le run attend-il qu'on pose son Cœur ?
 ##
-## Automatique, et c'est un bouchon assumé : `DESIGN.md` 2 fait de la pose du Cœur une
-## étape que le joueur franchira, et l'écran qui la lui demande appartient à `I2`. Le
-## poser au centre est ce qui s'en approche le plus sans rien inventer.
-func _place_starting_building() -> void:
-	var id := _balance.run.starting_building
-	if id.is_empty():
-		return
-	var data := building(id)
-	assert(data != null,
-		"balance/run_balance.tres → starting_building nomme un bâtiment inconnu : %s" % id)
-	if data == null:
-		return
-	var anchor := _nearest_anchor_to_the_middle(data)
-	assert(anchor != NO_CELL, "aucune place pour %s sur ce relief" % id)
-	if anchor == NO_CELL:
-		return
-	_city.place(_terrain, data, anchor)
+## Vrai avant la fondation, et **seulement** si `data/balance/` nomme un bâtiment
+## d'ouverture. Un `starting_building` vide n'est pas un oubli mais le run d'un harnais qui
+## veut une carte nue : celui-là n'attend rien et démarre sa première journée aussitôt.
+func awaits_its_heart() -> bool:
+	return _heart == NO_CELL and not _balance.run.starting_building.is_empty()
 
-## La première ancre acceptée en balayant du centre vers les bords.
+## Ancre du Cœur, ou NO_CELL s'il n'est pas posé — ou s'il n'y en a pas.
 ##
-## L'ordre est totalement déterministe : à distance égale du centre, c'est le balayage en
-## y puis en x qui départage. Deux runs partis du même seed posent donc leur Cœur sur la
-## même case.
-func _nearest_anchor_to_the_middle(data: BuildingData) -> Vector2i:
+## C'est par elle que la défaite de `DESIGN.md` 5 se lit : le Cœur est tombé quand la ville
+## ne porte plus cette ancre. Un run sans bâtiment d'ouverture rend NO_CELL pour toujours,
+## et ne peut donc pas perdre son Cœur — ce qui est la bonne réponse et non un trou.
+func heart_anchor() -> Vector2i:
+	return _heart
+
+## Retient où le Cœur vient d'être posé. Aucune règle n'est vérifiée ici : c'est
+## `RunOrchestrator.found()` qui pose les questions, comme `assign_worker()` laisse
+## `staff()` poser les siennes.
+func set_heart_anchor(anchor: Vector2i) -> void:
+	assert(anchor != NO_CELL, "Cœur fondé nulle part")
+	_heart = anchor
+
+## Où poser le Cœur si l'on ne veut pas choisir : la première ancre acceptée en balayant du
+## centre vers les bords, ou NO_CELL si aucune ne convient.
+##
+## C'est la pose automatique de `I1`, devenue une **suggestion** le jour où la fondation est
+## devenue un geste. `F1` avait annoncé ce sort mot pour mot pour le déploiement
+## automatique : « la règle automatique lui survivra comme bouton par défaut ».
+##
+## L'ordre est totalement déterministe — à distance égale du centre, le balayage en y puis
+## en x départage —, donc deux runs partis du même seed proposent la même case.
+func suggested_heart_anchor() -> Vector2i:
+	var data := building(_balance.run.starting_building)
+	if data == null:
+		return NO_CELL
 	var extent := _terrain.size()
 	var middle := extent / 2
 	var cells: Array[Vector2i] = []
@@ -260,3 +304,43 @@ func _nearest_anchor_to_the_middle(data: BuildingData) -> Vector2i:
 		if PlacementValidator.validate(_city, _terrain, data, anchor).is_ok():
 			return anchor
 	return NO_CELL
+
+## Une bataille attend-elle ?
+##
+## Entre la fermeture d'une journée et l'ouverture de la suivante, et nulle part ailleurs.
+## Tant que c'est vrai, le cycle n'avance pas : `DESIGN.md` 3.8 pose que « le cycle devra
+## refuser d'avancer tant qu'une bataille est en attente », et c'est ici que ce refus se
+## lit.
+func awaits_a_battle() -> bool:
+	return _pending_wave != null
+
+## La vague qui attend, ou null.
+func pending_wave() -> WaveDef:
+	return _pending_wave
+
+## Arme cette vague pour la fermeture en cours.
+##
+## Posée par `RunOrchestrator.close_the_day()`, qui lit le calendrier de `data/balance/`.
+## Ce fichier ne sait pas quel jour on se bat, et n'a pas à le savoir.
+func arm_wave(wave: WaveDef) -> void:
+	assert(wave != null, "vague armée sans vague")
+	assert(not awaits_a_battle(), "une bataille attend déjà")
+	_pending_wave = wave
+
+## La bataille est passée.
+func clear_wave() -> void:
+	_pending_wave = null
+
+## Comment le run s'est terminé, ou null tant qu'il tourne.
+func outcome() -> RunOutcome:
+	return _outcome
+
+## Referme le run sur cette issue.
+##
+## Elle ne va jamais sans `cycle().end()`, et les deux sont posées d'un seul geste par
+## `RunOrchestrator._finish()` : un run qui porterait une issue en continuant d'avancer, ou
+## qui s'arrêterait sans dire pourquoi, seraient deux moitiés de la même incohérence.
+func set_outcome(outcome: RunOutcome) -> void:
+	assert(outcome != null, "run refermé sans issue")
+	assert(_outcome == null, "run refermé deux fois")
+	_outcome = outcome

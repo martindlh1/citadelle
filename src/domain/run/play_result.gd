@@ -53,6 +53,25 @@ const REASON_UNAFFORDABLE := &"unaffordable"
 ## C'est le sort d'un power tant que `X4` n'a pas rempli le troisième pool.
 const REASON_UNKNOWN_CARD := &"unknown_card"
 
+## Le Cœur n'est pas encore posé, donc le run n'a pas commencé.
+##
+## `DESIGN.md` 2 fait de la fondation une étape avant la première journée. Elle est un
+## geste depuis `I2`, donc elle a un refus, et il est **nommé** : la leçon de `I1` sur le
+## silence d'Espace vaut ici plus qu'ailleurs, puisque c'est le tout premier geste d'un run
+## et que rien à l'écran n'a encore appris au joueur ce qui l'attend.
+const REASON_NO_HEART := &"no_heart"
+
+## Le Cœur est déjà posé — on ne fonde pas deux fois.
+const REASON_ALREADY_FOUNDED := &"already_founded"
+
+## Une vague attend, donc la journée n'est pas finie.
+##
+## Le refus qui rend vraie la phrase de `DESIGN.md` 3.8 : « le cycle devra refuser
+## d'avancer tant qu'une bataille est en attente ». Entre la fermeture d'une journée et la
+## bataille qui la clôt, plus rien ne se pose ni ne s'affecte — les ouvriers sont rentrés,
+## le plateau est vide, et ce qui reste à faire est de tenir la ligne.
+const REASON_BATTLE_PENDING := &"battle_pending"
+
 var _ok: bool
 var _reason: StringName = REASON_NONE
 var _action: PlayedAction = null

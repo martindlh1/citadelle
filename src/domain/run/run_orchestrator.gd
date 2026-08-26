@@ -25,7 +25,51 @@ extends RefCounted
 ##     `HeightGrid`, donc le seul qui **puisse** les appliquer sans casser la règle de
 ##     dépendance.
 ##
+## Ce que `I2` y ajoute, et qui n'est que du branchement : la **fondation**, qui fait de la
+## pose du Cœur un geste ; le **calendrier**, qui date les vagues sur la journée ; la
+## **coupure** de la fin de journée, que `DESIGN.md` 3.8 réclamait avant d'en avoir besoin ;
+## et la **fin de run** de 5. Aucun contrat n'a bougé pour ça, ce qui était la promesse de 8.
+##
 ## Statique et sans état, comme tous les résolveurs : ce qui persiste est dans `RunState`.
+
+## Fonde le village : pose le Cœur sur cette cellule, et ouvre la première journée.
+##
+## `DESIGN.md` 2 en fait une étape à part entière — « génération de carte → **pose du Cœur**
+## → suite de journées » — et `I1` l'avait bouchonnée en le posant au centre, en annonçant
+## que « l'écran qui la demande au joueur appartient à `I2` ». Le voici, et c'est un geste
+## comme les autres : une cellule, une validation, un `PlayResult`.
+##
+## Il ne passe **pas** par la bourse, à l'inverse de `_open_site()`. Le Cœur est « posé au
+## départ » et son coût est vide dans `data/` ; le facturer ferait dépendre l'ouverture d'un
+## run du stock de départ, c'est-à-dire de deux chiffres d'équilibrage qui n'ont aucune
+## raison de se parler. C'est la seule pose gratuite du jeu, et elle l'est parce qu'elle est
+## le jeu qui commence.
+##
+## Il n'ouvre pas de chantier non plus, et sans qu'une ligne le dise : le `build_actions` du
+## Cœur vaut 0, donc `CityState.place()` le rend achevé d'office. C'est ce que 4.1 annonçait
+## depuis `C4` et que `I1` a vérifié.
+##
+## La main est piochée **ici** et non à l'ouverture du run, ce qui est la conséquence
+## directe de faire de la fondation une étape : une main tirée devant une carte nue serait
+## une main qu'on ne peut pas jouer, donc un écran qui promet ce qu'il refuse.
+static func found(state: RunState, cell: Vector2i, turns := 0) -> PlayResult:
+	assert(state != null, "fondation sans run")
+	if not state.awaits_its_heart():
+		return PlayResult.refused(PlayResult.REASON_ALREADY_FOUNDED)
+	var data := state.building(state.balance().run.starting_building)
+	assert(data != null,
+		"balance/run_balance.tres → starting_building nomme un bâtiment inconnu : %s"
+			% state.balance().run.starting_building)
+	if data == null:
+		return PlayResult.refused(PlayResult.REASON_UNKNOWN_CARD)
+	var placement := PlacementValidator.validate(state.city(), state.terrain(), data, cell,
+		turns)
+	if not placement.is_ok():
+		return PlayResult.refused(placement.reason())
+	state.city().place(state.terrain(), data, cell, turns)
+	state.set_heart_anchor(cell)
+	state.draw_phase()
+	return PlayResult.opened(cell, data.cost)
 
 ## Joue cette carte sur cette cellule. Rend ce que ça a posé, ou pourquoi ça a été refusé.
 ##
@@ -39,6 +83,10 @@ extends RefCounted
 static func play(state: RunState, card: StringName, cell: Vector2i, turns := 0,
 		direction := PlayedAction.DIRECTION_NONE) -> PlayResult:
 	assert(state != null, "jeu sans run")
+	if state.awaits_its_heart():
+		return PlayResult.refused(PlayResult.REASON_NO_HEART)
+	if state.awaits_a_battle():
+		return PlayResult.refused(PlayResult.REASON_BATTLE_PENDING)
 	if not state.cycle().permits(PhaseDef.ACTION_PLAY):
 		return PlayResult.refused(PlayResult.REASON_WRONG_PHASE)
 	if not state.deck().hand().has(card):
@@ -75,6 +123,8 @@ static func play(state: RunState, card: StringName, cell: Vector2i, turns := 0,
 ## retire. « Que rend un chantier annulé ? » est l'`OUVERT` de 3.2, et il reste entier.
 static func withdraw(state: RunState, action: int) -> bool:
 	assert(state != null, "retrait sans run")
+	if state.awaits_a_battle():
+		return false
 	if not state.cycle().permits(PhaseDef.ACTION_PLAY):
 		return false
 	var posted := state.board().at(action)
@@ -117,6 +167,10 @@ const REASON_NO_ROOM := &"no_room"
 static func staffing_refusal(state: RunState, worker: StringName,
 		action: int) -> StringName:
 	assert(state != null, "affectation sans run")
+	if state.awaits_its_heart():
+		return PlayResult.REASON_NO_HEART
+	if state.awaits_a_battle():
+		return PlayResult.REASON_BATTLE_PENDING
 	if not state.cycle().permits(PhaseDef.ACTION_ASSIGN):
 		return PlayResult.REASON_WRONG_PHASE
 	var posted := state.board().at(action)
@@ -160,6 +214,8 @@ static func staff(state: RunState, worker: StringName, action: int) -> bool:
 static func auto_staff(state: RunState) -> Array[StringName]:
 	assert(state != null, "auto-affectation sans run")
 	var staffed: Array[StringName] = []
+	if state.awaits_its_heart() or state.awaits_a_battle():
+		return staffed
 	if not state.cycle().permits(PhaseDef.ACTION_ASSIGN):
 		return staffed
 	var orders := StaffingAdvisor.plan(state.terrain(), state.city().to_snapshot(),
@@ -175,7 +231,7 @@ static func auto_staff(state: RunState) -> Array[StringName]:
 ## Rappelle tous les ouvriers d'une action et rend leurs identifiants.
 static func unstaff(state: RunState, action: int) -> Array[StringName]:
 	assert(state != null, "rappel sans run")
-	if not state.cycle().permits(PhaseDef.ACTION_ASSIGN):
+	if state.awaits_a_battle() or not state.cycle().permits(PhaseDef.ACTION_ASSIGN):
 		var none: Array[StringName] = []
 		return none
 	return state.release_action(action)
@@ -246,10 +302,15 @@ static func resolve(state: RunState) -> PhaseReport:
 ## la ville, le roster et la réserve à la fois — un résolveur de Combat qui les muterait
 ## violerait la règle de dépendance trois fois.
 ##
-## **Rien ne l'appelle automatiquement**, et c'est délibéré. La fréquence des vagues est
-## l'`OUVERT` de `DESIGN.md` 2, et la fin de journée n'en sait donc rien : ce sont le
-## harnais de combat et, à `I2`, `close_the_day()` qui décideront quand frapper. La place
-## est gardée depuis `I1`, elle n'est pas encore occupée.
+## **Elle ne se choisit plus, elle s'attend.** `F1` prenait la vague en argument parce que
+## rien ne la datait ; `I2` la lit dans le calendrier de `data/balance/` et l'arme à la
+## fermeture de la journée, si bien que cette porte ne fait plus que consommer ce qui
+## attend. On ne se bat donc pas hors calendrier, et c'est structurel plutôt qu'écrit.
+##
+## **Elle avance le cycle**, et c'est la seconde moitié de la coupure de `end_phase()`.
+## Une bataille est le dernier cran de la fermeture d'une journée : quand elle est passée,
+## il ne reste plus rien à faire de ce jour-là. La confier à un troisième geste laisserait
+## un run capable de rester indéfiniment entre deux journées.
 ##
 ## **L'ordre des quatre applications est imposé, et chaque cran se justifie.**
 ##
@@ -267,9 +328,10 @@ static func resolve(state: RunState) -> PhaseReport:
 ## `_apply()` saute un chantier disparu. Le cas ne se présente pas aujourd'hui, la ville
 ## étant figée entre le verdict et son application ; il se présentera le jour où deux choses
 ## frapperont le même soir.
-static func fight(state: RunState, wave: WaveDef) -> BattleReport:
+static func fight(state: RunState) -> BattleReport:
 	assert(state != null, "vague sans run")
-	assert(wave != null, "vague sans vague")
+	assert(state.awaits_a_battle(), "vague appelée sans vague en attente")
+	var wave := state.pending_wave()
 	var balance := state.balance()
 	var force := state.roster().to_combat(balance.combat.combat_skill_family,
 		balance.workforce)
@@ -290,20 +352,39 @@ static func fight(state: RunState, wave: WaveDef) -> BattleReport:
 	var progress := SkillResolver.award_lines(state.roster(), damage.work(),
 		balance.workforce)
 
+	state.clear_wave()
+	var lost := _defeat_of(state)
+	if lost.is_empty():
+		_open_next_phase(state)
+	else:
+		_finish(state, lost)
+
 	return BattleReport.create(damage, plundered, progress)
 
-## Ferme la journée : prélève l'upkeep et rend ce qu'elle a coûté.
+## Ferme la journée : prélève l'upkeep, arme la vague du jour, et rend ce qu'elle a coûté.
 ##
-## Une porte à part parce que c'est ici que 3.7 et `F1` viendront s'ajouter, et qu'ils s'y
-## ajouteront **par un champ de plus** plutôt qu'en déplaçant quoi que ce soit. La
-## séquence de 2 leur garde la place : « actions jouées → événement → upkeep → combat →
-## gain d'XP → rapport ».
+## Une porte à part parce que c'est ici que `F1` devait s'ajouter, et il s'y ajoute **par un
+## champ de plus** plutôt qu'en déplaçant quoi que ce soit — la séquence de 2 lui gardait la
+## place : « actions jouées → événement → upkeep → **combat** → gain d'XP → rapport ».
+## L'événement de 3.7 entrera par la même porte et de la même façon.
+##
+## Elle **arme** et ne frappe pas, et c'est toute la différence que `DESIGN.md` 3.8 réclame.
+## Un résolveur rend un rapport ; un combat tactique attend le joueur pendant des dizaines
+## de tours, et le domaine n'a pas le droit d'`await`. Le rapport de journée porte donc la
+## vague **en attente**, et ce qu'elle aura coûté revient par `fight()`.
+##
+## L'ordre est celui de la séquence : on mange **avant** de se battre. Un village affamé le
+## soir d'un siège l'est toujours pendant, et l'inverse ferait payer l'upkeep de morts qui
+## viennent de tomber.
 static func close_the_day(state: RunState) -> DayReport:
 	assert(state != null, "fermeture de journée sans run")
 	var balance := state.balance()
 	var upkeep := ProductionResolver.take_upkeep(state.labor(), state.ledger(),
 		balance.economy)
-	return DayReport.create(state.cycle().day(), upkeep)
+	var wave := balance.run.wave_on(state.cycle().day())
+	if wave != null:
+		state.arm_wave(wave)
+	return DayReport.create(state.cycle().day(), upkeep, wave)
 
 ## Termine la phase courante et passe à la suivante. Rend un rapport si elle résolvait ou
 ## si elle fermait la journée, null sinon.
@@ -320,9 +401,21 @@ static func close_the_day(state: RunState) -> DayReport:
 ##
 ## Ce que ça décide du sort de la main non jouée — elle est défaussée — est l'état par
 ## défaut de l'`OUVERT` de 3.5 et non une réponse. `I2b` le tranchera.
+##
+## **Elle cesse d'être atomique à `I2`**, et c'est le seul travail que la discussion sur le
+## format de combat a ajouté au jalon. `DESIGN.md` 3.8 l'a écrit avant qu'on en ait besoin :
+## le combat clôt la journée, il attend le joueur, et « la rupture interactive tombe au
+## milieu » de ce geste. Ce qui est donc différé n'est pas la résolution — elle a bien lieu,
+## le plateau se vide, la main part à la défausse — mais l'**ouverture de la phase
+## suivante**, que `fight()` fera à sa place. Le prix a été payé ici plutôt qu'à `F3` :
+## « une demi-heure aujourd'hui contre un écran à défaire ensuite ».
 static func end_phase(state: RunState) -> PhaseReport:
 	assert(state != null, "fin de phase sans run")
 	if state.cycle().is_over():
+		return null
+	if state.awaits_its_heart():
+		return null
+	if state.awaits_a_battle():
 		return null
 	var resolves := state.cycle().resolves()
 	var report: PhaseReport = null
@@ -332,10 +425,18 @@ static func end_phase(state: RunState) -> PhaseReport:
 		state.board().clear()
 		state.clear_staffing()
 		state.deck().discard_hand()
-	state.cycle().advance()
-	if resolves and not state.cycle().is_over():
-		state.draw_phase()
+	if not state.awaits_a_battle():
+		_open_next_phase(state)
 	return report
+
+## Comment le run s'est terminé, ou null tant qu'il tourne.
+##
+## Un relais sur `RunState`, et il est ici parce que c'est la porte que les adapters
+## connaissent : un écran de fin n'a aucune raison d'aller chercher deux objets pour poser
+## une question.
+static func outcome(state: RunState) -> RunOutcome:
+	assert(state != null, "issue sans run")
+	return state.outcome()
 
 ## Ouvre un chantier, si la carte se pose **et** si la réserve suit.
 ##
@@ -431,6 +532,71 @@ static func _apply(state: RunState, sites: SiteReport) -> Array[Vector2i]:
 static func _restore_capacity(state: RunState, balance: EconomyBalance) -> void:
 	state.ledger().set_capacity(
 		ProductionResolver.capacity_for(state.city().to_snapshot(), balance))
+
+## Ouvre la phase suivante : avance le cycle, repioche si la précédente résolvait, et
+## constate la victoire si le run vient d'épuiser ses journées.
+##
+## Appelé de **deux** endroits — la fin d'une phase ordinaire, et la bataille qui clôt une
+## journée —, ce qui est exactement la coupure de `end_phase()`. Les avoir tous deux passer
+## par ici est ce qui garantit qu'une journée fermée par un combat s'ouvre sur la suivante
+## dans le même état qu'une journée paisible.
+##
+## Il lit `resolves()` **avant** d'avancer, et n'a donc rien à retenir : quand une bataille
+## attend, le cycle pointe encore sur la phase qui vient de finir. C'est ce qui permet à
+## `RunState` de ne porter qu'un seul champ pour l'attente — la vague — au lieu de traîner
+## un souvenir de ce qu'il restait à faire.
+static func _open_next_phase(state: RunState) -> void:
+	var draws := state.cycle().resolves()
+	state.cycle().advance()
+	if state.cycle().is_over():
+		_finish(state, RunOutcome.CAUSE_SURVIVED)
+		return
+	if draws:
+		state.draw_phase()
+
+## Pourquoi le run est perdu, ou &"" s'il tient encore.
+##
+## Les deux défaites de `DESIGN.md` 5, et rien d'autre. Elles se lisent sur ce que la ville
+## et le roster disent déjà — c'est ce que `F1` annonçait : « la défaite lit ce que la ville
+## et le roster disent déjà », donc aucun système n'a eu à apprendre un mot.
+##
+## Le Cœur passe en premier parce qu'un village dont le Cœur est tombé a perdu même s'il
+## reste du monde, et parce que c'est l'ordre où 5. les nomme. Il ne se cherche pas par son
+## identifiant : `RunState` retient son ancre à la fondation, ce qui laisse `&"heart"` dans
+## `data/balance/` et hors de ce fichier.
+##
+## Un run sans bâtiment d'ouverture ne peut pas perdre son Cœur, et c'est la bonne réponse :
+## on ne perd pas ce qu'on n'a jamais eu.
+static func _defeat_of(state: RunState) -> StringName:
+	var heart := state.heart_anchor()
+	if heart != RunState.NO_CELL and not state.city().has_anchor(heart):
+		return RunOutcome.CAUSE_HEART
+	if state.roster().size() <= 0:
+		return RunOutcome.CAUSE_ROSTER
+	return &""
+
+## Referme le run sur cette cause, et compte ce qu'il valait.
+##
+## Les deux gestes sont ici et nulle part ailleurs : le cycle s'arrête **et** l'issue est
+## posée. Séparés, ils laisseraient exister un run arrêté sans raison ou un run fini qui
+## avance encore.
+##
+## Il ne calcule pas le score — il va chercher ses quatre termes chez les quatre systèmes
+## qui les possèdent, et c'est `RunOutcome` qui applique le barème. La réserve rend un
+## total, la ville compte ses **achevés** — un chantier n'est pas un bâtiment intact —, le
+## roster compte ses vivants et rend la somme de leurs niveaux. Aucun contenu d'état ne
+## traverse : quatre entiers, ce qui est la ligne que `F1` a tracée sur le pillage.
+##
+## Le jour retenu est la **dernière journée jouée**, et il est borné : une victoire se
+## constate après que le cycle a passé son dernier jour, où `day()` vaut déjà `days + 1`.
+static func _finish(state: RunState, cause: StringName) -> void:
+	var balance := state.balance()
+	var cycle := state.cycle()
+	var day := mini(cycle.day(), cycle.days())
+	cycle.end()
+	state.set_outcome(RunOutcome.tally(cause, day, state.ledger().total(),
+		state.city().to_snapshot().completed().size(), state.roster().size(),
+		state.roster().total_level(balance.workforce), balance.run))
 
 ## Le roster moins tous ceux qui ont tenu un poste, quel qu'il soit.
 ##

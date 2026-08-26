@@ -37,8 +37,16 @@ extends Node
 ## bouton remplit le reste. Le harnais ne classe personne : il demande, `StaffingAdvisor`
 ## répond.
 ##
-## Ce qui reste en texte est ce dont aucun jalon d'écran n'a encore la charge : les piles
-## et le survol. Ils attendront `I2`.
+## Ce que `I2` en fait enfin un jeu qu'on ouvre et qu'on finit. Le run **commence** par la
+## pose du Cœur — un clic sur la carte, ou Entrée pour la case que le domaine suggère — au
+## lieu de le trouver déjà posé au centre. Les vagues **tombent à leur date**, et la journée
+## s'arrête sur elles : le bandeau annonce l'assaut, le `BattlePanel` dit ce qu'on lui
+## oppose, et rien n'avance tant qu'on n'a pas tenu la ligne. Et le run **se termine** — la
+## dernière journée franchie, le Cœur tombé ou le village vidé —, sur un bandeau qui dit
+## laquelle des trois et ce que la partie valait.
+##
+## Ce qui reste en texte est ce dont aucune vue n'a la charge : les piles, le survol, et le
+## bandeau de tête.
 ##
 ## Les commandes : une carte se prend au clavier — 1 à 9 — ou au clic dessus ; un clic
 ## gauche sur le sol la joue sur la case survolée, un clic droit retire l'action posée là,
@@ -66,6 +74,25 @@ const SLOT_KEYS := 9
 ## Rang qui ne désigne aucune carte.
 const NO_SLOT := -1
 
+## Valeurs de `--shot-view`, dans l'ordre des crans, plus celle qui éteint tout.
+##
+## Des noms et non des chiffres : `--shot-view 2` n'aurait dit à personne ce qu'il capture,
+## et c'est une ligne de commande qu'on relit six mois plus tard dans un journal.
+const VIEW_NAMES: Array[String] = ["complet", "essentiel", "masque"]
+const VIEW_NONE := "aucun"
+
+## Crans du rapport texte, du plus bavard au plus discret.
+##
+## Trois et non deux, parce qu'un simple on/off répond mal à ce qui gêne. Ce qui couvre la
+## carte est en grande partie l'aide et les piles, qu'on cesse de lire au bout de deux
+## minutes ; le bandeau et la dernière action, eux, sont ce qui dit où l'on en est et ce
+## que le dernier geste a fait — les masquer pour dégager la vue reviendrait à jouer en
+## aveugle. Le cran du milieu garde exactement ces deux-là.
+enum Report { FULL, ESSENTIAL, HIDDEN }
+
+## Nom de chaque cran, pour que la touche dise ce qu'elle vient de faire.
+const REPORT_NAMES: Array[String] = ["complet", "l'essentiel", "masqué"]
+
 const REPORT_MARGIN := 16.0
 const REPORT_FONT_SIZE := 13
 const REPORT_OUTLINE_SIZE := 4
@@ -73,12 +100,23 @@ const REPORT_OUTLINE_SIZE := 4
 const CONTROLS := """La main    1-9 ou clic sur une carte : la prendre. Tab : pivoter, ou retourner un terrassement.
 La carte   clic gauche : jouer sur la case survolée. Clic droit : retirer.
 Le travail clic sur une fiche, puis sur une ligne d'action — ou Auto. Espace : envoyer sur la case survolée.
-           Retour arrière : rappeler. Entrée : finir la phase.
-La caméra  Q/E : pivoter. Molette : zoomer. WASD : déplacer. R : recadrer."""
+           Retour arrière : rappeler.
+Entrée     fonder le village, tenir la ligne, ou finir la phase — selon ce que le run attend.
+La caméra  Q/E : pivoter. Molette : zoomer. WASD : déplacer. R : recadrer.
+La vue     H : replier ce rapport. F1 : masquer tout le HUD."""
 
 ## Marge basse du panneau d'affectation : la hauteur que la main occupe, plus son écart.
 ## Sans elle le panneau descendrait sur les cartes, la main étant ancrée en bas.
 const HAND_CLEARANCE := 88.0
+
+## Ce que `--shot-evenings` doit valoir pour capturer l'écran de **fondation**.
+##
+## Zéro journée, littéralement : le run n'a pas commencé. C'est le seul état de `I2` qu'une
+## capture ne pouvait sinon jamais atteindre, puisque toute journée jouée commence par
+## poser le Cœur — donc le seul écran neuf du jalon que personne n'aurait regardé. La
+## valeur est comparée en **texte** et non convertie, pour distinguer un « 0 » écrit
+## exprès d'un drapeau absent, que `to_int()` rend tous les deux à zéro.
+const SHOT_FOUNDING := "0"
 
 var _metrics: TerrainMetrics
 var _world: DevWorld
@@ -90,8 +128,40 @@ var _hand_view: HandView
 var _palette: CommodityPalette
 var _bar: ResourceBar
 var _panel: ProductionPanel
+var _battle: BattlePanel
 var _crew: AssignmentPanel
 var _label: Label
+
+## Le libellé de la vague qu'on est en train de mener, et le jour où elle tombe.
+##
+## Retenus **avant** d'appeler `RunManager.fight()`, exactement pour la raison qui vaut
+## depuis `I1` sur le libellé de phase : quand `battle_resolved` arrive, la vague est
+## consommée et le cycle a avancé. Le rapport de bataille ne porte ni l'une ni l'autre —
+## il dit ce que la vague a coûté, pas comment elle s'appelait.
+var _battle_label := ""
+var _battle_day := 0
+
+## Identifiant -> prénom, relevé juste avant que la vague tombe.
+##
+## **Trouvé en capture, et c'est le défaut que `F1` avait nommé d'avance** : une table peut
+## être fausse sur ce qu'elle prétend montrer. Le panneau annonçait « Pertes : bo, cy » —
+## les identifiants internes — parce que `_name_of()` interroge le roster, et qu'au moment
+## où `battle_resolved` arrive **les morts n'y sont plus** : `RunOrchestrator.fight()` les a
+## retirés avant de rendre son rapport, ce qui est précisément l'ordre qui fait qu'un mort
+## ne gagne pas d'XP. Rien ne plantait, rien ne compilait de travers, et la seule ligne du
+## jeu qui raconte quelque chose disait des matricules.
+var _battle_names: Dictionary[StringName, String] = {}
+
+## Cran courant du rapport texte.
+var _report_level := Report.FULL
+
+## Les deux colonnes du HUD, gardées pour pouvoir les masquer d'un coup.
+##
+## Retenues plutôt que retrouvées par `get_children()` : un harnais qui irait chercher ses
+## propres nœuds par leur rang dans l'arbre serait le `get_node("../../UI/HUD")` que
+## `CLAUDE.md` refuse en premier, écrit à l'envers.
+var _left_slot: MarginContainer
+var _right_slot: MarginContainer
 
 ## Ouvrier sélectionné dans le panneau, ou &"" si aucun.
 ##
@@ -152,17 +222,28 @@ func _ready() -> void:
 	_palette = CommodityPalette.from_database()
 	_bar = ResourceBar.create(_palette)
 	_panel = ProductionPanel.create(_palette)
+	_battle = BattlePanel.create()
+	_battle.battle_requested.connect(_fight)
 	_crew = AssignmentPanel.create(_state().catalogue())
 	_crew.worker_picked.connect(_on_worker_picked)
 	_crew.action_picked.connect(_on_action_picked)
 	_crew.auto_requested.connect(_on_auto_requested)
 	_label = _make_label()
-	add_child(_hud_slot(_make_left_column(), Control.SIZE_SHRINK_BEGIN,
-		Control.SIZE_SHRINK_BEGIN))
-	add_child(_hud_slot(_make_right_column(), Control.SIZE_SHRINK_END,
-		Control.SIZE_SHRINK_END, HAND_CLEARANCE))
+	_left_slot = _hud_slot(_make_left_column(), Control.SIZE_SHRINK_BEGIN,
+		Control.SIZE_SHRINK_BEGIN)
+	add_child(_left_slot)
+	_right_slot = _hud_slot(_make_right_column(), Control.SIZE_SHRINK_END,
+		Control.SIZE_SHRINK_END, HAND_CLEARANCE)
+	add_child(_right_slot)
 
 	EventBus.phase_resolved.connect(_on_phase_resolved)
+	EventBus.battle_pending.connect(_on_battle_pending)
+	EventBus.battle_resolved.connect(_on_battle_resolved)
+	# La première ligne du jeu doit parler du premier geste. « Prendre une carte » était
+	# vrai tant qu'un run s'ouvrait Cœur posé et main tirée ; depuis `I2` il n'y a ni
+	# l'un ni l'autre, et l'écran conseillerait un geste que le domaine refuse.
+	if _state().awaits_its_heart():
+		_last_action = "Poser le Cœur : un clic sur la carte, ou Entrée pour la case suggérée."
 	_refresh_targets()
 	_capture_if_asked()
 
@@ -210,7 +291,11 @@ func _handle_key(event: InputEventKey) -> void:
 		KEY_BACKSPACE:
 			_unstaff_here()
 		KEY_ENTER, KEY_KP_ENTER:
-			_end_phase()
+			_press_on()
+		KEY_H:
+			_cycle_report()
+		KEY_F1:
+			_toggle_hud()
 		_:
 			var slot := event.keycode - KEY_1
 			if slot < 0 or slot >= SLOT_KEYS:
@@ -219,6 +304,32 @@ func _handle_key(event: InputEventKey) -> void:
 	get_viewport().set_input_as_handled()
 
 # --- Les gestes -----------------------------------------------------------------------
+
+## Fait passer le rapport texte au cran suivant : complet, l'essentiel, masqué.
+##
+## Le premier confort demandé, et le plus mérité : le pavé couvre la moitié gauche de la
+## carte en permanence, alors que la moitié de ses lignes ne change jamais.
+func _cycle_report() -> void:
+	_report_level = (_report_level + 1) % REPORT_NAMES.size()
+	_label.visible = _report_level != Report.HIDDEN
+	_last_action = "Rapport : %s. H pour changer." % REPORT_NAMES[_report_level]
+
+## Masque ou remontre tout le HUD, main comprise.
+##
+## Un cran plus loin que le précédent, et pour un autre usage : celui-ci ne sert pas à
+## jouer mais à **regarder** — le village entier, le relief, ce qu'une vague a cassé. C'est
+## aussi ce qui rend une capture propre possible sans toucher au code.
+##
+## Il masque la main, donc il empêche de jouer, et c'est assumé : un mode où l'on ne voit
+## rien mais où l'on peut tout faire serait un piège plus désagréable que le pavé qu'on
+## vient d'enlever.
+func _toggle_hud() -> void:
+	var shown := not _left_slot.visible
+	_left_slot.visible = shown
+	_right_slot.visible = shown
+	_hand_view.visible = shown
+	if shown:
+		_last_action = "HUD rendu. F1 pour le remasquer."
 
 ## Prend en main la carte de ce rang, ou la repose si elle y était déjà.
 func _hold(slot: int) -> void:
@@ -249,6 +360,12 @@ func _turn_the_held_card() -> void:
 ## laquelle des deux il a sous la main.
 func _play_here() -> void:
 	var hovered := _world.cursor().hovered()
+	if _state().awaits_its_heart():
+		if not hovered.is_hit():
+			_last_action = "Rien sous le curseur — le Cœur se pose sur la carte."
+			return
+		_found_at(hovered.cell())
+		return
 	var held := _held_card()
 	if held.is_empty():
 		_last_action = "Aucune carte en main — 1 à 9, ou un clic sur une carte."
@@ -408,8 +525,32 @@ func _unstaff_here() -> void:
 		recalled.size(), _label_of(action.card())]
 	_refresh_markers()
 
+## Entrée fait avancer le run, quoi qu'il attende : elle fonde, elle mène la bataille, ou
+## elle finit la phase.
+##
+## Une seule touche pour une seule idée — « je suis prêt » —, comme Tab agit sur ce que la
+## carte tenue **ferait**. Les trois attentes sont exclusives et le domaine les distingue
+## déjà ; une touche par cas aurait demandé au joueur de savoir laquelle avant d'appuyer.
+##
+## Fonder par Entrée pose le Cœur sur la case que le domaine suggère. C'est le « bouton par
+## défaut » que `F1` annonçait pour le déploiement automatique, et c'est le même geste :
+## la règle automatique de `I1` survit comme raccourci, le clic reste le choix.
+func _press_on() -> void:
+	if _state().awaits_its_heart():
+		_found_at(_state().suggested_heart_anchor())
+		return
+	if _state().awaits_a_battle():
+		_fight()
+		return
+	_end_phase()
+
 ## Termine la phase. C'est `RunManager` qui décide si ça résout — le harnais ne connaît
 ## pas la journée, il la traverse.
+##
+## Trois suites depuis `I2` et non plus deux : la phase suivante, la fin du run, ou une
+## **bataille qui attend**. La troisième se lit à ce que le cycle n'a pas bougé, et il
+## fallait la nommer : annoncer « au tour de Matin » alors qu'on est toujours au Matin qui
+## vient de finir serait un écran qui ment sur ce qu'il attend.
 func _end_phase() -> void:
 	if _state().cycle().is_over():
 		_last_action = "Run terminé."
@@ -419,10 +560,56 @@ func _end_phase() -> void:
 	RunManager.end_phase()
 	_held_slot = NO_SLOT
 	_refresh_targets()
+	if _state().awaits_a_battle():
+		_last_action = "%s terminée — %s en approche. Entrée pour tenir la ligne." % [
+			finished, _state().pending_wave().label]
+		return
 	if _state().cycle().is_over():
-		_last_action = "%s terminée — le run s'arrête là." % finished
+		_last_action = "%s terminée — %s." % [finished, _verdict()]
 		return
 	_last_action = "%s terminée. Au tour de %s." % [finished, _phase_label()]
+
+## Pose le Cœur sur cette cellule, et ouvre la première journée.
+##
+## Le refus vient du domaine et n'est pas redeviné ici — `PlacementValidator` répond, comme
+## pour n'importe quelle carte de bâtiment. C'est le tout premier geste d'un run, donc
+## l'endroit où un refus muet coûterait le plus cher.
+func _found_at(cell: Vector2i) -> void:
+	if cell == NO_CELL:
+		_last_action = "Aucune place pour le Cœur sur ce relief."
+		return
+	var result := RunManager.found(cell, _turns)
+	if not result.is_ok():
+		_last_action = "Cœur refusé en %s — %s" % [cell, result.reason()]
+		return
+	_renderer.rebuild(_state().city())
+	_last_action = "Cœur posé en %s. La première journée commence." % cell
+	_refresh_targets()
+
+## Fait tomber la vague en attente.
+##
+## Le libellé et le jour sont retenus **avant** l'appel : la vague est consommée et le
+## cycle a avancé quand le signal arrive.
+func _fight() -> void:
+	if not _state().awaits_a_battle():
+		_last_action = "Aucune vague en approche."
+		return
+	_battle_label = _state().pending_wave().label
+	_battle_day = _state().cycle().day()
+	_battle_names = {}
+	for worker in _state().roster().workers():
+		_battle_names[worker.id()] = worker.given_name()
+	var report := RunManager.fight()
+	_held_slot = NO_SLOT
+	_refresh_targets()
+	# Les murs sont tombés et le relief n'a pas bougé : seul le rendu de la ville est à
+	# refaire. C'est aussi le seul endroit du harnais où un bâtiment disparaît sans qu'un
+	# geste du joueur l'ait visé.
+	_renderer.rebuild(_state().city())
+	if _state().cycle().is_over():
+		_last_action = "%s : %s." % [_battle_label, _verdict()]
+		return
+	_last_action = "%s repoussée." % _battle_label if report.is_held() 		else "%s a frappé. Au tour de %s." % [_battle_label, _phase_label()]
 
 ## Le seul endroit du harnais qui réagit à un signal plutôt qu'à une touche, et c'est ce
 ## que `I0` avait dessiné : le domaine retourne, `RunManager` publie, l'écran écoute.
@@ -442,6 +629,35 @@ func _on_phase_resolved(report: PhaseReport) -> void:
 	# les deux plutôt que de deviner lequel : deux résolutions par jour, le coût est nul.
 	_world.show_grid(_state().grid())
 	_renderer.rebuild(_state().city())
+
+## La vague est armée et n'est pas encore tombée : le seul moment que `DESIGN.md` 3.8 fait
+## exister, et le seul où l'on peut encore regarder ce qu'on lui oppose.
+##
+## Les deux chiffres viennent du Combat et ne sont pas refaits ici. Un écran qui
+## additionnerait des points de défense serait une seconde règle de combat, et celle qui
+## s'afficherait ne serait pas celle qui frappe — le même piège que deux tables de ciblage
+## à `D2`.
+func _on_battle_pending(_wave: StringName) -> void:
+	var balance := _state().balance()
+	var city := _state().city().to_snapshot()
+	var force := _state().roster().to_combat(balance.combat.combat_skill_family,
+		balance.workforce)
+	var slots := InstantCombatResolver.slots_for(city, balance.combat)
+	_battle.show_pending(_state().pending_wave(), _state().cycle().day(),
+		InstantCombatResolver.defense_of(city, force, balance.combat),
+		InstantCombatResolver.deploy(force, slots).size())
+
+## Ce que la vague a coûté. Les prénoms sont traduits ici : le panneau ne connaît pas le
+## roster, et c'est ce que `E2` a posé pour `ProductionPanel`.
+##
+## Ils viennent du relevé pris **avant** la bataille et non du roster, qui ne connaît plus
+## les morts — voir `_battle_names`.
+func _on_battle_resolved(report: BattleReport) -> void:
+	var names := PackedStringArray()
+	for fallen in report.damage().lost():
+		names.append(_battle_names.get(fallen, String(fallen)))
+	_battle.show_report(report, _battle_label, _battle_day, names)
+	_crew.show_progress(report.progress())
 
 # --- Les rafraîchissements -------------------------------------------------------------
 
@@ -482,7 +698,7 @@ func _refresh_targets() -> void:
 ## bois mélangerait deux refus que `DESIGN.md` 3.2 sépare exprès.
 func _refresh_ghost() -> void:
 	var hovered := _world.cursor().hovered()
-	var data := _building_of(_held_card())
+	var data := _founding_data() if _state().awaits_its_heart() 		else _building_of(_held_card())
 	if not hovered.is_hit() or data == null:
 		_ghost.clear()
 		return
@@ -505,7 +721,14 @@ func _refresh_ghost() -> void:
 func _report() -> String:
 	var lines := PackedStringArray()
 	lines.append(_banner())
+	var forecast := _forecast_line()
+	if not forecast.is_empty():
+		lines.append(forecast)
 	lines.append("")
+	lines.append_array(_closing_lines())
+	if _report_level == Report.ESSENTIAL:
+		lines.append(_last_action)
+		return "\n".join(lines)
 	lines.append(_piles_line())
 	lines.append("")
 	lines.append(_hover_line())
@@ -513,6 +736,29 @@ func _report() -> String:
 	lines.append("")
 	lines.append(CONTROLS)
 	return "\n".join(lines)
+
+## Quand tombe la prochaine vague, et laquelle.
+##
+## **Ce n'est pas du confort**, à l'inverse des deux touches ci-dessus. `DESIGN.md` 3.6 pose
+## que la direction d'une vague s'annonce à l'avance parce que 3.2 « veut qu'on pense à la
+## bataille en posant un bâtiment », et qu'« une direction révélée le soir même
+## transformerait cette prévoyance en loterie ». La **date** se tient par le même argument,
+## et elle n'était visible nulle part : jusqu'ici une vague apparaissait le soir où elle
+## tombait, donc la palissade se bâtissait après coup ou par superstition.
+##
+## Elle se lit à tous les crans du rapport, y compris le plus discret, pour cette raison
+## exactement : c'est une information de décision, pas un compte rendu.
+func _forecast_line() -> String:
+	var cycle := _state().cycle()
+	if cycle.is_over() or _state().awaits_a_battle():
+		return ""
+	var slot := _state().balance().run.next_slot_from(cycle.day())
+	if slot == null:
+		return "Plus aucune vague au calendrier."
+	var wait := slot.day - cycle.day()
+	if wait <= 0:
+		return "%s ce soir." % slot.wave.label
+	return "%s au jour %d — dans %d journée(s)." % [slot.wave.label, slot.day, wait]
 
 ## Le bandeau de phase. Le libellé et les gestes viennent de la `PhaseDef`, jamais d'un
 ## nom écrit ici : c'est ce qui fera de l'arbitrage de `I2b` un échange de `.tres`.
@@ -522,10 +768,76 @@ func _report() -> String:
 ## chiffre, donc un endroit où le lire faux le jour où l'un des deux dériverait.
 func _banner() -> String:
 	var cycle := _state().cycle()
+	if _state().awaits_its_heart():
+		return "Fondation   |   poser le Cœur : clic sur la carte, ou Entrée pour la case suggérée   |   seed %d" 			% SEED
 	if cycle.is_over():
-		return "Run terminé — %d jour(s) joués, seed %d." % [cycle.days(), SEED]
+		return "Run terminé   |   %s" % _verdict()
+	if _state().awaits_a_battle():
+		return "Jour %d/%d   |   %s en approche   |   tenir la ligne" % [
+			cycle.day(), cycle.days(), _state().pending_wave().label]
 	return "Jour %d/%d   |   %s   |   %s" % [
 		cycle.day(), cycle.days(), _phase_label(), _permissions()]
+
+## Comment le run s'est terminé, en une demi-ligne.
+##
+## La cause est traduite ici et non portée par le domaine : un `RunOutcome` rend une
+## constante, l'écran en fait une phrase — le même partage que `_staffing_refusal()` depuis
+## `I1`.
+##
+## Court, et il l'est en deux fois. La première capture de `I2` mettait la phrase entière
+## dans le bandeau, qui passait sous les panneaux de droite : la seule chose qu'il devait
+## annoncer se lisait « Victoire — la dernière journée est passée au jour 15. Score 431 —
+## 71 en ré ». La raccourcir une fois ne suffisait pas — la moitié gauche de l'écran est
+## large de sept cents pixels, et un bandeau ne se replie pas. Ce qui tient est donc **un
+## mot**, et la cause comme le détail sont des lignes du rapport, où le texte peut aller à
+## la ligne.
+func _verdict() -> String:
+	var ending := _state().outcome()
+	if ending == null:
+		return "%d jour(s) joués, seed %d" % [_state().cycle().days(), SEED]
+	return "%s   |   jour %d, score %d" % [_outcome_word(ending), ending.day(),
+		ending.score()]
+
+func _outcome_word(ending: RunOutcome) -> String:
+	return "Victoire" if ending.is_victory() else "Défaite"
+
+## Le détail du score, sur sa propre ligne du rapport.
+##
+## Les quatre termes que `DESIGN.md` 5 énumère, parce qu'un total seul ne dit pas ce qui l'a
+## fait — c'est la raison pour laquelle `RunOutcome` les garde à côté de la somme.
+func _score_line() -> String:
+	var ending := _state().outcome()
+	if ending == null:
+		return ""
+	return "Score %d — %d en réserve, %d bâtiment(s) debout, %d ouvrier(s), %d niveau(x)." \
+		% [ending.score(), ending.resources(), ending.buildings(), ending.workers(),
+			ending.levels()]
+
+## Pourquoi le run s'est arrêté, en clair.
+##
+## La traduction d'une constante du domaine, comme `_staffing_refusal()` depuis `I1` : un
+## `RunOutcome` rend `&"heart"`, l'écran en fait une phrase. Le repli par défaut existe pour
+## qu'une quatrième cause, le jour où il y en aura une, se lise plutôt que de disparaître.
+func _cause_of(ending: RunOutcome) -> String:
+	match ending.cause():
+		RunOutcome.CAUSE_SURVIVED:
+			return "La dernière journée est passée, le village tient debout."
+		RunOutcome.CAUSE_HEART:
+			return "Le Cœur est tombé."
+		RunOutcome.CAUSE_ROSTER:
+			return "Il ne reste plus personne au village."
+	return "Fin : %s." % ending.cause()
+
+## Le détail du score s'ajoute au rapport une fois le run fini, et lui seul : les autres
+## lignes décrivent une partie en cours.
+func _closing_lines() -> PackedStringArray:
+	var lines := PackedStringArray()
+	if not _state().cycle().is_over():
+		return lines
+	lines.append(_cause_of(_state().outcome()))
+	lines.append(_score_line())
+	lines.append("")
+	return lines
 
 ## Ce que la phase courante autorise, en clair. L'écran ne suppose rien : il pose les
 ## deux questions au domaine et affiche les réponses.
@@ -561,6 +873,10 @@ func _hover_line() -> String:
 	var cell := hovered.cell()
 	var line := "Survol : (%d, %d)   h = %d   %s" % [cell.x, cell.y, hovered.height(),
 		_state().terrain().terrain_at(cell).id]
+	if _state().awaits_its_heart():
+		return "%s   ->   %s, %s%s" % [line, _founding_label(), _orientation(),
+			"" if _founding_placement(cell).is_ok()
+				else "   <- %s" % _founding_placement(cell).reason()]
 	var building := _state().city().building_at(cell)
 	if building != null:
 		line += "   |   %s : %s" % [building.data().id, _site_state(building)]
@@ -634,6 +950,27 @@ func _name_of(worker: StringName) -> String:
 	if not _state().roster().has(worker):
 		return String(worker)
 	return _state().roster().worker(worker).given_name()
+
+## Le bâtiment d'ouverture, ou null si `data/balance/` n'en nomme aucun.
+##
+## Il est lu sur l'équilibrage et jamais écrit ici : `&"heart"` dans un `.gd` serait
+## l'identifiant de contenu que les conventions refusent partout ailleurs.
+func _founding_data() -> BuildingData:
+	return _state().building(_state().balance().run.starting_building)
+
+## Le nom du bâtiment d'ouverture, tel que `data/` le porte.
+func _founding_label() -> String:
+	var data := _founding_data()
+	return "—" if data == null else String(data.id)
+
+## Ce que le validateur dit de la case survolée pendant la fondation.
+##
+## La même question que le fantôme pose, posée au même endroit : c'est
+## `PlacementValidator` qui répond, et l'écran ne fait que traduire. Un survol qui
+## afficherait « accepté » là où le fantôme est rouge serait deux règles de placement.
+func _founding_placement(cell: Vector2i) -> PlacementResult:
+	return PlacementValidator.validate(_state().city(), _state().terrain(),
+		_founding_data(), cell, _turns)
 
 ## Le bâtiment que cette carte pose, ou null si ce n'en est pas une.
 func _building_of(card: StringName) -> BuildingData:
@@ -716,13 +1053,20 @@ func _hud_slot(view: Control, horizontal: int, vertical: int,
 ## texte dessous.
 ##
 ## La barre se rétracte à sa largeur ; sans ça, la colonne l'étirerait sur la largeur du
-## bloc de texte, qui est bien plus large.
+## bloc de texte, qui est bien plus large. Le panneau de bataille fait de même.
+##
+## Il s'intercale entre les deux, et il est masqué tant qu'aucune vague n'est en jeu — voir
+## `_make_right_column()`, qui dit pourquoi il n'y est pas. Entre la barre et le texte
+## plutôt qu'en dessous : ce qu'une vague pille est ce que la barre au-dessus affiche, et
+## tant qu'elle est en approche c'est la seule chose de l'écran qui demande une décision.
 func _make_left_column() -> VBoxContainer:
 	var column := VBoxContainer.new()
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.add_theme_constant_override("separation", int(REPORT_MARGIN))
 	_bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	column.add_child(_bar)
+	_battle.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	column.add_child(_battle)
 	column.add_child(_label)
 	return column
 
@@ -741,6 +1085,19 @@ func _make_left_column() -> VBoxContainer:
 ##
 ## Les deux se rétractent à leur largeur ; sans ça, la colonne étirerait le plus étroit
 ## sur la largeur du plus large.
+##
+## **Le panneau de bataille n'est pas ici, et la capture de `I2` explique pourquoi.** Il y a
+## d'abord été mis, en tête — un assaut en approche se lit avant un compte rendu de récolte
+## —, et le jour de la dernière vague la colonne débordait par le bas : trois panneaux
+## empilés plus la marge que la main réclame ne tiennent pas dans huit cents pixels, et la
+## dernière fiche d'ouvrier sortait de l'écran. C'est le défaut qu'`W2` avait déjà payé, un
+## cran plus loin — la colonne ne se recouvre pas, elle **déborde**, et augmenter une marge
+## basse aggraverait la chose au lieu de la corriger.
+##
+## Il vit donc dans la colonne de gauche, où la place est. Ce n'est pas un pis-aller : `W2`
+## notait déjà du compte rendu de phase qu'« il n'y était pas par principe mais parce que
+## rien d'autre n'occupait ce coin ». Et la lecture y gagne — la vague est voisine de la
+## réserve qu'elle va piller.
 func _make_right_column() -> VBoxContainer:
 	var column := VBoxContainer.new()
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -776,6 +1133,13 @@ func _make_label() -> Label:
 ## entière plutôt qu'un geste — un chantier ouvert, payé, avancé, et un terrassement
 ## exécuté —, sans quoi elle ne montrerait rien de ce que `I1` ajoute.
 ##
+## **Elle joue le run entier et non plus une journée**, ce qui est le sujet de `I2` : un
+## `--shot-evenings 16` fonde, traverse quinze journées, encaisse les trois vagues du
+## calendrier et s'arrête sur le bandeau de fin. Une vague reste **en approche** quand elle
+## tombe sur la dernière journée demandée, de sorte que les deux moitiés de la coupure de
+## `DESIGN.md` 3.8 soient chacune atteignables en une commande. Et `--shot-evenings 0`
+## capture la fondation, voir `SHOT_FOUNDING`.
+##
 ## Elle n'imprime plus le compte rendu de la dernière phase : il est devenu un panneau, et
 ## un panneau se regarde. Le réécrire en texte à côté aurait donné deux mises en forme du
 ## même rapport, dont une seule serait vérifiée par la capture — donc l'autre dériverait.
@@ -802,12 +1166,21 @@ func _capture_if_asked() -> void:
 		return
 	_world.cursor().input_enabled = false
 	_world.cursor().hover_cell(DevShot.hover_cell(_state().grid().size() / 2))
-	for _day in maxi(DevShot.argument(DevShot.SHOT_EVENINGS_FLAG).to_int(), 1):
-		_scripted_day()
-	_scripted_open_phase()
+	var asked := DevShot.argument(DevShot.SHOT_EVENINGS_FLAG)
+	if asked != SHOT_FOUNDING:
+		_scripted_found()
+		var days := maxi(asked.to_int(), 1)
+		for index in days:
+			_scripted_day()
+			if _state().awaits_a_battle() and index < days - 1:
+				_fight()
+		if not _state().awaits_a_battle() and not _state().cycle().is_over():
+			_scripted_open_phase()
+	_apply_shot_view()
 	for _frame in DevShot.WARMUP_FRAMES:
 		await get_tree().process_frame
 	print("[run_harness] %s" % _banner())
+	print("[run_harness] %s" % _armies_line())
 	print("[run_harness] réserve %s — %d/%d" % [
 		_palette.bundle_text(_state().ledger().amounts()),
 		_state().ledger().total(), _state().ledger().capacity()])
@@ -815,6 +1188,48 @@ func _capture_if_asked() -> void:
 	var error := get_viewport().get_texture().get_image().save_png(path)
 	print("[run_harness] capture vers %s : %s" % [path, error_string(error)])
 	get_tree().quit(OK if error == OK else FAILED)
+
+## Applique le cran de HUD demandé par `--shot-view`, s'il l'est.
+##
+## Sans drapeau, la capture montre le rapport complet — ce que toutes les captures du projet
+## montrent depuis `T2`, et ce qu'un lecteur de journal attend par défaut.
+func _apply_shot_view() -> void:
+	var asked := DevShot.argument(DevShot.SHOT_VIEW_FLAG)
+	if asked.is_empty():
+		return
+	if asked == VIEW_NONE:
+		_toggle_hud()
+		return
+	var level := VIEW_NAMES.find(asked)
+	if level < 0:
+		return
+	while _report_level != level:
+		_cycle_report()
+
+## Fonde le village là où le domaine le suggère.
+##
+## Elle doit passer avant tout : depuis `I2`, un run attend son Cœur et refuse tout autre
+## geste d'ici là. Sans elle, la journée scriptée poserait zéro carte et la capture
+## montrerait une carte nue — ce qui compilerait, ne lèverait aucune erreur, et serait faux
+## sur ce qu'elle prétend montrer.
+func _scripted_found() -> void:
+	if not _state().awaits_its_heart():
+		return
+	_found_at(_state().suggested_heart_anchor())
+
+## Ce que la ligne oppose à la vague en approche, ou ce que la dernière a coûté.
+##
+## Imprimé à côté de la réserve, et pour la même raison qu'elle : c'est ce qu'une image ne
+## rend pas lisible d'un coup d'œil. Un `BattlePanel` masqué et un `BattlePanel` qui annonce
+## zéro brèche se ressemblent beaucoup en capture, et ne disent pas du tout la même chose.
+func _armies_line() -> String:
+	if _state().awaits_a_battle():
+		return "vague en approche : %s, puissance %d" % [
+			_state().pending_wave().label, _state().pending_wave().power]
+	if _battle_label.is_empty():
+		return "aucune vague n'est encore tombée"
+	return "dernière vague : %s au jour %d — %d bâtiment(s), %d ouvrier(s) restants" % [
+		_battle_label, _battle_day, _state().city().count(), _state().roster().size()]
 
 ## Une journée jouée comme une main humaine la jouerait : on pose ce qu'on peut, on
 ## envoie les ouvriers, on finit la journée.

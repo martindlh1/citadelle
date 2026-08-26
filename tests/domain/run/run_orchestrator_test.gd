@@ -672,7 +672,7 @@ func test_a_held_wave_leaves_the_run_alone() -> void:
 	var state := _open()
 	_raise(state, CARD_STORE, SPOT)
 	var before := state.ledger().total()
-	var report := RunOrchestrator.fight(state, _wave(_defense(state)))
+	var report := _strike(state, _wave(_defense(state)))
 	assert_bool(report.is_held()).is_true()
 	assert_int(state.city().count()).is_equal(1)
 	assert_int(state.roster().size()).is_equal(3)
@@ -682,7 +682,7 @@ func test_a_held_wave_leaves_the_run_alone() -> void:
 func test_a_wave_that_breaks_through_takes_the_building_out() -> void:
 	var state := _open()
 	_raise(state, CARD_STORE, SPOT)
-	var report := RunOrchestrator.fight(state, _wave(_defense(state) + HIT_POINTS))
+	var report := _strike(state, _wave(_defense(state) + HIT_POINTS))
 	assert_array(report.damage().destroyed()).is_equal([SPOT])
 	assert_int(state.city().count()).is_equal(0)
 	assert_bool(state.city().is_occupied(SPOT)).is_false()
@@ -695,7 +695,7 @@ func test_a_destroyed_warehouse_lowers_the_reserve() -> void:
 	var state := _open()
 	_raise(state, CARD_STORE, SPOT)
 	assert_int(state.ledger().capacity()).is_equal(BASE_CAP + STORE_BONUS)
-	RunOrchestrator.fight(state, _wave(_defense(state) + HIT_POINTS))
+	_strike(state, _wave(_defense(state) + HIT_POINTS))
 	assert_int(state.ledger().capacity()).is_equal(BASE_CAP)
 
 ## La vague emporte ce que la brèche lui vaut, et c'est le `Ledger` qui décide **quoi** :
@@ -703,7 +703,7 @@ func test_a_destroyed_warehouse_lowers_the_reserve() -> void:
 func test_the_wave_carries_off_what_the_breach_is_worth() -> void:
 	var state := _open()
 	var before := state.ledger().total()
-	var report := RunOrchestrator.fight(state, _wave(_defense(state) + 4))
+	var report := _strike(state, _wave(_defense(state) + 4))
 	assert_int(report.damage().plunder()).is_equal(4)
 	assert_int(report.total_plundered()).is_equal(4)
 	assert_int(state.ledger().total()).is_equal(before - 4)
@@ -714,7 +714,7 @@ func test_the_wave_carries_off_what_the_breach_is_worth() -> void:
 func test_an_empty_reserve_gives_nothing_up() -> void:
 	var state := _open()
 	state.ledger().take_share(state.ledger().total())
-	var report := RunOrchestrator.fight(state, _wave(_defense(state) + 4))
+	var report := _strike(state, _wave(_defense(state) + 4))
 	assert_int(report.damage().plunder()).is_equal(4)
 	assert_int(report.total_plundered()).is_equal(0)
 
@@ -722,8 +722,7 @@ func test_an_empty_reserve_gives_nothing_up() -> void:
 ## places, celui qui est resté au village est en sécurité quoi qu'il arrive.
 func test_the_fallen_leave_the_roster() -> void:
 	var state := _open()
-	var report := RunOrchestrator.fight(state,
-		_wave(_defense(state) + BREACH_PER_CASUALTY))
+	var report := _strike(state, _wave(_defense(state) + BREACH_PER_CASUALTY))
 	assert_int(report.damage().lost().size()).is_equal(1)
 	assert_int(state.roster().size()).is_equal(2)
 	assert_bool(state.roster().has(report.damage().lost()[0])).is_false()
@@ -733,8 +732,7 @@ func test_the_fallen_leave_the_roster() -> void:
 ## on retire, puis on crédite, et le résolveur saute un ouvrier qu'il ne connaît plus.
 func test_the_fallen_earn_nothing() -> void:
 	var state := _open()
-	var report := RunOrchestrator.fight(state,
-		_wave(_defense(state) + BREACH_PER_CASUALTY))
+	var report := _strike(state, _wave(_defense(state) + BREACH_PER_CASUALTY))
 	var rewarded: Array[StringName] = []
 	for gain in report.progress().gains():
 		rewarded.append(gain.worker())
@@ -744,14 +742,14 @@ func test_the_fallen_earn_nothing() -> void:
 ## une piste comme un chantier depuis `I1`, sans une ligne de GDScript qui l'énumère.
 func test_holding_the_line_pays_the_combat_track() -> void:
 	var state := _open()
-	RunOrchestrator.fight(state, _wave(_defense(state)))
+	_strike(state, _wave(_defense(state)))
 	assert_int(state.roster().worker(&"ana").track_xp(COMBAT)).is_equal(XP_PER_SHIFT)
 
 ## Un homme resté au village ne gagne rien : il n'était pas sur la ligne. C'est le revers
 ## exact de « il ne défend rien », et les deux viennent de la même borne.
 func test_a_man_left_at_the_village_earns_nothing() -> void:
 	var state := _open()
-	RunOrchestrator.fight(state, _wave(_defense(state)))
+	_strike(state, _wave(_defense(state)))
 	assert_int(state.roster().worker(&"cy").track_xp(COMBAT)).is_equal(0)
 
 ## **Une vague ne demande pas la permission à la phase.** Les quatre autres portes de ce
@@ -761,7 +759,7 @@ func test_a_man_left_at_the_village_earns_nothing() -> void:
 func test_a_wave_does_not_ask_the_phase() -> void:
 	var state := _open()
 	RunOrchestrator.end_phase(state)
-	var report := RunOrchestrator.fight(state, _wave(_defense(state) + HIT_POINTS))
+	var report := _strike(state, _wave(_defense(state) + HIT_POINTS))
 	assert_bool(report.is_held()).is_false()
 
 ## Le déterminisme, sur le chemin neuf : deux runs partis du même seed et frappés par la
@@ -771,9 +769,8 @@ func test_a_wave_does_not_ask_the_phase() -> void:
 func test_the_same_seed_loses_the_same_people() -> void:
 	var first := _open()
 	var second := _open()
-	var here := RunOrchestrator.fight(first, _wave(_defense(first) + BREACH_PER_CASUALTY))
-	var there := RunOrchestrator.fight(second,
-		_wave(_defense(second) + BREACH_PER_CASUALTY))
+	var here := _strike(first, _wave(_defense(first) + BREACH_PER_CASUALTY))
+	var there := _strike(second, _wave(_defense(second) + BREACH_PER_CASUALTY))
 	assert_array(there.damage().lost()).is_equal(here.damage().lost())
 
 ## Ce que le village oppose à l'instant, tel que le résolveur le calculera.
@@ -792,6 +789,16 @@ func _raise(state: RunState, id: StringName, anchor: Vector2i) -> void:
 	state.ledger().set_capacity(
 		ProductionResolver.capacity_for(state.city().to_snapshot(),
 			state.balance().economy))
+
+## Arme cette vague et la fait tomber, ce que le calendrier fait le reste du temps.
+##
+## `fight()` a perdu son argument à `I2` : on ne se bat plus que contre une vague **en
+## attente**, et l'armer est ce que `close_the_day()` fait en lisant `data/balance/`. Les
+## cas qui veulent une puissance précise passent donc par ici plutôt que par une journée
+## entière, exactement comme ils fabriquent leurs propres phases.
+func _strike(state: RunState, wave: WaveDef) -> BattleReport:
+	state.arm_wave(wave)
+	return RunOrchestrator.fight(state)
 
 func _wave(power: int) -> WaveDef:
 	var wave := WaveDef.new()
@@ -987,6 +994,10 @@ func _run(phases: Array[PhaseDef]) -> RunBalance:
 	var run := RunBalance.new()
 	run.days = DAYS
 	run.starting_building = &""
+	run.score_per_resource = 1
+	run.score_per_building = 1
+	run.score_per_worker = 1
+	run.score_per_worker_level = 1
 	var day := phases
 	if day.is_empty():
 		day = [_phase(&"first", [PhaseDef.ACTION_PLAY], false),
@@ -1003,3 +1014,262 @@ func _phase(id: StringName, allows: Array, resolves: bool) -> PhaseDef:
 	phase.allows = kinds
 	phase.resolves = resolves
 	return phase
+
+# --- Fonder le village ------------------------------------------------------------------
+
+## `DESIGN.md` 2 fait de la pose du Cœur une étape — « génération de carte → pose du Cœur →
+## suite de journées ». `I1` la bouchonnait en le posant au centre ; c'est un geste depuis
+## `I2`, donc il a une porte, un verdict et des refus nommés.
+func test_founding_places_the_heart_where_it_is_asked() -> void:
+	var state := _open_founding()
+	var result := RunOrchestrator.found(state, OTHER_SPOT)
+	assert_bool(result.is_ok()).is_true()
+	assert_vector(state.heart_anchor()).is_equal(OTHER_SPOT)
+	assert_bool(state.city().has_anchor(OTHER_SPOT)).is_true()
+	assert_bool(state.awaits_its_heart()).is_false()
+
+## La fondation ne connaît **aucun cas particulier** : elle pose ce que `data/` décrit, et
+## c'est le `build_actions` du bâtiment qui décide s'il sort achevé ou en chantier. C'est ce
+## que 4.1 annonce depuis `C4` — « un bâtiment qui ne réclame aucune action est achevé dès
+## qu'il est posé, sans que rien n'ait à connaître le cas ».
+##
+## Le bâtiment d'ouverture de ce fixture en réclame deux, ce qui est une configuration
+## parfaitement légitime et le seul moyen de vérifier ici qu'aucun chemin de pose spécial
+## n'existe. Que le vrai Cœur en réclame zéro est une question de data, et
+## `RunBalanceTest` la pose là-bas.
+func test_founding_places_what_the_data_describes() -> void:
+	var state := _open_founding()
+	RunOrchestrator.found(state, OTHER_SPOT)
+	var placed := state.city().building_at(OTHER_SPOT)
+	assert_str(String(placed.data().id)).is_equal(String(CARD_HUT))
+	assert_bool(placed.is_complete()).is_equal(HUT_ACTIONS <= 0)
+
+## La fondation ne passe pas par la bourse : le Cœur est « posé au départ », et le facturer
+## ferait dépendre l'ouverture d'un run du stock de départ.
+func test_founding_costs_nothing_even_when_the_data_prices_it() -> void:
+	var state := _open_founding()
+	var before := state.ledger().amounts()
+	RunOrchestrator.found(state, OTHER_SPOT)
+	assert_dict(state.ledger().amounts()).is_equal(before)
+
+## La main arrive avec la fondation et non avec l'ouverture du run.
+func test_founding_deals_the_first_hand() -> void:
+	var state := _open_founding()
+	assert_int(state.deck().hand().size()).is_equal(0)
+	RunOrchestrator.found(state, OTHER_SPOT)
+	assert_int(state.deck().hand().size()).is_greater(0)
+
+## Le refus du placement traverse tel quel, comme celui d'une carte de bâtiment : il n'y a
+## pas deux vocabulaires à tenir d'accord.
+func test_founding_off_the_map_is_refused_by_the_validator() -> void:
+	var state := _open_founding()
+	var result := RunOrchestrator.found(state, Vector2i(MAP.x, 0))
+	assert_bool(result.is_ok()).is_false()
+	assert_bool(state.awaits_its_heart()).is_true()
+
+func test_founding_twice_is_refused() -> void:
+	var state := _open_founding()
+	RunOrchestrator.found(state, OTHER_SPOT)
+	var again := RunOrchestrator.found(state, SPOT)
+	assert_str(String(again.reason())).is_equal(String(PlayResult.REASON_ALREADY_FOUNDED))
+	assert_int(state.city().count()).is_equal(1)
+
+## Un run sans bâtiment d'ouverture n'a rien à fonder, et le dit plutôt que de laisser
+## croire qu'on a oublié quelque chose.
+func test_a_run_that_needs_no_heart_refuses_to_be_founded() -> void:
+	var result := RunOrchestrator.found(_open(), SPOT)
+	assert_str(String(result.reason())).is_equal(String(PlayResult.REASON_ALREADY_FOUNDED))
+
+## **Le trio qui porte la fondation.** Un refus qui ne se nomme pas est indiscernable
+## d'une panne — la leçon de `I1` sur le silence d'Espace —, et elle vaut ici plus
+## qu'ailleurs : c'est le tout premier geste d'un run, et rien à l'écran n'a encore appris
+## au joueur ce qu'on attend de lui.
+func test_nothing_can_be_played_before_the_heart_is_down() -> void:
+	var state := _open_founding()
+	var result := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST)
+	assert_str(String(result.reason())).is_equal(String(PlayResult.REASON_NO_HEART))
+
+func test_nobody_can_be_staffed_before_the_heart_is_down() -> void:
+	var state := _open_founding()
+	assert_str(String(RunOrchestrator.staffing_refusal(state, &"ana", 1))) \
+		.is_equal(String(PlayResult.REASON_NO_HEART))
+
+func test_no_phase_ends_before_the_heart_is_down() -> void:
+	var state := _open_founding()
+	assert_object(RunOrchestrator.end_phase(state)).is_null()
+	assert_int(state.cycle().day()).is_equal(1)
+	assert_int(state.cycle().phase_index()).is_equal(0)
+
+# --- Le calendrier des vagues -------------------------------------------------------------
+
+## `DESIGN.md` 8 laissait ce fil à `I2` : « la vague entre dans `close_the_day()`, où `I1`
+## lui a gardé sa place et où `DayReport` l'accueillera par un champ ». La voici.
+func test_the_day_named_by_the_calendar_arms_its_wave() -> void:
+	var state := _open_besieged(1, 4)
+	var report := _resolve_an_empty_day(state)
+	assert_bool(state.awaits_a_battle()).is_true()
+	assert_object(report.day_report().wave()).is_not_null()
+	assert_bool(report.day_report().awaits_a_battle()).is_true()
+
+## Une journée que le calendrier ne nomme pas se ferme comme avant : upkeep, et au lit.
+func test_a_day_the_calendar_ignores_arms_nothing() -> void:
+	var state := _open_besieged(2, 4)
+	var report := _resolve_an_empty_day(state)
+	assert_bool(state.awaits_a_battle()).is_false()
+	assert_object(report.day_report().wave()).is_null()
+	assert_int(state.cycle().day()).is_equal(2)
+
+## **Le cas qui porte la coupure.** `DESIGN.md` 3.8, écrit avant d'en avoir besoin : « le
+## cycle devra refuser d'avancer tant qu'une bataille est en attente ». La journée s'est
+## bien résolue — le plateau est vide, l'upkeep est pris — mais demain n'a pas commencé.
+func test_the_cycle_holds_still_while_a_battle_waits() -> void:
+	var state := _open_besieged(1, 4)
+	_resolve_an_empty_day(state)
+	assert_int(state.cycle().day()).is_equal(1)
+	assert_object(RunOrchestrator.end_phase(state)).is_null()
+	assert_int(state.cycle().day()).is_equal(1)
+
+## Et rien ne se joue dans cet intervalle : les ouvriers sont rentrés, le plateau est vide,
+## et ce qui reste à faire est de tenir la ligne.
+func test_nothing_is_played_while_a_battle_waits() -> void:
+	var state := _open_besieged(1, 4)
+	_resolve_an_empty_day(state)
+	var result := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST)
+	assert_str(String(result.reason())) \
+		.is_equal(String(PlayResult.REASON_BATTLE_PENDING))
+	assert_str(String(RunOrchestrator.staffing_refusal(state, &"ana", 1))) \
+		.is_equal(String(PlayResult.REASON_BATTLE_PENDING))
+	assert_array(RunOrchestrator.auto_staff(state)).is_empty()
+
+## La seconde moitié de la coupure : la bataille passée, la journée s'achève enfin — le
+## cycle avance et la main suivante est tirée, exactement comme après une journée paisible.
+func test_the_battle_opens_the_next_day() -> void:
+	var state := _open_besieged(1, 4)
+	_resolve_an_empty_day(state)
+	RunOrchestrator.fight(state)
+	assert_bool(state.awaits_a_battle()).is_false()
+	assert_int(state.cycle().day()).is_equal(2)
+	assert_int(state.cycle().phase_index()).is_equal(0)
+	assert_int(state.deck().hand().size()).is_greater(0)
+
+## Une vague ne tombe qu'une fois : le calendrier l'a datée, pas répétée.
+func test_a_wave_falls_once_and_the_run_moves_on() -> void:
+	var state := _open_besieged(1, 4)
+	_resolve_an_empty_day(state)
+	RunOrchestrator.fight(state)
+	_resolve_an_empty_day(state)
+	assert_bool(state.awaits_a_battle()).is_false()
+
+# --- La fin du run --------------------------------------------------------------------------
+
+## `DESIGN.md` 5, première défaite. L'ancre du Cœur est retenue à la fondation, si bien que
+## ce cas se passe d'écrire son identifiant — il vit dans `data/balance/`.
+func test_a_fallen_heart_ends_the_run() -> void:
+	var state := _open_founding()
+	RunOrchestrator.found(state, OTHER_SPOT)
+	_strike(state, _wave(_defense(state) + HIT_POINTS))
+	assert_bool(state.cycle().is_over()).is_true()
+	assert_str(String(state.outcome().cause())).is_equal(String(RunOutcome.CAUSE_HEART))
+	assert_bool(state.outcome().is_victory()).is_false()
+
+## Seconde défaite. Il faut deux vagues parce que la borne de déploiement tient : une vague
+## n'emporte jamais plus de monde qu'il n'y en avait sur la ligne.
+func test_an_emptied_roster_ends_the_run() -> void:
+	var state := _open()
+	_strike(state, _wave(_defense(state) + SLOTS * BREACH_PER_CASUALTY))
+	assert_int(state.roster().size()).is_equal(1)
+	_strike(state, _wave(_defense(state) + BREACH_PER_CASUALTY))
+	assert_int(state.roster().size()).is_equal(0)
+	assert_str(String(state.outcome().cause())).is_equal(String(RunOutcome.CAUSE_ROSTER))
+
+## Une défaite arrête vraiment le cycle, et au milieu du run : `is_over()` reste la seule
+## vérité, donc tous les gardes déjà écrits se ferment sans qu'une ligne ait bougé.
+func test_a_defeat_stops_the_run_where_it_stands() -> void:
+	var state := _open_founding()
+	RunOrchestrator.found(state, OTHER_SPOT)
+	_strike(state, _wave(_defense(state) + HIT_POINTS))
+	assert_int(state.outcome().day()).is_less(DAYS)
+	assert_bool(state.cycle().permits(PhaseDef.ACTION_PLAY)).is_false()
+	assert_object(RunOrchestrator.end_phase(state)).is_null()
+
+## La victoire de 5. : la dernière journée franchie. Elle se constate à l'ouverture de la
+## phase suivante, qui n'existe pas.
+func test_surviving_the_last_day_wins_the_run() -> void:
+	var state := _open()
+	for _day in DAYS:
+		_resolve_an_empty_day(state)
+	assert_bool(state.cycle().is_over()).is_true()
+	assert_bool(state.outcome().is_victory()).is_true()
+	assert_int(state.outcome().day()).is_equal(DAYS)
+
+## Le score compte les quatre termes que 5. énumère, et les garde lisibles à côté du total.
+## Trois ouvriers vivants et un entrepôt debout ne sont pas un nombre, ce sont deux
+## nombres — un écran de fin qui n'annoncerait que la somme ne dirait pas ce qui l'a faite.
+func test_the_outcome_counts_what_the_run_left_standing() -> void:
+	var state := _open()
+	_raise(state, CARD_STORE, SPOT)
+	for _day in DAYS:
+		_resolve_an_empty_day(state)
+	var outcome := state.outcome()
+	assert_int(outcome.buildings()).is_equal(1)
+	assert_int(outcome.workers()).is_equal(3)
+	assert_int(outcome.resources()).is_equal(state.ledger().total())
+	assert_int(outcome.score()).is_greater(0)
+
+## Un chantier n'est pas un bâtiment intact, par la règle qui vaut depuis `C4`.
+func test_an_unfinished_site_is_not_a_standing_building() -> void:
+	var state := _open()
+	state.city().place(state.terrain(), state.building(CARD_HUT), SPOT)
+	for _day in DAYS:
+		_resolve_an_empty_day(state)
+	assert_int(state.outcome().buildings()).is_equal(0)
+
+## Le rejeu, étendu au geste neuf et à la vague datée : la fondation est un geste comme un
+## autre, donc elle entre sous la promesse de `I0`. Sans ce cas, `I2` pourrait avoir cassé
+## le déterminisme au seul endroit que `I1` ne couvrait pas.
+func test_the_same_seed_replays_a_founded_and_besieged_run() -> void:
+	var first := _scripted_siege()
+	var second := _scripted_siege()
+	assert_dict(first.ledger().amounts()).is_equal(second.ledger().amounts())
+	assert_int(first.roster().size()).is_equal(second.roster().size())
+	assert_int(first.city().count()).is_equal(second.city().count())
+	assert_array(first.deck().hand().cards()).is_equal(second.deck().hand().cards())
+
+# --- La mise en place de `I2` -----------------------------------------------------------------
+
+## Un run qui attend son Cœur, sur un bâtiment qui n'est pas nommé « heart » : le nom vit
+## dans `data/balance/`, donc aucun cas n'a besoin de l'écrire.
+func _open_founding(phases: Array[PhaseDef] = []) -> RunState:
+	var balance := _make_balance(phases)
+	balance.run.starting_building = CARD_HUT
+	return RunState.open(SEED, _make_grid(), _make_roster(), _make_catalogue(),
+		_make_buildings(), balance)
+
+## Un run dont le calendrier pose une vague sur ce jour-là.
+func _open_besieged(day: int, power: int, phases: Array[PhaseDef] = []) -> RunState:
+	var balance := _make_balance(phases)
+	balance.run.waves = _calendar(day, power)
+	return RunState.open(SEED, _make_grid(), _make_roster(), _make_catalogue(),
+		_make_buildings(), balance)
+
+## Fonde, traverse la première journée, et encaisse la vague qu'elle a armée.
+##
+## Le seul endroit des tests qui enchaîne les quatre fils de `I2` — fondation, calendrier,
+## attente, bataille —, et c'est pour ça qu'il porte le rejeu.
+func _scripted_siege() -> RunState:
+	var balance := _make_balance([])
+	balance.run.starting_building = CARD_HUT
+	balance.run.waves = _calendar(1, HIT_POINTS)
+	var state := RunState.open(SEED, _make_grid(), _make_roster(), _make_catalogue(),
+		_make_buildings(), balance)
+	RunOrchestrator.found(state, state.suggested_heart_anchor())
+	_resolve_an_empty_day(state)
+	RunOrchestrator.fight(state)
+	return state
+
+func _calendar(day: int, power: int) -> Array[WaveSlot]:
+	var slot := WaveSlot.new()
+	slot.day = day
+	slot.wave = _wave(power)
+	var slots: Array[WaveSlot] = [slot]
+	return slots
