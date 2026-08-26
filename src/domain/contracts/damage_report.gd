@@ -42,8 +42,14 @@ var _interrupted: Array[Vector2i] = []
 ## Ouvriers que la vague a emportés, dans l'ordre du déploiement.
 var _lost: Array[StringName] = []
 
-## Ce que la vague a volé dans la réserve.
-var _plunder: Dictionary[StringName, int] = {}
+## Unités de réserve que la vague emporte.
+##
+## Un **total**, et non une répartition par ressource, et c'est une ligne de dépendance
+## plutôt qu'une simplification. Répartir demanderait de voir le stock, donc le contenu du
+## Ledger, qui est un interne de l'Économie — CLAUDE.md l'interdit à tout autre système. Ce
+## que la vague décide est *combien* ; ce que la réserve perd est une question de la
+## réserve, et Ledger.take_share() y répond avec sa propre règle de prorata.
+var _plunder: int
 
 ## Qui a tenu la ligne, et dans quelle famille.
 var _work: Array[WorkLine] = []
@@ -60,11 +66,11 @@ var _defense: int
 ## l'application déterministe sans avoir à trier : deux runs partis du même seed
 ## appliquent les mêmes ordres dans le même ordre.
 static func create(damaged: Dictionary[Vector2i, int], destroyed: Array[Vector2i],
-		interrupted: Array[Vector2i], lost: Array[StringName],
-		plunder: Dictionary[StringName, int], work: Array[WorkLine],
-		assault: int, defense: int) -> DamageReport:
+		interrupted: Array[Vector2i], lost: Array[StringName], plunder: int,
+		work: Array[WorkLine], assault: int, defense: int) -> DamageReport:
 	assert(assault >= 0, "vague de puissance négative : %d" % assault)
 	assert(defense >= 0, "défense négative : %d" % defense)
+	assert(plunder >= 0, "pillage négatif : %d" % plunder)
 	var report := DamageReport.new()
 	for anchor in damaged:
 		assert(damaged[anchor] > 0,
@@ -78,10 +84,7 @@ static func create(damaged: Dictionary[Vector2i, int], destroyed: Array[Vector2i
 		assert(report._destroyed.has(anchor),
 			"chantier interrompu en %s sans avoir été détruit" % anchor)
 		report._interrupted.append(anchor)
-	for resource in plunder:
-		assert(plunder[resource] > 0,
-			"pillage de %d en %s" % [plunder[resource], resource])
-		report._plunder[resource] = plunder[resource]
+	report._plunder = plunder
 	report._lost = lost.duplicate()
 	report._work = work.duplicate()
 	report._assault = assault
@@ -94,9 +97,8 @@ static func held(assault: int, defense: int, work: Array[WorkLine]) -> DamageRep
 	var no_damage: Dictionary[Vector2i, int] = {}
 	var no_anchor: Array[Vector2i] = []
 	var no_loss: Array[StringName] = []
-	var no_plunder: Dictionary[StringName, int] = {}
 	return DamageReport.create(no_damage, no_anchor, no_anchor.duplicate(), no_loss,
-		no_plunder, work, assault, defense)
+		0, work, assault, defense)
 
 ## Puissance de la vague.
 func assault() -> int:
@@ -139,16 +141,13 @@ func interrupted() -> Array[Vector2i]:
 func lost() -> Array[StringName]:
 	return _lost.duplicate()
 
-## Ce que la vague a volé, par ressource. Copie.
-func plunder() -> Dictionary[StringName, int]:
-	return _plunder.duplicate()
-
-## Total pillé, toutes ressources confondues.
-func total_plunder() -> int:
-	var stolen := 0
-	for resource in _plunder:
-		stolen += _plunder[resource]
-	return stolen
+## Unités de réserve que la vague emporte, toutes ressources confondues.
+##
+## Un ordre et non un fait, comme le reste du rapport : c'est ce que la vague **réclame**,
+## et une réserve à moitié vide en donnera moins. Ce qu'elle a réellement perdu est ce que
+## Ledger.take_share() rend à l'application.
+func plunder() -> int:
+	return _plunder
 
 ## Journal de ceux qui ont tenu la ligne. Copie.
 ##
@@ -175,4 +174,4 @@ func fighters() -> Array[StringName]:
 
 ## Le village a-t-il perdu quelque chose ?
 func is_empty() -> bool:
-	return _damaged.is_empty() and _lost.is_empty() and _plunder.is_empty()
+	return _damaged.is_empty() and _lost.is_empty() and _plunder <= 0

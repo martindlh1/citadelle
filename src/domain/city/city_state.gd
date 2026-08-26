@@ -22,6 +22,12 @@ extends RefCounted
 ## l'avancer sans passer par ici. Fermer ça demanderait de ne plus jamais laisser sortir
 ## un PlacedBuilding, ce dont le rendu dépend. advance() est donc la porte documentée,
 ## celle qu'une action vise par son ancre ; elle n'est pas un verrou.
+##
+## damage() est la troisième, entrée à F1, et elle est la seule des deux mutantes non
+## exclusives qui **compte vraiment** : un cran de chantier posé dans le dos de la ville
+## ne casse qu'un compteur, un bâtiment détruit dans son dos reste debout dans les deux
+## index, occupe ses cellules et relève encore la réserve. C'est pourquoi elle retire
+## elle-même, plutôt que de rendre un booléen que l'appelant aurait à honorer.
 
 ## Ancre -> bâtiment posé. L'ordre d'insertion d'un Dictionary est l'ordre de pose :
 ## c'est lui qui rend buildings() déterministe pour un même seed et une même suite
@@ -87,7 +93,7 @@ func to_snapshot() -> CitySnapshot:
 	for building in buildings():
 		projected.append(BuildingSnapshot.create(
 			building.data(), building.anchor(), building.height(), building.turns(),
-			building.progress()))
+			building.progress(), building.damage()))
 	return CitySnapshot.create(projected)
 
 ## Pose ce bâtiment sur cette ancre, dans cette orientation, si le placement est valide.
@@ -127,6 +133,30 @@ func place(terrain: TerrainQuery, data: BuildingData, anchor: Vector2i,
 func advance(anchor: Vector2i) -> bool:
 	assert(has_anchor(anchor), "chantier avancé sur une cellule qui n'ancre rien : %s" % anchor)
 	return _buildings[anchor].advance()
+
+## Fait encaisser des points au bâtiment ancré ici, et le **retire s'il tombe**. Rend vrai
+## s'il est tombé.
+##
+## Précondition : has_anchor(anchor). Passer par anchor_at() quand on tient une cellule
+## quelconque plutôt que l'ancre.
+##
+## Elle retire elle-même plutôt que de laisser l'appelant le faire, et c'est ce qui la
+## distingue d'advance() : un chantier qu'on oublie d'avancer reste un chantier, un
+## bâtiment détruit qu'on oublie de retirer reste **debout** dans la ville, occupe ses
+## cellules et relève encore la réserve. L'invariant est tenu par la structure, comme
+## place() valide avant de muter ; le laisser à un appelant serait le laisser à tous ceux
+## qui viendront.
+##
+## Le compte des points encaissés est délégué au bâtiment, comme le cran de chantier :
+## la ville sait qui est posé où, ce qu'il peut encore encaisser est son affaire à lui.
+func damage(anchor: Vector2i, points: int) -> bool:
+	assert(has_anchor(anchor), "dégâts sur une cellule qui n'ancre rien : %s" % anchor)
+	var building := _buildings[anchor]
+	building.take(points)
+	if not building.is_destroyed():
+		return false
+	remove(anchor)
+	return true
 
 ## Retire le bâtiment ancré ici et libère toutes ses cellules.
 ##

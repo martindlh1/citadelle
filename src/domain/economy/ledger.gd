@@ -159,6 +159,43 @@ func take(resource: StringName, quantity: int) -> int:
 		_reduce(resource, taken)
 	return taken
 
+## Retire `total` unités réparties **au prorata** de ce que chaque ressource pèse, et rend
+## ce qui a réellement été pris.
+##
+## Le pendant exact de l'écrêtage d'un dépôt, et volontairement la même règle : une vague
+## ne choisit pas ce qu'elle emporte, et deux réserves identiques rangées dans un ordre
+## différent doivent perdre la même chose. C'est ce que E1 exige déjà de la répartition
+## d'une récolte qui déborde.
+##
+## Elle existe parce que le Combat ne peut pas répondre à cette question. Un DamageReport
+## dit combien la vague emporte, jamais quoi : lui faire calculer les parts demanderait
+## qu'il voie le stock, donc le contenu d'un interne de l'Économie, et la règle de
+## dépendance de CLAUDE.md l'interdit. « Ce que la réserve perd quand on lui prend N » est
+## une question de la réserve, et elle se pose ici.
+##
+## Neutre de tout combat, jusque dans son nom : un événement de 3.7 ou un troc lui
+## poseront la même question.
+##
+## Prendre plus que le total disponible vide simplement la réserve — un pillage n'a pas
+## à savoir ce qu'il y avait.
+func take_share(total: int) -> Dictionary[StringName, int]:
+	assert(total >= 0, "retrait négatif : %d" % total)
+	var taken: Dictionary[StringName, int] = {}
+	if total <= 0 or _amounts.is_empty():
+		return taken
+	if total >= self.total():
+		taken = amounts()
+		_amounts.clear()
+		return taken
+	var shares := _shares(amounts(), total)
+	for resource in shares:
+		if shares[resource] <= 0:
+			continue
+		taken[resource] = shares[resource]
+	for resource in taken:
+		_reduce(resource, taken[resource])
+	return taken
+
 ## Retire une quantité connue disponible, en tenant l'invariant « aucune clé à zéro ».
 func _reduce(resource: StringName, quantity: int) -> void:
 	var left := amount(resource) - quantity
