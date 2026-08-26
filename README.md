@@ -67,6 +67,14 @@ obligatoire ; les autres sont optionnels :
 | `--shot-turns n` | quarts de tour appliqués à la **caméra** |
 | `--shot-rotate n` | quarts de tour appliqués au **bâtiment** à poser *(harnais Construction)* |
 | `--shot-evenings n` | soirs résolus avant de capturer *(harnais Cartes)*, journées jouées *(harnais Run)*, scène à montrer *(harnais HUD)* |
+| `--shot-view v` | cran d'affichage du HUD : `complet`, `essentiel`, `masque`, ou `aucun` *(harnais Run)* |
+
+`--shot-view` existe pour la raison qui a valu son drapeau à `--shot-evenings`, et que
+`I2` a reformulée en une phrase : **un écran qu'aucune capture ne peut atteindre est celui
+que personne ne regardera.** Replier le rapport et masquer le HUD sont deux gestes qui ne
+changent que l'image, donc les deux seuls dont ni le parsing ni les tests ne diront jamais
+rien. `aucun` rend la carte entière sans rien dessus, ce qui est aussi la façon de
+regarder un village de quinze journées.
 
 Sur le harnais **Run**, `--shot-evenings 0` est un cas à part : il capture l'écran de
 **fondation**, avant que le run n'ait commencé. C'est le seul état que les autres valeurs

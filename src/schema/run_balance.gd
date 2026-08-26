@@ -104,6 +104,28 @@ func wave_on(day: int) -> WaveDef:
 			return slot.wave
 	return null
 
+## Le prochain créneau à partir de ce jour, celui-ci compris, ou null si plus rien ne vient.
+##
+## Il existe pour une raison de design et non de confort. `DESIGN.md` 3.6 veut qu'on
+## « pense à la bataille en posant un bâtiment », et en tire que la direction d'une vague
+## s'annonce à l'avance : « une direction révélée le soir même transformerait cette
+## prévoyance en loterie ». **La date se tient par le même argument** — un joueur qui
+## ignore qu'un siège tombe dans deux journées ne peut pas bâtir en le prévoyant, et la
+## prévoyance que 3.2 réclame n'existe pas.
+##
+## Le balayage prend le plus petit jour plutôt que le premier trouvé : le tableau est une
+## liste d'édition, et rien dans `data/` n'oblige à l'écrire dans l'ordre. Exiger un tri
+## serait un contrôle de plus dans `missing_fields()` pour une contrainte que personne
+## n'a de raison de subir.
+func next_slot_from(day: int) -> WaveSlot:
+	var soonest: WaveSlot = null
+	for slot in waves:
+		if slot == null or slot.day < day:
+			continue
+		if soonest == null or slot.day < soonest.day:
+			soonest = slot
+	return soonest
+
 ## Champs non renseignés ou incohérents. Vide = bloc exploitable.
 ##
 ## Le contrôle qui compte est celui de la phase résolvante. Un `resolves` est un booléen,

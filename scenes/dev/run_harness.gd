@@ -74,6 +74,25 @@ const SLOT_KEYS := 9
 ## Rang qui ne désigne aucune carte.
 const NO_SLOT := -1
 
+## Valeurs de `--shot-view`, dans l'ordre des crans, plus celle qui éteint tout.
+##
+## Des noms et non des chiffres : `--shot-view 2` n'aurait dit à personne ce qu'il capture,
+## et c'est une ligne de commande qu'on relit six mois plus tard dans un journal.
+const VIEW_NAMES: Array[String] = ["complet", "essentiel", "masque"]
+const VIEW_NONE := "aucun"
+
+## Crans du rapport texte, du plus bavard au plus discret.
+##
+## Trois et non deux, parce qu'un simple on/off répond mal à ce qui gêne. Ce qui couvre la
+## carte est en grande partie l'aide et les piles, qu'on cesse de lire au bout de deux
+## minutes ; le bandeau et la dernière action, eux, sont ce qui dit où l'on en est et ce
+## que le dernier geste a fait — les masquer pour dégager la vue reviendrait à jouer en
+## aveugle. Le cran du milieu garde exactement ces deux-là.
+enum Report { FULL, ESSENTIAL, HIDDEN }
+
+## Nom de chaque cran, pour que la touche dise ce qu'elle vient de faire.
+const REPORT_NAMES: Array[String] = ["complet", "l'essentiel", "masqué"]
+
 const REPORT_MARGIN := 16.0
 const REPORT_FONT_SIZE := 13
 const REPORT_OUTLINE_SIZE := 4
@@ -83,7 +102,8 @@ La carte   clic gauche : jouer sur la case survolée. Clic droit : retirer.
 Le travail clic sur une fiche, puis sur une ligne d'action — ou Auto. Espace : envoyer sur la case survolée.
            Retour arrière : rappeler.
 Entrée     fonder le village, tenir la ligne, ou finir la phase — selon ce que le run attend.
-La caméra  Q/E : pivoter. Molette : zoomer. WASD : déplacer. R : recadrer."""
+La caméra  Q/E : pivoter. Molette : zoomer. WASD : déplacer. R : recadrer.
+La vue     H : replier ce rapport. F1 : masquer tout le HUD."""
 
 ## Marge basse du panneau d'affectation : la hauteur que la main occupe, plus son écart.
 ## Sans elle le panneau descendrait sur les cartes, la main étant ancrée en bas.
@@ -131,6 +151,17 @@ var _battle_day := 0
 ## ne gagne pas d'XP. Rien ne plantait, rien ne compilait de travers, et la seule ligne du
 ## jeu qui raconte quelque chose disait des matricules.
 var _battle_names: Dictionary[StringName, String] = {}
+
+## Cran courant du rapport texte.
+var _report_level := Report.FULL
+
+## Les deux colonnes du HUD, gardées pour pouvoir les masquer d'un coup.
+##
+## Retenues plutôt que retrouvées par `get_children()` : un harnais qui irait chercher ses
+## propres nœuds par leur rang dans l'arbre serait le `get_node("../../UI/HUD")` que
+## `CLAUDE.md` refuse en premier, écrit à l'envers.
+var _left_slot: MarginContainer
+var _right_slot: MarginContainer
 
 ## Ouvrier sélectionné dans le panneau, ou &"" si aucun.
 ##
@@ -198,10 +229,12 @@ func _ready() -> void:
 	_crew.action_picked.connect(_on_action_picked)
 	_crew.auto_requested.connect(_on_auto_requested)
 	_label = _make_label()
-	add_child(_hud_slot(_make_left_column(), Control.SIZE_SHRINK_BEGIN,
-		Control.SIZE_SHRINK_BEGIN))
-	add_child(_hud_slot(_make_right_column(), Control.SIZE_SHRINK_END,
-		Control.SIZE_SHRINK_END, HAND_CLEARANCE))
+	_left_slot = _hud_slot(_make_left_column(), Control.SIZE_SHRINK_BEGIN,
+		Control.SIZE_SHRINK_BEGIN)
+	add_child(_left_slot)
+	_right_slot = _hud_slot(_make_right_column(), Control.SIZE_SHRINK_END,
+		Control.SIZE_SHRINK_END, HAND_CLEARANCE)
+	add_child(_right_slot)
 
 	EventBus.phase_resolved.connect(_on_phase_resolved)
 	EventBus.battle_pending.connect(_on_battle_pending)
@@ -259,6 +292,10 @@ func _handle_key(event: InputEventKey) -> void:
 			_unstaff_here()
 		KEY_ENTER, KEY_KP_ENTER:
 			_press_on()
+		KEY_H:
+			_cycle_report()
+		KEY_F1:
+			_toggle_hud()
 		_:
 			var slot := event.keycode - KEY_1
 			if slot < 0 or slot >= SLOT_KEYS:
@@ -267,6 +304,32 @@ func _handle_key(event: InputEventKey) -> void:
 	get_viewport().set_input_as_handled()
 
 # --- Les gestes -----------------------------------------------------------------------
+
+## Fait passer le rapport texte au cran suivant : complet, l'essentiel, masqué.
+##
+## Le premier confort demandé, et le plus mérité : le pavé couvre la moitié gauche de la
+## carte en permanence, alors que la moitié de ses lignes ne change jamais.
+func _cycle_report() -> void:
+	_report_level = (_report_level + 1) % REPORT_NAMES.size()
+	_label.visible = _report_level != Report.HIDDEN
+	_last_action = "Rapport : %s. H pour changer." % REPORT_NAMES[_report_level]
+
+## Masque ou remontre tout le HUD, main comprise.
+##
+## Un cran plus loin que le précédent, et pour un autre usage : celui-ci ne sert pas à
+## jouer mais à **regarder** — le village entier, le relief, ce qu'une vague a cassé. C'est
+## aussi ce qui rend une capture propre possible sans toucher au code.
+##
+## Il masque la main, donc il empêche de jouer, et c'est assumé : un mode où l'on ne voit
+## rien mais où l'on peut tout faire serait un piège plus désagréable que le pavé qu'on
+## vient d'enlever.
+func _toggle_hud() -> void:
+	var shown := not _left_slot.visible
+	_left_slot.visible = shown
+	_right_slot.visible = shown
+	_hand_view.visible = shown
+	if shown:
+		_last_action = "HUD rendu. F1 pour le remasquer."
 
 ## Prend en main la carte de ce rang, ou la repose si elle y était déjà.
 func _hold(slot: int) -> void:
@@ -658,8 +721,14 @@ func _refresh_ghost() -> void:
 func _report() -> String:
 	var lines := PackedStringArray()
 	lines.append(_banner())
+	var forecast := _forecast_line()
+	if not forecast.is_empty():
+		lines.append(forecast)
 	lines.append("")
 	lines.append_array(_closing_lines())
+	if _report_level == Report.ESSENTIAL:
+		lines.append(_last_action)
+		return "\n".join(lines)
 	lines.append(_piles_line())
 	lines.append("")
 	lines.append(_hover_line())
@@ -667,6 +736,29 @@ func _report() -> String:
 	lines.append("")
 	lines.append(CONTROLS)
 	return "\n".join(lines)
+
+## Quand tombe la prochaine vague, et laquelle.
+##
+## **Ce n'est pas du confort**, à l'inverse des deux touches ci-dessus. `DESIGN.md` 3.6 pose
+## que la direction d'une vague s'annonce à l'avance parce que 3.2 « veut qu'on pense à la
+## bataille en posant un bâtiment », et qu'« une direction révélée le soir même
+## transformerait cette prévoyance en loterie ». La **date** se tient par le même argument,
+## et elle n'était visible nulle part : jusqu'ici une vague apparaissait le soir où elle
+## tombait, donc la palissade se bâtissait après coup ou par superstition.
+##
+## Elle se lit à tous les crans du rapport, y compris le plus discret, pour cette raison
+## exactement : c'est une information de décision, pas un compte rendu.
+func _forecast_line() -> String:
+	var cycle := _state().cycle()
+	if cycle.is_over() or _state().awaits_a_battle():
+		return ""
+	var slot := _state().balance().run.next_slot_from(cycle.day())
+	if slot == null:
+		return "Plus aucune vague au calendrier."
+	var wait := slot.day - cycle.day()
+	if wait <= 0:
+		return "%s ce soir." % slot.wave.label
+	return "%s au jour %d — dans %d journée(s)." % [slot.wave.label, slot.day, wait]
 
 ## Le bandeau de phase. Le libellé et les gestes viennent de la `PhaseDef`, jamais d'un
 ## nom écrit ici : c'est ce qui fera de l'arbitrage de `I2b` un échange de `.tres`.
@@ -1084,6 +1176,7 @@ func _capture_if_asked() -> void:
 				_fight()
 		if not _state().awaits_a_battle() and not _state().cycle().is_over():
 			_scripted_open_phase()
+	_apply_shot_view()
 	for _frame in DevShot.WARMUP_FRAMES:
 		await get_tree().process_frame
 	print("[run_harness] %s" % _banner())
@@ -1095,6 +1188,23 @@ func _capture_if_asked() -> void:
 	var error := get_viewport().get_texture().get_image().save_png(path)
 	print("[run_harness] capture vers %s : %s" % [path, error_string(error)])
 	get_tree().quit(OK if error == OK else FAILED)
+
+## Applique le cran de HUD demandé par `--shot-view`, s'il l'est.
+##
+## Sans drapeau, la capture montre le rapport complet — ce que toutes les captures du projet
+## montrent depuis `T2`, et ce qu'un lecteur de journal attend par défaut.
+func _apply_shot_view() -> void:
+	var asked := DevShot.argument(DevShot.SHOT_VIEW_FLAG)
+	if asked.is_empty():
+		return
+	if asked == VIEW_NONE:
+		_toggle_hud()
+		return
+	var level := VIEW_NAMES.find(asked)
+	if level < 0:
+		return
+	while _report_level != level:
+		_cycle_report()
 
 ## Fonde le village là où le domaine le suggère.
 ##

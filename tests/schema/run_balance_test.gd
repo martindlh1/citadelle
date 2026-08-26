@@ -99,6 +99,32 @@ func test_two_waves_sharing_a_day_are_reported() -> void:
 	balance.waves = slots
 	assert_array(balance.missing_fields()).contains(["waves.1.day.duplicate"])
 
+## Le jour courant compte comme « prochain » : une vague qui tombe ce soir est ce que le
+## joueur doit voir venir en premier, pas celle d'après.
+func test_the_next_slot_includes_today() -> void:
+	var balance := _working()
+	var slots: Array[WaveSlot] = [_slot(2, &"tide")]
+	balance.waves = slots
+	assert_int(balance.next_slot_from(2).day).is_equal(2)
+	assert_int(balance.next_slot_from(1).day).is_equal(2)
+	assert_object(balance.next_slot_from(3)).is_null()
+
+## Le plus petit jour, et non le premier écrit : le calendrier est une liste d'édition, et
+## rien dans `data/` n'oblige à la ranger. Sans ce cas, un `.tres` écrit à l'envers
+## annoncerait la mauvaise vague — ce qui compilerait, passerait le boot, et ne se verrait
+## qu'à l'écran.
+func test_the_next_slot_ignores_the_order_of_the_list() -> void:
+	var balance := _working()
+	var slots: Array[WaveSlot] = [_slot(3, &"surge"), _slot(2, &"tide")]
+	balance.waves = slots
+	assert_int(balance.next_slot_from(1).day).is_equal(2)
+
+func test_an_empty_calendar_never_announces_a_wave() -> void:
+	var balance := _working()
+	var none: Array[WaveSlot] = []
+	balance.waves = none
+	assert_object(balance.next_slot_from(1)).is_null()
+
 func test_a_null_slot_is_reported_under_its_index() -> void:
 	var balance := _working()
 	var slots: Array[WaveSlot] = [null]

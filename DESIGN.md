@@ -338,6 +338,8 @@ C'est une flèche neuve dans l'architecture — jusqu'ici rien ne remontait de l
 
 **La direction s'annonce à l'avance**, par une flèche à l'écran. Ce n'est pas du confort : 3.2 veut qu'on pense à la bataille en posant un bâtiment, et une direction révélée le soir même transformerait cette prévoyance en loterie. C'est aussi ce qui donne au relief et à l'empreinte d'un bâtiment un second sens, celui que l'`OUVERT` de 3.1 cherchait.
 
+**La date s'annonce par le même argument.** *(Écrit après `I2`.)* Elle avait été oubliée, et c'est plus grave que la direction, qui attend de toute façon `F2` : jusqu'ici une vague apparaissait à l'écran le soir où elle tombait, si bien que la palissade se bâtissait après coup ou par superstition. Ce que le calendrier de 2 sait — quelle vague, dans combien de journées — se lit donc en permanence, et c'est une information de décision plutôt qu'un compte rendu. La **composition** reste ce qu'un éclaireur de 3.7 révélerait en plus.
+
 **Le relief joue, et c'est la première chose qui l'emploie autrement que comme contrainte de pose.** Monter coûte, une marche trop haute bloque. Le terrassement de 3.1 devient donc un geste militaire autant qu'économique.
 
 #### Ce qu'une manche gagne, et ce qu'elle coûte

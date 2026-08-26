@@ -37,6 +37,15 @@ const SHOT_ROTATE_FLAG := "--shot-rotate"
 ## chemin de résolution d'un harnais ne serait jamais emprunté par un contrôle.
 const SHOT_EVENINGS_FLAG := "--shot-evenings"
 
+## Cran d'affichage du HUD au moment de capturer. Lu par les harnais qui en ont un.
+##
+## Il existe pour la raison qui a valu son drapeau à `--shot-evenings`, et que `I2` a
+## reformulée en une phrase : **un écran qu'aucune capture ne peut atteindre est celui que
+## personne ne regardera**. Replier un rapport et masquer un HUD sont deux gestes qui ne
+## changent que l'image, donc les deux seuls dont ni le parsing ni les tests ne diront
+## jamais rien.
+const SHOT_VIEW_FLAG := "--shot-view"
+
 ## Images laissées passer avant de capturer. La première ne porte encore ni le tampon
 ## d'instances téléversé ni la lumière, et rendrait un cadre vide.
 const WARMUP_FRAMES := 3
