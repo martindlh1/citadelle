@@ -26,20 +26,26 @@ extends Node
 ## est le vrai bénéfice : un chiffre affiché à deux endroits est un chiffre qui finira par
 ## différer de lui-même.
 ##
-## Ce qui reste en texte est ce dont aucun jalon d'écran n'a encore la charge — les piles,
-## le plateau, le roster, le survol. Le plateau et le roster iront à `W2`, qui doit
-## présenter *qui* l'on envoie.
-##
 ## Il ne décide rien. Il traduit un clic en appel de `RunManager` et une réponse en
 ## couleur, comme les harnais Construction et Cartes avant lui. Aucun « if » sur le
 ## terrain, la ville, la bourse ou la phase n'apparaît ici — la question se pose au
 ## domaine, l'écran affiche la réponse.
 ##
+## Ce que `W2` y ajoute, et ce qu'il en retire à son tour : le plateau et le roster ne
+## sont plus deux lignes de texte, c'est un `AssignmentPanel`. On y choisit **qui** l'on
+## envoie — une fiche, puis une action — au lieu de subir le premier ouvrier libre, et un
+## bouton remplit le reste. Le harnais ne classe personne : il demande, `StaffingAdvisor`
+## répond.
+##
+## Ce qui reste en texte est ce dont aucun jalon d'écran n'a encore la charge : les piles
+## et le survol. Ils attendront `I2`.
+##
 ## Les commandes : une carte se prend au clavier — 1 à 9 — ou au clic dessus ; un clic
 ## gauche sur le sol la joue sur la case survolée, un clic droit retire l'action posée là,
 ## Espace y envoie un ouvrier, Retour arrière les rappelle tous, Tab pivote un bâtiment ou
 ## retourne un terrassement, **Entrée termine la phase**. La caméra garde Q/E, la molette,
-## WASD et R.
+## WASD et R. Dans le panneau : un clic sur une fiche la sélectionne, un clic sur une
+## ligne d'action y envoie le sélectionné, et **Auto** remplit le reste.
 
 ## Seed du run. Fixe : deux lancements doivent se comparer.
 const SEED := 20260825
@@ -66,8 +72,13 @@ const REPORT_OUTLINE_SIZE := 4
 
 const CONTROLS := """La main    1-9 ou clic sur une carte : la prendre. Tab : pivoter, ou retourner un terrassement.
 La carte   clic gauche : jouer sur la case survolée. Clic droit : retirer.
-Le travail Espace : y envoyer un ouvrier. Retour arrière : les rappeler. Entrée : finir la phase.
+Le travail clic sur une fiche, puis sur une ligne d'action — ou Auto. Espace : envoyer sur la case survolée.
+           Retour arrière : rappeler. Entrée : finir la phase.
 La caméra  Q/E : pivoter. Molette : zoomer. WASD : déplacer. R : recadrer."""
+
+## Marge basse du panneau d'affectation : la hauteur que la main occupe, plus son écart.
+## Sans elle le panneau descendrait sur les cartes, la main étant ancrée en bas.
+const HAND_CLEARANCE := 88.0
 
 var _metrics: TerrainMetrics
 var _world: DevWorld
@@ -79,7 +90,15 @@ var _hand_view: HandView
 var _palette: CommodityPalette
 var _bar: ResourceBar
 var _panel: ProductionPanel
+var _crew: AssignmentPanel
 var _label: Label
+
+## Ouvrier sélectionné dans le panneau, ou &"" si aucun.
+##
+## Il vit ici et non dans la vue, exactement comme le rang de la carte tenue : `HandView`
+## a posé à `D2` qu'une vue signale et ne sélectionne pas, et une seconde vue qui
+## déciderait de sa propre sélection serait la même faute écrite deux fois.
+var _held_worker := &""
 
 ## Rang de la carte tenue dans Hand.cards(), ou NO_SLOT. Un **rang** et non un
 ## identifiant : une main tient couramment deux exemplaires du même nom, et `D2` a payé
@@ -133,9 +152,15 @@ func _ready() -> void:
 	_palette = CommodityPalette.from_database()
 	_bar = ResourceBar.create(_palette)
 	_panel = ProductionPanel.create(_palette)
+	_crew = AssignmentPanel.create(_state().catalogue())
+	_crew.worker_picked.connect(_on_worker_picked)
+	_crew.action_picked.connect(_on_action_picked)
+	_crew.auto_requested.connect(_on_auto_requested)
 	_label = _make_label()
-	add_child(_hud_slot(_make_left_column(), Control.SIZE_SHRINK_BEGIN))
-	add_child(_hud_slot(_panel, Control.SIZE_SHRINK_END))
+	add_child(_hud_slot(_make_left_column(), Control.SIZE_SHRINK_BEGIN,
+		Control.SIZE_SHRINK_BEGIN))
+	add_child(_hud_slot(_make_right_column(), Control.SIZE_SHRINK_END,
+		Control.SIZE_SHRINK_END, HAND_CLEARANCE))
 
 	EventBus.phase_resolved.connect(_on_phase_resolved)
 	_refresh_targets()
@@ -153,6 +178,7 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	_refresh_ghost()
 	_bar.show_ledger(_state().ledger(), _last_delta)
+	_crew.show_state(_state(), _held_worker)
 	_label.text = _report()
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -257,31 +283,56 @@ func _withdraw_here() -> void:
 	if not RunManager.withdraw(action.id()):
 		_last_action = "Retrait refusé — %s ne le permet pas." % _phase_label()
 		return
-	_last_action = "Retiré : %s en %s." % [_label_of(action.card()), action.target()]
-	_refresh_targets()
+	_last_action = "Retiré : %s en %s — la carte revient en main." % [
+		_label_of(action.card()), action.target()]
+	# La main vient de changer, donc un **rang** dans la main ne désigne plus la même
+	# carte : la carte rendue s'insère dans son pool et décale tout ce qui suit. C'est le
+	# même piège que `D2` a payé au clavier, et la même réponse que `_play_here()` — tout
+	# geste qui touche la main repose ce qu'on tenait.
+	_release()
 
-## Envoie le premier ouvrier libre sur l'action sous le curseur.
+## Envoie un ouvrier sur l'action sous le curseur : le sélectionné, ou le meilleur.
 ##
-## Le premier libre et non un choix : `DESIGN.md` 3.4 dit que **qui** l'on place est la
-## décision de fond d'une phase, et un harnais ne tranchera pas comment on la présente —
-## c'est le panneau d'affectation de `W2`.
+## Le premier ouvrier libre a tenu de `D2` à `E2`, et son commentaire renvoyait déjà ici :
+## `DESIGN.md` 3.4 dit que **qui** l'on place est la décision de fond d'une phase. Elle se
+## prend maintenant dans le panneau ; cette touche en est le raccourci, et c'est la même
+## règle qui la sert — `StaffingAdvisor` classe, on prend le premier du classement. Le
+## bouton n'est donc pas un chemin à part : c'est ce geste-ci répété.
 func _staff_here() -> void:
 	var action := _action_here()
 	if action == null:
 		_last_action = "Aucune action posée sous le curseur."
 		return
-	var free := _state().free_workers()
-	if free.is_empty():
+	_staff_on(action)
+
+## Envoie l'ouvrier tenu — ou le meilleur de son métier — sur cette action.
+func _staff_on(action: PlayedAction) -> void:
+	var worker := _held_worker if not _held_worker.is_empty() else _best_for(action)
+	if worker.is_empty():
 		_last_action = "Plus aucun ouvrier libre — tout le monde est déjà au travail."
 		return
-	if not RunManager.staff(free[0], action.id()):
+	if not RunManager.staff(worker, action.id()):
 		_last_action = "%s en %s : %s" % [_label_of(action.card()), action.target(),
-			_staffing_refusal(free[0], action)]
+			_staffing_refusal(worker, action)]
 		return
+	_held_worker = &""
 	_last_action = "%s -> %s en %s (%d/%d)." % [
-		_name_of(free[0]), _label_of(action.card()), action.target(),
+		_name_of(worker), _label_of(action.card()), action.target(),
 		_state().staffed_on(action.id()).size(), action.capacity()]
 	_refresh_markers()
+
+## Le meilleur ouvrier libre pour cette action, ou &"" s'il n'y en a aucun.
+##
+## Le classement vient du domaine et n'est pas refait ici : c'est celui-là même que le
+## bouton suit, donc la touche et le bouton ne peuvent pas envoyer deux personnes
+## différentes. Deux classements auraient dérivé, exactement comme deux tables de ciblage
+## l'auraient fait à `D2`.
+func _best_for(action: PlayedAction) -> StringName:
+	var family := StaffingAdvisor.family_of(action, _state().terrain(),
+		_state().city().to_snapshot(), _state().balance().actions)
+	var ranked := StaffingAdvisor.ranked_for(_state().free_workers(), _state().labor(),
+		family)
+	return &"" if ranked.is_empty() else ranked[0]
 
 ## Le refus d'affectation, en clair et avec le geste qui le lève.
 ##
@@ -304,6 +355,48 @@ func _staffing_refusal(worker: StringName, action: PlayedAction) -> String:
 		RunOrchestrator.REASON_NO_ACTION:
 			return "cette action n'est plus posée."
 	return "refusé (%s)." % reason
+
+## Prend une fiche en main, ou la repose si elle y était déjà. Même geste que pour une
+## carte, et volontairement : ce sont les deux moitiés d'une même intention.
+func _on_worker_picked(worker: StringName) -> void:
+	_held_worker = &"" if worker == _held_worker else worker
+	if _held_worker.is_empty():
+		_last_action = "Reposé."
+		return
+	_last_action = "%s en main — cliquer une ligne d'action pour l'y envoyer." \
+		% _name_of(worker)
+
+func _on_action_picked(action: int) -> void:
+	var posted := _state().board().at(action)
+	if posted == null:
+		_last_action = "Cette action n'est plus posée."
+		return
+	_staff_on(posted)
+
+## Le bouton d'auto-affectation. Il ne calcule rien ici : le domaine plane, l'orchestrateur
+## applique, et l'écran ne fait que compter ce qui est parti.
+func _on_auto_requested() -> void:
+	var placed := RunManager.auto_staff()
+	if placed.is_empty():
+		_last_action = "Auto : rien à remplir — %s." % _why_auto_did_nothing()
+		return
+	var names := PackedStringArray()
+	for worker in placed:
+		names.append(_name_of(worker))
+	_held_worker = &""
+	_last_action = "Auto : %d ouvrier(s) placé(s) — %s." % [placed.size(),
+		", ".join(names)]
+	_refresh_markers()
+
+## Pourquoi le bouton n'a rien fait. Trois causes, et aucune n'est une panne — c'est la
+## leçon de `I1` sur le refus muet, appliquée au seul geste de `W2` qui puisse ne rien
+## produire sans que rien ne soit cassé.
+func _why_auto_did_nothing() -> String:
+	if not _state().cycle().permits(PhaseDef.ACTION_ASSIGN):
+		return "affecter n'est pas permis en phase « %s »" % _phase_label()
+	if _state().free_workers().is_empty():
+		return "tout le monde est déjà au travail"
+	return "aucun poste libre sur ce qui est posé"
 
 func _unstaff_here() -> void:
 	var action := _action_here()
@@ -339,6 +432,10 @@ func _end_phase() -> void:
 ## calcule qu'une chose, le delta de la réserve, et par une fonction de la vue.
 func _on_phase_resolved(report: PhaseReport) -> void:
 	_panel.show_report(report, _ending_label)
+	_crew.show_progress(report.progress())
+	# La résolution a vidé le brouillon d'affectation : garder une fiche en main
+	# encadrerait un choix que plus rien ne porte.
+	_held_worker = &""
 	_last_delta = ResourceBar.delta_of(report,
 		_state().balance().economy.upkeep_resource)
 	# Le relief a pu bouger sous un terrassement, et la ville sous un chantier. Refaire
@@ -395,21 +492,21 @@ func _refresh_ghost() -> void:
 
 # --- Le rapport ------------------------------------------------------------------------
 
-## Ce qui reste du rapport texte de `I1` après que `E2` en a pris deux morceaux.
+## Ce qui reste du rapport texte de `I1` après que `E2` puis `W2` en ont pris des morceaux.
 ##
-## La réserve est partie sur la barre, la résolution sur le panneau. Ce qui demeure est ce
-## qu'aucun des deux jalons d'écran n'a encore de vue pour : les piles, le plateau, le
-## roster, le survol. Le roster et le plateau iront à `W2`, qui doit présenter *qui* l'on
-## envoie ; le survol et les piles attendront `I2`.
+## La réserve est partie sur la barre, la résolution sur le panneau de production, le
+## plateau et le roster sur le panneau d'affectation. Ce qui demeure est ce qu'aucun des
+## trois jalons d'écran n'a de vue pour : les piles et le survol, qui attendront `I2`.
+##
+## Chaque fois, le morceau est **retiré** plutôt que doublé. Garder les deux laisserait le
+## même chiffre lisible à deux endroits, et un chiffre affiché deux fois est un chiffre
+## qui finira par différer de lui-même — la capture n'en vérifie qu'une des deux mises en
+## forme, et l'autre dérive en silence.
 func _report() -> String:
 	var lines := PackedStringArray()
 	lines.append(_banner())
 	lines.append("")
 	lines.append(_piles_line())
-	lines.append("")
-	lines.append(_board_lines())
-	lines.append("")
-	lines.append(_roster_line())
 	lines.append("")
 	lines.append(_hover_line())
 	lines.append(_last_action)
@@ -455,33 +552,6 @@ func _piles_line() -> String:
 			_state().deck().hand_size(pool), _state().deck().draw_size(pool),
 			_state().deck().discard_size(pool)])
 	return "\n".join(lines)
-
-func _board_lines() -> String:
-	if _state().board().count() == 0:
-		return "Actions posées : aucune. Prendre une carte et cliquer une cible."
-	var lines := PackedStringArray()
-	lines.append("Actions posées")
-	for action in _state().board().to_plan().actions():
-		var workers := _state().staffed_on(action.id())
-		var names := PackedStringArray()
-		for worker in workers:
-			names.append(_name_of(worker))
-		lines.append("  #%-2d %-12s %-8s %s%s   %d/%d   %s" % [
-			action.id(), _label_of(action.card()),
-			"à cru" if action.is_bare() else "bâtiment", action.target(),
-			"" if not action.moves_ground() else (" %s" % _sense_of(action.direction())),
-			workers.size(), action.capacity(),
-			"— " + ", ".join(names) if not names.is_empty() else "—"])
-	return "\n".join(lines)
-
-func _roster_line() -> String:
-	var free := PackedStringArray()
-	for worker in _state().free_workers():
-		free.append(_name_of(worker))
-	var roster := _state().roster()
-	return "Roster : %d ouvriers, %d au travail, %d libre(s)%s" % [
-		roster.present_count(), _state().to_assignment().size(), free.size(),
-		"" if free.is_empty() else " — " + ", ".join(free)]
 
 ## Ce que le curseur désigne, et ce que la carte tenue y ferait — coût compris.
 func _hover_line() -> String:
@@ -620,14 +690,21 @@ func _make_buildings() -> Dictionary[StringName, BuildingData]:
 ##
 ## Un conteneur ne se trompe sur aucun des deux, et il ne se trompe pas non plus à la
 ## dixième résolution : c'est lui qui refait la mise en page quand le contenu change.
-func _hud_slot(view: Control, horizontal: int) -> MarginContainer:
+## `bottom` s'écarte de la marge commune pour une seule raison, et c'est la main : elle
+## est ancrée au bas de l'écran, donc une vue qui se rétracte vers le bas lui monterait
+## dessus. Une marge plus grande est la façon de le dire dans le vocabulaire du
+## conteneur ; une hauteur recopiée serait exactement ce que `E2` a payé pour ne plus
+## écrire.
+func _hud_slot(view: Control, horizontal: int, vertical: int,
+		bottom := REPORT_MARGIN) -> MarginContainer:
 	var slot := MarginContainer.new()
 	slot.set_anchors_preset(Control.PRESET_FULL_RECT)
 	slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for side in ["left", "top", "right", "bottom"]:
+	for side in ["left", "top", "right"]:
 		slot.add_theme_constant_override("margin_%s" % side, int(REPORT_MARGIN))
+	slot.add_theme_constant_override("margin_bottom", int(bottom))
 	view.size_flags_horizontal = horizontal
-	view.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	view.size_flags_vertical = vertical
 	slot.add_child(view)
 	return slot
 
@@ -647,6 +724,31 @@ func _make_left_column() -> VBoxContainer:
 	_bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	column.add_child(_bar)
 	column.add_child(_label)
+	return column
+
+## Le compte rendu de phase, puis le panneau d'affectation dessous.
+##
+## Empilés pour la raison que la première capture de `W2` a montrée : posés séparément,
+## l'un en haut à droite et l'autre en bas à droite, ils se **recouvrent** dès que le
+## plateau porte cinq actions — le panneau grandit vers le haut et vient manger les lignes
+## « Chantiers » et « Upkeep » du rapport. Ce n'est pas une marge à régler : c'est deux
+## vues qui grandissent l'une vers l'autre, donc un chevauchement qui n'attend qu'une
+## phase chargée. Une colonne les fait se pousser au lieu de se croiser.
+##
+## Le prix est que le compte rendu descend du haut de l'écran, où `E2` l'avait mis. Il n'y
+## était pas par principe mais parce que rien d'autre n'occupait ce coin, et il reste au
+## même endroit d'une résolution à l'autre — ce qui est la seule chose qu'on lui demande.
+##
+## Les deux se rétractent à leur largeur ; sans ça, la colonne étirerait le plus étroit
+## sur la largeur du plus large.
+func _make_right_column() -> VBoxContainer:
+	var column := VBoxContainer.new()
+	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	column.add_theme_constant_override("separation", int(REPORT_MARGIN))
+	_panel.size_flags_horizontal = Control.SIZE_SHRINK_END
+	column.add_child(_panel)
+	_crew.size_flags_horizontal = Control.SIZE_SHRINK_END
+	column.add_child(_crew)
 	return column
 
 ## Le rapport texte. Il n'a plus ni ancre ni décalage depuis `E2` : il est empilé sous la
@@ -679,6 +781,21 @@ func _make_label() -> Label:
 ## même rapport, dont une seule serait vérifiée par la capture — donc l'autre dériverait.
 ## Ce qui reste imprimé est ce qu'aucune image ne rend lisible d'un coup d'œil : la réserve
 ## chiffrée, qui dit si la bourse a bien été débitée.
+##
+## **`W2` lui retire la table des actions posées**, pour la même raison et à contrecœur :
+## c'est elle qui avait attrapé le seul vrai bug de `D2`. Elle est désormais dessinée par
+## le panneau d'affectation, avec les ouvriers qui la tiennent, et la garder en texte
+## aurait laissé la version imprimée dire vrai pendant qu'une mise en page fautive cachait
+## l'autre — c'est exactement le piège que `E2` a rencontré deux fois de suite.
+##
+## Ce que la journée scriptée traverse a changé en revanche : elle remplit les postes par
+## le **bouton**, donc par `StaffingAdvisor`. Le chemin neuf du jalon est emprunté par le
+## seul contrôle qui regarde l'écran.
+##
+## Et elle s'arrête désormais **au milieu** d'une phase, sur une dernière manche posée et
+## affectée qu'on ne finit pas. Une capture prise juste après une résolution montrait un
+## plateau vide et six fiches oisives, c'est-à-dire tout `W2` sauf ce qu'il fait : la
+## seule image qui prouve quelque chose est celle où des ouvriers tiennent des postes.
 func _capture_if_asked() -> void:
 	var path := DevShot.path()
 	if path.is_empty():
@@ -687,6 +804,7 @@ func _capture_if_asked() -> void:
 	_world.cursor().hover_cell(DevShot.hover_cell(_state().grid().size() / 2))
 	for _day in maxi(DevShot.argument(DevShot.SHOT_EVENINGS_FLAG).to_int(), 1):
 		_scripted_day()
+	_scripted_open_phase()
 	for _frame in DevShot.WARMUP_FRAMES:
 		await get_tree().process_frame
 	print("[run_harness] %s" % _banner())
@@ -694,7 +812,6 @@ func _capture_if_asked() -> void:
 		_palette.bundle_text(_state().ledger().amounts()),
 		_state().ledger().total(), _state().ledger().capacity()])
 	print("[run_harness] %s" % _hover_line())
-	print("[run_harness] %s" % _board_lines())
 	var error := get_viewport().get_texture().get_image().save_png(path)
 	print("[run_harness] capture vers %s : %s" % [path, error_string(error)])
 	get_tree().quit(OK if error == OK else FAILED)
@@ -720,6 +837,20 @@ func _scripted_day() -> void:
 		if closed:
 			return
 
+## Pose et affecte sans finir la phase : l'état sur lequel la capture s'arrête.
+##
+## C'est le seul moment où le panneau d'affectation a quelque chose à montrer — des postes
+## ouverts et des ouvriers dessus. Une phase résolue les efface tous les deux, et l'image
+## ne dirait plus rien de ce que `W2` ajoute.
+func _scripted_open_phase() -> void:
+	if _state().cycle().is_over():
+		return
+	if _state().cycle().permits(PhaseDef.ACTION_PLAY):
+		_scripted_plays()
+	if _state().cycle().permits(PhaseDef.ACTION_ASSIGN):
+		_scripted_staffing()
+	_refresh_markers()
+
 ## Pose une carte de chaque nature qui trouve une cible : un bâtiment payable, puis les
 ## verbes. L'ordre compte — le chantier doit exister avant que *Construire* le vise.
 func _scripted_plays() -> void:
@@ -737,15 +868,14 @@ func _play_scripted(card: StringName) -> bool:
 			return true
 	return false
 
-## Remplit les actions posées avec les ouvriers libres, dans l'ordre.
+## Remplit les actions posées, par le bouton lui-même.
+##
+## Elle recopiait la boucle « premier libre » jusqu'à `W2`. Passer par
+## `RunManager.auto_staff()` la raccourcit à une ligne, et surtout fait entrer le chemin
+## neuf du jalon dans le seul contrôle qui regarde l'écran — sans quoi ni le parsing, ni
+## les tests, ni la capture n'auraient jamais emprunté le bouton.
 func _scripted_staffing() -> void:
-	for action in _state().board().to_plan().actions():
-		while _state().staffed_on(action.id()).size() < action.capacity():
-			var free := _state().free_workers()
-			if free.is_empty():
-				return
-			if not RunManager.staff(free[0], action.id()):
-				break
+	RunManager.auto_staff()
 	_refresh_markers()
 
 ## Les cellules de la carte, balayées **du centre vers les bords**.

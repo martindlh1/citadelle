@@ -56,16 +56,31 @@ static func play(state: RunState, card: StringName, cell: Vector2i, turns := 0,
 ## chôme —, mais c'est une façon coûteuse de perdre de la main-d'œuvre, et la rattraper au
 ## même endroit que le retrait évite d'avoir à y penser.
 ##
-## La carte, elle, ne revient pas en main : elle est à la défausse depuis qu'on l'a jouée.
-## C'est l'état par défaut et non une réponse — le sort des cartes est l'`OUVERT` de 3.5,
-## et `I2b` le tranchera devant un vrai playtest.
+## **La carte revient en main**, et c'est une correction plutôt qu'un ajout. Ce docstring
+## affirmait le contraire — « elle est à la défausse depuis qu'on l'a jouée, c'est l'état
+## par défaut et non une réponse » — en renvoyant à l'`OUVERT` de 3.5. Il confondait deux
+## gestes : cet `OUVERT` porte sur les cartes **non jouées en fin de phase**, alors qu'un
+## retrait reprend une carte **jouée**, dans la phase même, avant que quoi que ce soit
+## n'ait été consommé. Rien n'a produit, aucun ouvrier n'a travaillé, la réserve n'a pas
+## bougé : il n'y a rien à faire payer.
+##
+## Le prix de l'ancienne lecture se voyait au clavier et nulle part ailleurs : le clic
+## droit n'était pas une annulation mais un sacrifice, et il punissait une cible mal
+## visée plutôt qu'une décision. Le scumming qu'on aurait pu craindre en retour —  poser
+## pour lire la capacité, retirer, reposer ailleurs — n'existe pas : le ciblage annonce
+## déjà la capacité **avant** le jeu, et la surbrillance montre les cibles légales.
+##
+## Une **carte de bâtiment** ne passe pas par ici : elle ouvre un chantier, que rien ne
+## retire. « Que rend un chantier annulé ? » est l'`OUVERT` de 3.2, et il reste entier.
 static func withdraw(state: RunState, action: int) -> bool:
 	assert(state != null, "retrait sans run")
 	if not state.cycle().permits(PhaseDef.ACTION_PLAY):
 		return false
-	if not state.board().has(action):
+	var posted := state.board().at(action)
+	if posted == null:
 		return false
 	state.release_action(action)
+	state.deck().take_back(posted.card())
 	return state.board().withdraw(action)
 
 ## Rien ne porte ce numéro d'action.
@@ -123,6 +138,38 @@ static func staff(state: RunState, worker: StringName, action: int) -> bool:
 		return false
 	state.assign_worker(worker, action)
 	return true
+
+## Remplit les postes libres au mieux et rend les ouvriers que ça vient de placer.
+##
+## Le bouton d'auto-affectation de `DESIGN.md` 3.4, et le même partage qu'à `I1` pour les
+## verbes de chantier : `StaffingAdvisor` **ordonne**, ce fichier **applique**. Le plan
+## est calculé une fois sur l'état d'avant, puis posé geste par geste à travers
+## `staff()` — donc à travers `staffing_refusal()`, qui reste le seul juge. Une porte
+## d'affectation qui court-circuiterait les cinq refus serait une seconde liste de
+## règles, et c'est exactement ce que `I1` a refusé en écrivant la première.
+##
+## Il ne déplace personne : `plan()` ne propose que des ouvriers libres, ce qui fait de la
+## surcharge manuelle un geste qui **tient**. On place à la main ceux dont on se soucie,
+## on appuie sur le bouton pour le reste, et l'ordre des deux gestes n'a pas d'importance.
+##
+## L'assertion tient l'invariant que l'advisor promet — un plan ne se fait pas refuser à
+## l'application, puisqu'il compte les postes de la même façon que `staffing_refusal()`.
+## Elle ne survit pas à un export release, et c'est sans danger : un refus y sortirait
+## simplement l'ouvrier de la liste rendue, sans rien casser.
+static func auto_staff(state: RunState) -> Array[StringName]:
+	assert(state != null, "auto-affectation sans run")
+	var staffed: Array[StringName] = []
+	if not state.cycle().permits(PhaseDef.ACTION_ASSIGN):
+		return staffed
+	var orders := StaffingAdvisor.plan(state.terrain(), state.city().to_snapshot(),
+		state.board().to_plan(), state.to_assignment(), state.labor(),
+		state.balance().actions)
+	for worker in orders:
+		var accepted := staff(state, worker, orders[worker])
+		assert(accepted, "le plan d'affectation a proposé %s, que staff() refuse" % worker)
+		if accepted:
+			staffed.append(worker)
+	return staffed
 
 ## Rappelle tous les ouvriers d'une action et rend leurs identifiants.
 static func unstaff(state: RunState, action: int) -> Array[StringName]:

@@ -97,16 +97,25 @@ attrapé le seul vrai bug de `D2` — deux *Récolter* sur une même cabane à d
 trois ouvriers dedans. Il ne se voyait ni au parsing, ni aux tests, ni à l'œil sur
 l'image : il se lisait dans cette table.
 
-Celle du harnais **Run** imprime le bandeau de phase, la **réserve chiffrée**, la ligne
-de survol et la table des actions posées. Elle joue une journée entière par
-`--shot-evenings` plutôt qu'un geste : ouvrir un chantier, le payer, y envoyer des
-ouvriers, le voir monter d'un cran et le relief se creuser à côté. Une capture qui ne
-montrerait qu'une carte posée ne dirait rien de ce que `I1` ajoute, et la réserve
-imprimée est la seule preuve que la bourse a bien été débitée.
+Celle du harnais **Run** imprime le bandeau de phase, la **réserve chiffrée** et la ligne
+de survol. Elle joue une journée entière par `--shot-evenings` plutôt qu'un geste : ouvrir
+un chantier, le payer, y envoyer des ouvriers, le voir monter d'un cran et le relief se
+creuser à côté. Une capture qui ne montrerait qu'une carte posée ne dirait rien de ce que
+`I1` ajoute, et la réserve imprimée est la seule preuve que la bourse a bien été débitée.
+
+Elle s'arrête **au milieu** d'une phase depuis `W2`, sur une dernière manche posée et
+affectée qu'elle ne finit pas. Prise juste après une résolution, elle montrait un plateau
+vide et six fiches oisives — c'est-à-dire tout sauf ce que le panneau d'affectation fait.
+Elle remplit ces postes par le **bouton**, ce qui fait passer le chemin neuf du jalon sous
+le seul contrôle qui regarde l'écran.
 
 Elle **n'imprime plus** le rapport du dernier soir : depuis `E2` c'est un panneau, et un
 panneau se regarde. Le réécrire en texte à côté aurait donné deux mises en forme du même
-rapport, dont une seule serait vérifiée par la capture — donc l'autre dériverait.
+rapport, dont une seule serait vérifiée par la capture — donc l'autre dériverait. `W2` lui
+retire la **table des actions posées** pour la même raison, et à contrecœur : c'est elle
+qui avait attrapé le seul vrai bug de `D2`. Elle est désormais dessinée par le panneau,
+avec les ouvriers qui la tiennent, et la garder en texte aurait laissé la version imprimée
+dire vrai pendant qu'une mise en page fautive cachait l'autre.
 
 Le harnais **HUD** est le seul dont `--shot-evenings` ne désigne pas un temps mais un
 **cas** : il ne joue rien, il fabrique des états — réserve pleine qui gaspille, famine,

@@ -275,6 +275,12 @@ Un `MarginContainer` plein écran dont l'enfant porte `SIZE_SHRINK_BEGIN` ou `SI
 
 **Une vue rafraîchie à chaque image met ses nœuds à jour sur place** plutôt que de les reconstruire. C'est ce qui permet de l'appeler depuis `_process` sans churn d'allocation, et surtout sans avoir à énumérer tous les gestes qui touchent son sujet — un oubli dans cette liste se lit comme un compteur qui ne bouge pas.
 
+**Deux vues qui grandissent l'une vers l'autre vivent dans le même conteneur.** `W2` a posé le panneau d'affectation en bas à droite et laissé le compte rendu de phase en haut à droite : les deux tiennent tant que le plateau est vide, et se **recouvrent** dès qu'il porte cinq actions. Ce n'est pas une marge à régler — c'est un chevauchement qui n'attend que la phase la plus chargée, donc qui se manifeste le plus tard possible. Empilées dans un `VBoxContainer`, elles se poussent au lieu de se croiser.
+
+**Et une liste qui suit la partie se borne.** Un HUD a une hauteur fixe, une phase peut poser un nombre quelconque d'actions : une liste sans plafond finit dehors. On en affiche un nombre nommé et on compte le reste sur une ligne. Corollaire : augmenter une marge basse **aggrave** le débordement au lieu de le corriger, parce qu'un conteneur trop petit pour son contenu le laisse déborder par le bas au lieu de le remonter.
+
+**Une vue sur laquelle on clique porte `MOUSE_FILTER_STOP`**, à l'inverse des vues de lecture, qui laissent passer en `IGNORE` pour que le curseur de cellule continue de piocher dessous. Le geste tombe alors dans le `gui_input` de la vue et n'atteint jamais `_unhandled_input` du harnais, ce qui est exactement le partage voulu — sans quoi un clic sur une fiche jouerait aussi la carte tenue sur la case cachée derrière.
+
 ### Sélection de cellule
 
 **Pas de collider, pas de physique.** Raycast analytique en DDA sur la grille de hauteurs, implémenté dans `domain/terrain/cell_picker.gd` comme fonction pure :

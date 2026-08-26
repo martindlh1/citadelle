@@ -4,6 +4,259 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-26 — `W2` : choisir qui, et une phrase de design qu'il a fallu corriger
+
+**État : terminé.** Sept commits sur `feat/w2-assignment`, tirée de `master` — dont trois
+qui corrigent le jalon après coup, sur un défaut trouvé au clavier. Les trois
+commandes passent : boot sans erreur ni warning, tout `src/domain/` parse, **625 tests
+verts contre 589** à l'ouverture, 39 suites contre 38.
+
+### Ce qui a été livré
+
+- **Domaine** — `StaffingAdvisor` dans `domain/run/` ; `ProductionResolver.family_of()`
+  devient publique ; `RunOrchestrator.auto_staff()`.
+- **Adapters** — `WorkerCard` et `AssignmentPanel` sous `src/adapters/workforce/`, le
+  dossier que l'arborescence réservait depuis `I0` et que rien n'habitait.
+- **Aucun DTO de `contracts/` créé ni modifié**, pour la deuxième fois d'affilée.
+- **Une suite neuve et 36 cas de plus**, dont dix sur l'orchestrateur.
+- `Deck.take_back()`, et le retrait qui rend enfin sa carte — voir plus bas.
+- `run_harness` perd ses deux dernières lignes de plateau et de roster ; `RunManager`
+  gagne un passe-plat.
+- `DESIGN.md` 3.4, 3.5 et 8 ; `CLAUDE.md` ; `README.md`.
+
+### La phrase de `DESIGN.md` qu'il a fallu corriger, et pourquoi je ne l'ai pas contournée
+
+3.4 listait trois mitigations du micro-management et concluait : « C'est du travail
+d'adapter, pas de domaine. » C'est vrai des deux qui encadrent la troisième — un effectif
+réduit est un chiffre d'équilibrage, une affectation persistante est une politique
+d'écran. **Ce n'est pas vrai du bouton.**
+
+Classer des ouvriers exige la famille que chaque action posée créditera, les
+multiplicateurs de la `LaborForce`, et la capacité figée à la pose. La famille n'est
+calculable qu'à un seul endroit : `ProductionResolver.family_of()`, dont le docstring dit
+qu'elle est « posée ici et nulle part ailleurs ». L'écrire dans une vue aurait donc
+demandé de l'y recopier, et une vue qui classerait sur une famille que le soir ne crédite
+pas est un défaut qui ne se voit qu'au bout de dix journées, sur une courbe d'XP.
+
+L'argument décisif est ailleurs : **le bouton est un geste.** `CLAUDE.md` promet depuis
+`I0` qu'un seed plus une suite de gestes rejoue un run à l'identique. Un geste dont le
+résultat n'est pas reproductible casse cette promesse, et `src/adapters/` n'est pas testé.
+
+La question a été posée avant d'écrire une ligne, avec les deux autres, et la réponse est
+entrée dans `DESIGN.md` dans le même commit que le domaine. Le journal seul n'aurait pas
+suffi : la prochaine session lit le design.
+
+### La règle du bouton, qui est du gameplay et non de la technique
+
+Elle est écrite en 3.4 parce qu'elle se discute :
+
+> Parcourir les actions **dans l'ordre de pose**, remplir les postes qui restent avec
+> l'ouvrier libre le plus efficace dans la famille de cette action, départager à égalité
+> par l'ordre du roster. Sauter une action que rien ne crédite. Ne jamais déplacer un
+> ouvrier placé à la main.
+
+Le choix le plus discutable est ce qu'elle **refuse** de faire : elle ne pondère pas par
+le rendement. Une récolte à 3 bois et une case nue à 1 se valent devant elle. Pondérer
+aurait demandé de lire `_yield_of()`, et surtout rendu un cran de chantier comparable à
+une récolte — un arbitrage d'équilibrage, donc `I3`.
+
+Ce que ça achète en échange vaut mieux que l'optimalité : **l'ordre de pose est la
+priorité que le joueur a déjà exprimée**, et le bouton s'y tient. Il ne décide jamais
+quelle action mérite un ouvrier, seulement *qui* y va — c'est-à-dire exactement la moitié
+évidente de la décision, celle que 3.4 veut retirer. Un bouton plus malin serait un bouton
+qu'on ne pourrait pas prédire, donc contre lequel la surcharge manuelle serait un combat.
+
+### Le cas de test qui porte le jalon
+
+`test_the_announced_family_is_the_one_the_evening_credits` résout un vrai soir avec les
+deux résolveurs, puis confronte **chaque ligne de travail** à ce que l'advisor annonçait
+pour l'action dont elle vient. C'est le seul vrai risque du jalon, et il est silencieux :
+un classement sur la mauvaise piste produit des affectations plausibles, un soir qui
+résout normalement, et une courbe d'XP qui dérive sans que rien ne tombe.
+
+Deux égalités sont épinglées exprès. À efficacité égale c'est l'ordre reçu qui départage,
+et une famille que personne n'a entamée laisse l'ordre du roster intact. Sans les deux,
+deux runs partis du même seed enverraient deux ouvriers différents sur le même poste, et
+ni la bourse ni le relief ne le montreraient. Le cas de rejeu de `I1` a gagné un jumeau
+qui passe par le bouton.
+
+### Ce que le domaine n'a pas eu à inventer
+
+`family_of()` devient publique plutôt que d'être recopiée, et c'est le même geste que
+`staffing_refusal()` à `I1` : une seconde question se pose sur la même règle, donc la
+règle sort, elle ne se duplique pas. `auto_staff()` applique le plan **à travers**
+`staff()`, jamais autour — une porte d'affectation qui court-circuiterait les cinq refus
+serait une seconde liste de règles.
+
+`StaffingAdvisor.plan()` **ordonne et ne mute rien**, comme `SiteResolver` depuis `I1`.
+Bénéfice concret : il se teste sans run, et l'écran pourrait l'appeler pour prévisualiser
+sans rien engager. Il compte les postes exactement comme `staffing_refusal()`, ce qui
+garantit qu'aucune paire proposée ne peut se faire refuser — un plan à moitié appliqué
+serait invisible à l'écran.
+
+### Ce qu'un `Worker` fait dans une vue
+
+`W1` a écrit que « rien hors de `domain/workforce/` n'en voit un », et la fiche en reçoit
+un. Ce n'est pas une entorse : la phrase vise les **systèmes du domaine**, ceux à qui l'on
+ne montre que des projections. Un adapter lit le domaine — `ResourceBar` prend un
+`Ledger`, `HandView` une `Hand`, `BuildingRenderer` un `CityState`. Passer par la
+`LaborForce` aurait coûté le niveau, l'XP et la présence, qui n'y traversent pas justement
+parce que l'Économie n'a pas à les connaître.
+
+Le panneau, lui, reçoit un **`RunState`**, ce qu'aucune vue n'avait fait. Une affectation a
+besoin du plateau, du roster et du brouillon qui les relie, plus le relief et la ville pour
+la famille de chaque action : `RunState` est le seul objet qui les tienne ensemble, et 3.8
+l'autorise à exister pour cette raison même. Les passer un par un aurait fait six arguments
+dont l'appelant devrait calculer le sixième.
+
+### Le legs de `E2` repris, et déplacé
+
+`ProductionPanel` « ne nomme pas qui a franchi un palier » parce que ça lui demanderait le
+`Roster`, « c'est-à-dire exactement la dépendance que `W2` existe pour porter ». Elle est
+portée — mais **sur la fiche de l'intéressé**, pas dans le compte rendu de récolte. Un
+palier appartient à la personne, et l'annoncer aux deux endroits aurait rejoué le doublon
+que `E2` avait précisément défait en retirant la réserve du pavé de texte. Le panneau
+d'Économie n'a pas bougé d'une ligne.
+
+### Trois défauts de mise en page, tous trouvés en capture
+
+Ni le parsing ni les tests ne regardent l'écran, et `W2` le redémontre — cette fois sur des
+défauts **structurels** plutôt que sur des pièges d'API.
+
+**Deux panneaux qui grandissent l'un vers l'autre finissent par se recouvrir.** Le compte
+rendu de phase en haut à droite et le panneau d'affectation en bas à droite tiennent tant
+que le plateau est vide, et se chevauchent dès cinq actions posées. Ce n'est pas une marge
+à régler : c'est un chevauchement qui n'attend que la phase la plus chargée, donc qui se
+manifeste le plus tard possible. Une colonne les fait se pousser au lieu de se croiser.
+
+**Une liste qui suit la partie sort de n'importe quel HUD de taille fixe.** Elle est bornée
+et le reste est compté. Corollaire contre-intuitif appris en chemin : augmenter la marge
+basse **aggrave** le débordement, parce qu'un conteneur trop petit pour son contenu le
+laisse déborder par le bas au lieu de le remonter.
+
+**Une ligne qui n'apparaît qu'au palier fait sauter toute la grille**, et elle le fait au
+moment exact où le compte rendu de phase est le plus long — donc où la colonne a le moins
+de place. La ligne est désormais toujours là, et montre l'XP totale à défaut de palier :
+pas du remplissage, l'axe du niveau d'ouvrier, celui que les pistes n'expliquent pas. Même
+raison que les quatre colonnes de `ResourceBar` qui ne bougent pas à zéro.
+
+Les trois sont dans `CLAUDE.md` : la prochaine vue n'a pas à les réapprendre.
+
+### Ce que la capture a dû changer pour prouver quelque chose
+
+Elle s'arrêtait après une résolution, donc sur un plateau vide et six fiches oisives —
+c'est-à-dire sur tout `W2` sauf ce qu'il fait. Elle joue maintenant une manche de plus
+qu'elle **ne finit pas** : la seule image qui prouve quelque chose est celle où des
+ouvriers tiennent des postes.
+
+Elle remplit ces postes par le **bouton**, ce qui fait passer le chemin neuf du jalon sous
+le seul contrôle qui regarde l'écran. Et elle perd la table des actions posées, à
+contrecœur : c'est elle qui avait attrapé le seul vrai bug de `D2`, mais la garder aurait
+laissé la version imprimée dire vrai pendant qu'une mise en page fautive cachait l'autre.
+
+### Une heure perdue sur un `cd`
+
+À noter parce que ça se reproduira. Un `cd src/adapters/workforce &&` dans une commande a
+laissé le shell dans ce dossier, et les commandes suivantes ont lancé Godot avec
+`--path .` sur un dossier sans projet. Symptômes : le boot cesse d'imprimer sa ligne, une
+capture ne rend jamais la main, le renderer bascule en OpenGL, `.godot/` « a disparu ».
+Rien n'était cassé. **Toujours des chemins absolus**, et vérifier `pwd` avant de conclure
+qu'un projet est en vrac.
+
+### Ce qui n'a pas été fait, et qui était au plan
+
+**La bande de fiches dans le harnais Effectifs.** Le plan la donnait, je l'ai retirée
+plutôt que de la forcer : ce harnais est un rapport texte plein écran sur dix ouvriers et
+trente soirs, et six fiches graphiques n'y ont ni la place ni l'idiome. La fiche se regarde
+dans le harnais Run, qui est aussi l'endroit où elle sert. Le seul manque réel est de la
+voir aux paliers 3 et 4, que quinze journées n'atteignent pas.
+
+### Ce qui reste
+
+- **l'affectation persistante d'une phase à l'autre** — la troisième mitigation de 3.4.
+  Elle touche au vidage du board et au sort de la main non jouée, qui est l'`OUVERT` de
+  3.5 : c'est `I2b`, sur un `.tres`.
+- **le recrutement** — `OUVERT` de 3.4. Le panneau affiche « 6/12 places » ; ce qui les
+  remplit n'existe toujours pas.
+- **`X5`** — le niveau se gagne et se lit sur la fiche, il n'ouvre rien.
+- **le libellé français d'une famille.** La fiche affiche « Harvest » et « Construction »,
+  parce qu'aucune famille n'est déclarée nulle part : 3.4 pose que la liste n'est pas close
+  et qu'aucun code ne l'énumère. Écrire une table identifiant → libellé dans une vue
+  rouvrirait l'énumération que la Construction a pu rejoindre sans une ligne de GDScript à
+  `I1`. Le jour où ça comptera, ce sera un champ de `.tres`.
+- **la sortie sous `scenes/ui/`** — `I2`, comme les trois vues de `E2`. C'est là aussi que
+  la borne de trois lignes du panneau devra être traitée pour de bon.
+
+### Le défaut que le clavier a trouvé, deux jalons de suite
+
+*(Trouvé par l'humain juste après le jalon, corrigé dans la foulée. **625 tests verts
+contre 619.**)* Retirer une action ne rendait pas sa carte.
+
+Le comportement était **documenté comme volontaire** dans `RunOrchestrator.withdraw()` —
+« elle est à la défausse depuis qu'on l'a jouée, c'est l'état par défaut et non une
+réponse » — et renvoyé à l'`OUVERT` de 3.5. Le docstring avait tort, et sur un point
+précis : **il confondait deux gestes.** Cet `OUVERT` porte sur les cartes *non jouées en
+fin de phase* ; un retrait reprend une carte *jouée*, dans la phase même, avant que quoi
+que ce soit n'ait été consommé — aucun ouvrier n'a travaillé, la réserve n'a pas bougé.
+Deux moments, deux questions, et `I2b` garde la sienne entière.
+
+Le prix de l'ancienne lecture ne se voyait qu'au clavier : le clic droit n'était pas une
+annulation mais un sacrifice, et il punissait une cible mal visée plutôt qu'une décision.
+Le scumming qu'on aurait pu craindre en retour — poser pour lire la capacité, retirer,
+reposer ailleurs — n'existe pas, la ligne de survol annonçant déjà « accepté, N poste(s) »
+avant le jeu.
+
+**Aucun test ne figeait l'ancien comportement**, et c'est la différence avec le cas que
+`E2` avait dû réécrire : les trois cas de retrait ne vérifiaient que le plateau et les
+ouvriers. Rien n'avait été prouvé, seulement supposé.
+
+`Deck.take_back()` est l'inverse exact de `discard()`, et reprend le **dernier exemplaire
+tombé** — sans conséquence observable, deux exemplaires étant interchangeables, mais ça
+fixe l'ordre et garde deux runs du même seed identiques jusque dans les piles.
+
+Le cas qui compte est que la carte rendue **se rejoue** : sans lui, les autres passeraient
+sur une carte rendue à une main dont plus rien ne pourrait la sortir. Son revers aussi —
+un retrait que la phase refuse ne rend rien, sans quoi un clic droit dans la mauvaise
+phase serait une source de cartes gratuites.
+
+**Et un second défaut est tombé avec, que personne n'avait signalé.** Le harnais garde un
+**rang** dans la main, jamais un identifiant — la leçon de `D2`, deux exemplaires d'une
+même carte étant indistinguables. Une carte rendue s'insère dans son pool et décale tout
+ce qui suit : tenir une carte de bâtiment et retirer une action changeait donc
+silencieusement ce qu'on tenait. `_play_here()` reposait déjà la sélection pour cette
+raison exacte ; `_withdraw_here()` le fait maintenant aussi.
+
+### Prochain jalon
+
+**`F1`** — le bouchon de combat, `CombatForce` et `DamageReport`. Inchangé, et `W2` ne lui
+coûte rien : il s'est intercalé comme annoncé. Ce qu'il lui laisse d'utile est un roster
+qui se regarde — le jour où le `DamageReport` blessera quelqu'un, la fiche a déjà la place
+de le dire, et `WorkerCard` sait déjà griser un absent.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action d'`InputMap`
+ajoutée, **aucun champ de `data/` créé** — les chiffres des deux vues sont de la mise en
+forme, et `data/balance/` reste réservé aux questions ouvertes.
+
+- `F5` lance toujours le **harnais Run** — `HARNESS` vaut `&"run"`.
+- **Les commandes ont changé pour le travail** : un clic sur une fiche la sélectionne, un
+  clic sur une ligne d'action y envoie le sélectionné, **Auto** remplit le reste. Espace
+  marche toujours sur la case survolée, mais il envoie désormais l'ouvrier **sélectionné**,
+  ou le meilleur pour cette action à défaut — plus jamais le premier venu.
+- **La branche n'est pas fusionnée** : `feat/w2-assignment`, quatre commits.
+- **L'équilibrage des ressources reste le premier chantier ouvert**, et `W2` ne l'a pas
+  touché. La capture au jour 8 montre une famine à 5 ouvriers à jeun et une réserve à 29 —
+  le constat de `I1` est inchangé, deux récoltes par jour pour un seul upkeep n'ont pas
+  suffi.
+- **Les paliers sont lents à voir** : quatre XP par poste, vingt-cinq par palier, donc sept
+  soirs de travail dans la même famille pour le premier cran. La fiche le rend enfin
+  observable — c'est exactement le genre de chiffre que `I3` aura à trancher.
+- Les caches de classes et d'uid ont été reconstruits pendant la session, et les `.gd.uid`
+  des trois scripts neufs sont commités.
+
+---
+
 ## 2026-08-26 — `E2` : la réserve regardable, et le mensonge qu'un écran a trouvé
 
 **État : terminé.** Six commits sur `master`. Les trois commandes passent : boot sans

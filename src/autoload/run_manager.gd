@@ -76,6 +76,11 @@ func staff(worker: StringName, action: int) -> bool:
 	assert(is_running(), "affectation hors run")
 	return RunOrchestrator.staff(_state, worker, action)
 
+## Remplit les postes libres au mieux et rend les ouvriers que ça vient de placer.
+func auto_staff() -> Array[StringName]:
+	assert(is_running(), "auto-affectation hors run")
+	return RunOrchestrator.auto_staff(_state)
+
 ## Rappelle tous les ouvriers d'une action.
 func unstaff(action: int) -> Array[StringName]:
 	assert(is_running(), "rappel hors run")
