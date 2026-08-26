@@ -4,6 +4,276 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-26 — `E2` : la réserve regardable, et le mensonge qu'un écran a trouvé
+
+**État : terminé.** Six commits sur `master`. Les trois commandes passent : boot sans
+erreur ni warning, tout `src/domain/` parse, **589 tests verts contre 585** à l'ouverture.
+Premier jalon d'écran du projet.
+
+### Ce qui a été livré
+
+- **Adapters** — `CommodityPalette`, `ResourceBar`, `ProductionPanel` sous
+  `src/adapters/hud/`.
+- **Schéma** — `CommodityData` gagne un `order`, et les quatre `.tres` avec.
+- **Domaine** — `RunOrchestrator` relève la réserve dès qu'un chantier d'entrepôt est
+  achevé. Trois lignes, aucune signature déplacée.
+- **Aucun DTO de `contracts/` créé ni modifié.** C'est la première chose à dire du jalon.
+- **Quatre cas de plus**, dont un qui en **remplace** un de `I1`.
+- `run_harness` réécrit à deux endroits et allégé de deux autres, `economy_harness`
+  débarrassé de sa copie, `hud_harness` neuf.
+- `DESIGN.md` 3.3 et 8 ; `CLAUDE.md` ; `README.md`.
+
+### Ce qu'un jalon d'écran n'a pas à écrire
+
+Le plan tenait en une ligne qui a décidé de tout le reste : **aucun DTO de `contracts/`
+ne bouge**. Deux vues qui lisent un `Ledger` et un `PhaseReport` ne franchissent aucune
+frontière neuve — `CLAUDE.md` pose depuis `I1` que le critère d'entrée dans `contracts/`
+est un second **système du domaine**, pas un adapter, et que « les adapters lisent le
+domaine, c'est leur métier ». Le précédent était déjà posé deux fois : `HandView` reçoit
+une `Hand`, `BuildingRenderer` un `CityState`.
+
+Un `LedgerSnapshot` aurait été le geste réflexe, et il aurait figé une forme que personne
+ne traverse.
+
+Corollaire assumé : **peu de tests**. `src/adapters/` n'est pas testé, et un jalon dont le
+contenu est trois `Control` n'a pas à inventer du domaine pour se donner de quoi tester.
+Les quatre cas écrits portent sur les deux seules choses testables — le rang d'une
+ressource, et la correction de domaine ci-dessous.
+
+### La jauge est unique, et c'est tout le sujet
+
+`E1` a tranché pour une **réserve commune** : cent unités partagées, « remplir sa réserve
+de bois, c'est renoncer à stocker de la pierre ». Depuis, c'était une règle de résolution
+que rien ne montrait. Quatre jauges côte à côte auraient dessiné quatre plafonds
+indépendants, c'est-à-dire exactement la lecture que `E1` a écartée — et la phrase de 3.3,
+« un joueur qui ne la voit pas ne comprend pas pourquoi son entrepôt manque », serait
+restée une intention.
+
+Une seule barre segmentée où le bois qui monte pousse la place de la pierre est la
+décision de `E1` rendue regardable. Le harnais HUD le met à l'épreuve sur une réserve
+pleine : la jauge sature, et la ligne « perdu au plafond » nomme les trois ressources que
+le prorata a écrêtées ensemble.
+
+Deux détails d'affichage qui sont des décisions, pas de la mise en forme. **Les quatre
+colonnes ne bougent jamais**, même à zéro : une ressource qui apparaîtrait le jour où l'on
+en gagne la première unité ferait glisser ses voisines sous l'œil, et il faudrait relire
+la barre entière pour retrouver la nourriture. Et **le reste de la division va à la place
+libre**, jamais à une ressource : lui donner un pixel de plus ferait mentir la seule barre
+qui compte, celle qui dit s'il reste de la place. Une réserve pleine n'a donc aucune place
+libre à l'écran, pas même d'un pixel.
+
+### Le mensonge d'une phase, que seul un écran pouvait trouver
+
+**C'est le vrai apport du jalon, et il n'était pas au plan.**
+
+`ProductionResolver.resolve()` pose la capacité de la réserve, puis `_apply()` achève les
+chantiers. Un entrepôt fini ce soir ne relevait donc la réserve qu'**au soir suivant** :
+entre les deux, un bâtiment visiblement terminé sur la carte cohabitait une phase entière
+avec une jauge annonçant l'ancien plafond.
+
+Personne ne l'avait vu, et pour une raison qui vaut d'être écrite : **aucun écran
+n'affichait la capacité en continu**, et la résolution suivante la reposait de toute
+façon. Un mensonge qui se corrige tout seul reste un mensonge le temps qu'il dure. Le
+harnais Économie contournait d'ailleurs la même chose depuis `E1`, en reposant la capacité
+à la main après ses poses, et son commentaire renvoyait la question « là où le HUD de `E2`
+le fera aussi ».
+
+Elle n'a pas été faite là. Un adapter qui appellerait `Ledger.set_capacity()` serait la
+faute d'architecture que `CLAUDE.md` refuse en premier. C'est `RunOrchestrator` qui relève
+la réserve, juste après avoir appliqué les chantiers, parce qu'il est le seul à tenir la
+ville et la bourse.
+
+**La règle d'ordre de `I1` ne bouge pas d'un pouce.** La production est déjà calculée
+quand le plafond monte : un entrepôt achevé ce soir ne sauve toujours pas la récolte de ce
+soir. Ce qui change n'est pas la résolution, c'est ce que l'écran raconte entre deux.
+
+### Le test de `I1` qu'il a fallu réécrire, et pourquoi ce n'est pas un recul
+
+`test_a_warehouse_finished_tonight_only_raises_the_cap_tomorrow` affirmait exactement ce
+que la correction change. Son docstring justifiait la **règle** — la récolte du soir n'est
+pas sauvée — mais son assertion portait sur un **effet de bord** : que le compteur vaille
+encore 100 à la fin de la phase. Les deux ne sont pas la même affirmation, et `I1` les a
+confondues parce que la seconde était la seule chose observable à l'époque.
+
+Le cas remplit désormais la réserve à ras bord avant de résoudre : la récolte du soir n'a
+nulle part où entrer, et elle est visiblement perdue alors même que l'entrepôt s'achève.
+C'est **plus fort** que ce que `I1` pouvait épingler, et ça laisse la capacité libre de se
+relever aussitôt. Deux cas neufs tiennent l'autre versant — le plafond est monté quand la
+phase rend la main, et une phase qui n'achève rien n'y touche pas.
+
+Réécrire un test qu'un jalon précédent a délibérément écrit, docstring argumentée à
+l'appui, mérite d'être signalé plutôt que fait en passant. La question à se poser était :
+est-ce que je casse la règle, ou est-ce que je casse l'observation qu'on en faisait ? La
+réponse était la seconde.
+
+### L'ordre des ressources, ou le troisième `_bundle_text()` évité
+
+`run_harness._bundle()` et `economy_harness._bundle_text()` étaient la même fonction
+écrite deux fois, et un panneau de production en voulait une troisième. C'est exactement
+le problème que le journal de `I1` note à propos du `_make_label()` à neuf exemplaires :
+« elle n'appartient à aucun jalon, ce qui est précisément pourquoi elle ne se fait
+jamais ». Celle-ci appartenait à celui-ci — afficher un lot de ressources *est* le sujet.
+
+`CommodityPalette` les remplace, et donne au passage un foyer à une question que personne
+n'avait posée : **dans quel ordre affiche-t-on les ressources ?** Les deux copies triaient
+par identifiant, donc en anglais interne, ce qui rangeait la nourriture — celle qui tue —
+entre le minerai et la pierre. Le rang vit désormais sur la `CommodityData`, avec le reste
+de ce qui fait une ressource, parce que la seule alternative était une liste d'identifiants
+dans un `.gd` : le nombre magique que les conventions refusent, et que `DESIGN.md` 3.3
+refuse nommément en sortant l'ensemble des ressources de l'énumération du code.
+
+Il commence à **1** et non à 0, pour la raison qui vaut sur tout `data/balance/` : un champ
+non renseigné vaut 0, et un rang 0 légitime aurait rendu l'oubli indétectable. Un cas de
+test tient le seul vrai piège du champ — deux ressources ne partagent pas un rang, sans
+quoi leur ordre retomberait sur une comparaison de `StringName`, stable le temps d'une
+session et différente à la suivante.
+
+### L'`OUVERT` refermé : les oisifs restent un compte
+
+`production_report.gd` portait la question depuis `E1`, renvoyée en toutes lettres à « ce
+que E2 tranchera devant une vraie maquette ». Trois raisons se cachaient derrière un seul
+chiffre : non affecté, affecté à une ancre vide, arrivé quand les slots étaient pris.
+
+Devant la maquette, la réponse est **non**, et pour deux raisons qui se cumulent. Au
+niveau de la phase les trois s'effondrent de toute façon en « n'a tenu aucun poste », qui
+est la seule lecture juste depuis `I1`. Et les séparer aurait demandé au résolveur de
+tracer une information que le joueur voit **déjà** sur le plateau avant de résoudre, donc
+au moment où il peut encore agir. Un chiffre qu'on ne peut plus corriger n'a pas besoin de
+trois colonnes.
+
+### Ce que le panneau lit, et ce qu'il refuse de lire
+
+Il prend un **`PhaseReport`** et non un `ProductionReport`, alors que le jalon s'appelle
+Économie. `I1` a trouvé que le rapport de production compte comme oisif un ouvrier parti
+bâtir — il ne connaît que les postes de production —, et que seul le rapport de phase voit
+les deux journaux de travail. Un panneau qui lirait le second réintroduirait le mensonge
+que `I1` a diagnostiqué, et il le réintroduirait en grand, à l'écran.
+
+Il **ne nomme pas** qui a franchi un palier, et s'en tient au compte. Le faire demanderait
+le `Roster` pour traduire un identifiant en prénom, c'est-à-dire exactement la dépendance
+que `W2` existe pour porter.
+
+Le libellé de la phase lui est **fourni** plutôt que lu. Un `PhaseReport` porte
+l'identifiant de sa phase et non son libellé, et au moment où `phase_resolved` arrive le
+cycle a déjà avancé : `RunManager.phase()` désigne la suivante. Le harnais, lui, connaît
+celle qu'il finit — il la retient avant d'appeler `end_phase()`. Aucun nom de phase n'est
+écrit nulle part, ce que `DESIGN.md` 2 exige jusque dans les adapters.
+
+### Les deux pièges de mise en page, trouvés en capture l'un après l'autre
+
+Ni le parsing ni les tests ne regardent l'écran, et `E2` en a fait la démonstration deux
+fois de suite.
+
+**Premier piège.** `set_anchors_preset()` prend un **booléen** en second argument, là où
+`set_anchors_and_offsets_preset()` prend un `LayoutPresetMode`. Lui passer
+`PRESET_MODE_MINSIZE` revient à lui dire « garde tes décalages », donc à laisser la vue à
+la taille qu'elle avait — zéro, la mise en page n'ayant pas encore tourné. Un
+`PanelContainer` de taille nulle **ne dessine pas son fond** pendant que ses libellés
+débordent par-dessus la carte. La première capture du jalon montrait deux blocs de texte
+flottant sur le relief.
+
+**Second piège**, qui survit à la correction du premier : `get_combined_minimum_size()` lu
+juste après avoir ajouté des enfants rend encore la valeur d'**avant**, Godot la
+recalculant à la passe suivante. Le panneau se plaçait donc sur la taille du rapport
+précédent, ce qui n'aurait été visible qu'au deuxième rapport d'une session.
+
+La correction n'est pas un calcul plus fin, c'est **l'abandon du calcul** : un
+`MarginContainer` plein écran dont l'enfant porte `SIZE_SHRINK_BEGIN` ou `SIZE_SHRINK_END`
+ne se trompe sur aucun des deux, et ne se trompe pas davantage à la dixième mise à jour du
+contenu. Le rapport texte du harnais est empilé sous la barre par le même mécanisme,
+plutôt que posé à une hauteur recopiée qui aurait dérivé au premier réglage de la barre.
+
+C'est écrit dans `CLAUDE.md` : la prochaine vue n'a pas à le réapprendre.
+
+### Ce que le harnais Run perd, et pourquoi c'est le vrai livrable
+
+Le jalon aurait pu ajouter deux vues et laisser le pavé de texte tranquille. Il en a retiré
+deux morceaux à la place : la réserve sort du bandeau, le compte rendu de résolution
+disparaît entièrement.
+
+Garder les deux aurait laissé **le même chiffre lisible à deux endroits**, et un chiffre
+affiché deux fois est un chiffre qui finira par différer de lui-même. La capture ne
+vérifie qu'une seule des deux mises en forme ; l'autre dérive en silence. Pour la même
+raison, la capture du harnais Run n'imprime plus le rapport du soir — elle imprime la
+réserve chiffrée, qui est ce qu'aucune image ne rend lisible d'un coup d'œil et la seule
+preuve que la bourse a été débitée.
+
+Ce qui reste en texte est ce dont aucun jalon d'écran n'a encore la charge : les piles, le
+plateau, le roster, le survol. Le plateau et le roster iront à `W2`.
+
+*(Un effet de bord non prévu : le panneau, en haut à droite, mangeait la fin de la ligne
+des trois piles. Elle est devenue trois lignes courtes, ce qui se lit de toute façon mieux
+qu'une file de séparateurs.)*
+
+### Le harnais qui fabrique ses cas
+
+Le harnais Run montre les deux vues **en situation**, et c'est là qu'on vérifie qu'elles
+disent la vérité. Ce qu'il ne peut pas montrer, c'est à quoi elles ressemblent quand ça va
+mal : une réserve pleine qui gaspille, une famine, une journée qui ne se ferme pas. Un run
+met une dizaine de journées à y arriver, et une capture ne sait pas attendre.
+
+`hud_harness.gd` **fabrique** donc ses cinq scènes au lieu de les jouer, sur le même
+principe que le harnais Économie cherche le soir où l'économie casse au lieu de le mettre
+en scène. Il n'y a **pas de run ouvert** derrière — ce qui est aussi le contrôle que les
+deux vues ne lisent rien d'autre que ce qu'on leur donne.
+
+Il réutilise `--shot-evenings` pour désigner la scène, plutôt que d'inventer un neuvième
+drapeau. C'est le seul harnais où ce drapeau ne compte pas un temps mais un cas, et
+`dev_shot.gd` le permet en posant que chaque harnais ignore ceux qui ne le concernent pas.
+
+### Ce qui reste
+
+Rien pour `E2`. Trois choses volontairement laissées :
+
+- **la prévisualisation de ce qu'une action posée rapporterait.** C'est `C3` : le calcul de
+  delta au survol vient avec l'adjacence, et l'écrire ici demanderait au résolveur une
+  porte « à blanc » qu'aucun jalon n'a réclamée.
+- **le choix de *qui* l'on envoie**, et la fiche d'unité. C'est `W2`, et c'est aussi
+  pourquoi le panneau compte les paliers sans nommer personne.
+- **la sortie sous `scenes/ui/`.** Les trois vues restent construites en code, comme
+  `HandView` depuis `D2`. Elles déménageront quand `I2` fera un vrai écran, et elles
+  déménageront avec leur mise en forme : elles n'ont pas de règles à emporter.
+
+La mise en commun des `_make_label()` est toujours à neuf exemplaires — les vues de `E2`
+ont leur propre fabrique de texte, mais elle porte des couleurs et des tailles qui leur
+sont propres, ce qui n'est plus tout à fait le même doublon.
+
+### Prochain jalon
+
+**`F1`** — le bouchon de combat, `CombatForce` et `DamageReport`. Inchangé : c'est le
+dernier système qui fera bouger un contrat, et le faire avant `I2` évite de câbler deux
+fois. `W2` reste intercalable à tout moment.
+
+Ce que `E2` lui laisse en héritage utile : `DayReport` accueillera le combat par un champ
+de plus, et le `ProductionPanel` une ligne de plus — les deux places sont déjà tenues, la
+première par la séquence de `DESIGN.md` 2, la seconde par une grille qui n'affiche que les
+lignes qui ont quelque chose à dire.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché, aucune action
+d'`InputMap` ajoutée.
+
+- `F5` lance toujours le **harnais Run** — `HARNESS` vaut `&"run"`. Le nouveau harnais
+  **HUD** s'atteint en mettant `&"hud"` dans cette constante : Espace ou clic pour la
+  scène suivante, Retour arrière pour la précédente.
+- **Les quatre `.tres` de `data/commodities/` ont un champ de plus**, `order`, écrit à la
+  main hors éditeur. Nourriture 1, Bois 2, Pierre 3, Minerai 4 — ce qui tue d'abord, puis
+  la chaîne de construction dans l'ordre où les bâtiments la réclament. C'est un ordre
+  d'affichage et rien d'autre : le domaine ne le lit jamais.
+- **Les couleurs des quatre ressources se voient enfin**, sur les pastilles et dans la
+  jauge. Elles dormaient dans `data/commodities/` depuis `E1` sans que rien ne les
+  affiche ; c'est le moment de les regarder ensemble plutôt qu'une par une, la jauge les
+  mettant côte à côte.
+- **L'équilibrage des ressources reste le premier chantier ouvert**, et `E2` ne l'a pas
+  touché — il le rend seulement lisible. Le verdict du harnais Économie est inchangé :
+  première famine au soir 6, réserve jamais pleine en vingt soirs. Il mesure toujours un
+  soir par jour, quand la journée livrée en compte deux.
+- Les caches de classes et d'uid ont été reconstruits pendant la session, et le `.gd.uid`
+  du harnais neuf est commité.
+
+---
+
 ## 2026-08-25 — `I1` : la journée, la bourse, et les deux verbes enfin exécutés
 
 **État : terminé.** Dix commits sur `feat/d1-deck`, à la suite de `D2` — dont deux qui

@@ -262,6 +262,19 @@ La dispersion d'une décoration — dérive, échelle, orientation — vient d'u
 
 Pas de `GridMap` : il ne gère pas la hauteur variable par cellule sans empiler des cubes unitaires.
 
+### HUD — vues construites en code
+
+Les vues de `src/adapters/hud/` sont des `Control` bâtis dans un `static func create()`, sans `.tscn`, comme `HandView` depuis `D2`. Elles reçoivent un objet du domaine et dessinent ; elles ne jugent rien. « La réserve est-elle pleine ? » se demande au domaine, et la vue affiche la réponse — **un adapter qui appellerait `Ledger.set_capacity()` serait la faute d'architecture que ce fichier refuse en premier.**
+
+**Placer une vue dans un coin se fait par un conteneur, jamais par des ancres calculées.** `E2` a essayé les ancres et a payé deux pièges de suite, tous deux invisibles au parsing comme aux tests :
+
+- `set_anchors_preset()` prend un **booléen** en second argument, là où `set_anchors_and_offsets_preset()` prend un `LayoutPresetMode`. Lui passer `PRESET_MODE_MINSIZE` revient à lui dire « garde tes décalages ». La vue reste à la taille qu'elle avait — zéro —, et **un `PanelContainer` de taille nulle ne dessine pas son fond** pendant que ses libellés débordent par-dessus la scène.
+- `get_combined_minimum_size()` lu juste après avoir ajouté des enfants rend encore la valeur d'**avant** : Godot la recalcule à la passe de mise en page suivante. Une vue placée sur cette mesure se place donc toujours sur le contenu précédent.
+
+Un `MarginContainer` plein écran dont l'enfant porte `SIZE_SHRINK_BEGIN` ou `SIZE_SHRINK_END` ne se trompe sur aucun des deux, et ne se trompe pas davantage à la dixième mise à jour du contenu.
+
+**Une vue rafraîchie à chaque image met ses nœuds à jour sur place** plutôt que de les reconstruire. C'est ce qui permet de l'appeler depuis `_process` sans churn d'allocation, et surtout sans avoir à énumérer tous les gestes qui touchent son sujet — un oubli dans cette liste se lit comme un compteur qui ne bouge pas.
+
 ### Sélection de cellule
 
 **Pas de collider, pas de physique.** Raycast analytique en DDA sur la grille de hauteurs, implémenté dans `domain/terrain/cell_picker.gd` comme fonction pure :

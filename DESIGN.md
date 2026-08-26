@@ -158,6 +158,16 @@ Deux bénéfices immédiats. La cohérence devient **structurelle** au lieu d'ê
 
 **La règle qui décide où va le code.** Ajouter un **bâtiment** doit rester une édition de `data/`. Ajouter une **nature** de bâtiment est légitimement une modification de code — mais dans `src/domain/`, jamais dans le schéma ni dans la data. Une `Resource` qui porterait une méthode de résolution serait du domaine déguisé, et le jour où il lui faut le terrain, la ville et le roster, on aurait recodé le résolveur dans `src/schema/`.
 
+#### Ce que la réserve montre, et ce qu'elle ne détaille pas
+
+*(Écrit à `E2`.)* La réserve commune n'était jusqu'ici qu'une règle de résolution ; elle est maintenant **une seule jauge segmentée**, où chaque ressource prend la place que les autres n'ont pas. Quatre jauges côte à côte auraient dessiné quatre plafonds indépendants, c'est-à-dire exactement la lecture que `E1` a écartée — et la phrase de cette section, « un joueur qui ne la voit pas ne comprend pas pourquoi son entrepôt manque », serait restée une intention.
+
+**L'ordre des ressources à l'écran vit dans `data/`**, un rang par `CommodityData`, pour la même raison que leur nombre : trier par identifiant triait en anglais interne, et rangeait la nourriture entre le minerai et la pierre. Deux ressources ne peuvent pas partager un rang, et c'est un cas de test qui le tient — à rangs égaux, l'ordre retomberait sur une comparaison de `StringName`, stable le temps d'une session et différente à la suivante.
+
+**Un entrepôt achevé relève la réserve à l'instant où il est fini.** Ce n'est pas une entorse à la règle d'ordre de 2 — la production du soir est déjà calculée quand le plafond bouge, donc l'entrepôt ne sauve toujours pas la récolte de ce soir-là. C'est la règle **d'affichage** qui manquait : jusqu'à `E2` le plafond ne montait qu'à la résolution suivante, si bien qu'un entrepôt visiblement terminé sur la carte cohabitait une phase entière avec une jauge qui annonçait l'ancien chiffre. Aucun écran n'affichant la réserve en continu, le défaut avait traversé `I1` sans se faire remarquer.
+
+**Les oisifs restent un compte, sans raison distinguée.** *(Tranché à `E2`.)* Trois raisons se cachaient derrière ce chiffre — non affecté, affecté à une ancre vide, arrivé quand les slots étaient pris —, et la question était explicitement renvoyée « devant une vraie maquette ». La voici : au niveau de la **phase**, les trois s'effondrent de toute façon en « n'a tenu aucun poste », qui est la seule lecture juste *(cf. 2)*. Les séparer aurait demandé au résolveur de tracer une information que le joueur voit déjà sur le plateau **avant** de résoudre, donc au moment où il peut encore agir. Un chiffre qu'on ne peut plus corriger n'a pas besoin de trois colonnes.
+
 **`OUVERT`** — la conséquence de la famine. Perte d'efficacité le lendemain, blessure, départ, mort ? Le rapport d'upkeep porte déjà le compte des non-nourris : les quatre restent ouvertes sans que le contrat bouge. C'est le jour où l'une sera choisie que ce rapport entrera dans `contracts/`, puisque ce jour-là ce sont les Effectifs qui le liront.
 
 **`HORS MVP` — artisanat.** L'atelier et l'action *Fabriquer* convertiront des ressources brutes en ressources ouvrées. Rien n'est écrit tant que la boucle n'est pas jouable, mais la réserve commune et le catalogue de `data/` accueillent une cinquième ressource sans refonte.
@@ -431,7 +441,7 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 ### Économie — `E`
 - **E1** ✅ — `Ledger` en réserve commune, `ProductionResolver`, upkeep, famine, tests.
 - **E1b** ✅ — Le bloc **`production` nullable** sorti de `BuildingData`, quatrième ressource, contenu de 4.1. Petit, et il a déblayé avant que douze bâtiments écrivent l'ancien format.
-- **E2** — HUD des ressources, panneau de rapport de production.
+- **E2** ✅ — **HUD des ressources et panneau de résolution.** `ResourceBar`, `ProductionPanel` et `CommodityPalette` sous `src/adapters/hud/`, la **jauge commune segmentée** qui rend regardable la décision de `E1`, et le rang d'affichage d'une ressource entré dans `data/`. Le harnais Run y perd les deux morceaux de son pavé de texte qu'ils remplacent, plutôt que de les doubler. Un jalon d'écran a aussi trouvé un défaut de domaine que personne ne pouvait voir sans écran : la réserve annonçait l'ancien plafond pendant toute une phase après qu'un entrepôt était achevé. Un `OUVERT` refermé : les oisifs restent un compte, sans raison distinguée.
 
 ### Effectifs — `W`
 - **W1** ✅ — `Worker`, `SkillTrack`, `Roster`, XP depuis les `WorkLine`, projection en `LaborForce`, tests. **Vivier unique**, et rien qui suppose le roster entier disponible *(cf. 3.9)*.
@@ -466,7 +476,9 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 - **X4** — Powers : le troisième pool se remplit *(3.5)*.
 - **X5** — Ce qu'un palier de **niveau d'ouvrier** offre : le choix de compétence *(3.4)*. `W1` écrit l'accumulateur et les paliers, qui se gagnent et se lisent ; ce qu'ils débloquent est du contenu et de l'UI, et se décide devant un roster qui a vraiment vécu quinze jours.
 
-**Ordre suivant** — `F1`, le bouchon de combat, puis `I2`. `I1` a refermé la boucle sur tout ce qui existait ; ce qui manque désormais à un run jouable du début à la fin est un adversaire. `F1` est aussi le dernier système qui fera bouger un contrat — `CombatForce` et `DamageReport` —, et le faire avant `I2` évite de câbler deux fois. `E2` et `W2` peuvent s'intercaler à tout moment : ce sont des écrans, et le harnais de `I1` montre exactement ce qu'ils auront à remplacer.
+**Ordre suivant** — `F1`, le bouchon de combat, puis `I2`. `I1` a refermé la boucle sur tout ce qui existait ; ce qui manque désormais à un run jouable du début à la fin est un adversaire. `F1` est aussi le dernier système qui fera bouger un contrat — `CombatForce` et `DamageReport` —, et le faire avant `I2` évite de câbler deux fois. `W2` peut s'intercaler à tout moment : c'est un écran, et le harnais de `I1` montre exactement ce qu'il aura à remplacer.
+
+*(Constaté à `E2`.)* Ce que le premier des deux jalons d'écran a appris, et qui vaut pour `W2` : **un écran trouve des défauts qu'aucun test ne cherche**. Les tests avaient raison sur chaque chiffre pris isolément ; c'est la juxtaposition d'un entrepôt visiblement fini et d'une jauge inchangée qui a montré un mensonge d'une phase. Les deux pièges de mise en page du jalon, eux, ne se sont vus qu'en capture — un panneau à taille nulle ne dessine pas son fond, et une taille minimale se lit en retard d'une passe.
 
 *(Historique.)* `E1b` est passé avant `W1` parce qu'il touchait les `.tres` de bâtiments et que leur nombre a doublé ; `W1` a suivi parce qu'il était le dernier moment où `LaborForce` pouvait bouger sans douleur — elle n'a finalement pas bougé — et parce qu'il est le seul jalon qui rende le journal de travail de `E1` utile à quelque chose. `C4` est venu ensuite parce qu'il rouvrait ces mêmes `.tres` une dernière fois avant que les cartes n'arrivent, et parce que `D2` a besoin d'une cible pour *Construire* : sans chantier, cette carte n'aurait rien à avancer. `D1` a suivi sans surprise, étant le seul jalon qui ne dépende de rien — le `Deck` ne connaît ni la grille, ni la bourse, ni le roster.
 

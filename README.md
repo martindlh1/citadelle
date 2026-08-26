@@ -66,7 +66,7 @@ obligatoire ; les autres sont optionnels :
 | `--shot-hover x,y` | cellule à désigner. À défaut, le centre de la carte |
 | `--shot-turns n` | quarts de tour appliqués à la **caméra** |
 | `--shot-rotate n` | quarts de tour appliqués au **bâtiment** à poser *(harnais Construction)* |
-| `--shot-evenings n` | soirs résolus avant de capturer *(harnais Cartes)*, journées jouées *(harnais Run)* |
+| `--shot-evenings n` | soirs résolus avant de capturer *(harnais Cartes)*, journées jouées *(harnais Run)*, scène à montrer *(harnais HUD)* |
 
 `--shot-hover` a une valeur par défaut plutôt que rien, parce qu'une capture qui ne
 montre pas la surbrillance ne prouve rien à son sujet, et que souris à `(0, 0)` le
@@ -97,12 +97,22 @@ attrapé le seul vrai bug de `D2` — deux *Récolter* sur une même cabane à d
 trois ouvriers dedans. Il ne se voyait ni au parsing, ni aux tests, ni à l'œil sur
 l'image : il se lisait dans cette table.
 
-Celle du harnais **Run** imprime les quatre à la fois — le bandeau de phase, la ligne de
-survol, la table des actions posées et le **rapport du dernier soir**. Elle joue une
-journée entière par `--shot-evenings` plutôt qu'un geste : ouvrir un chantier, le payer,
-y envoyer des ouvriers, le voir monter d'un cran et le relief se creuser à côté. Une
-capture qui ne montrerait qu'une carte posée ne dirait rien de ce que `I1` ajoute, et le
-rapport imprimé est la seule preuve que la bourse a bien été débitée.
+Celle du harnais **Run** imprime le bandeau de phase, la **réserve chiffrée**, la ligne
+de survol et la table des actions posées. Elle joue une journée entière par
+`--shot-evenings` plutôt qu'un geste : ouvrir un chantier, le payer, y envoyer des
+ouvriers, le voir monter d'un cran et le relief se creuser à côté. Une capture qui ne
+montrerait qu'une carte posée ne dirait rien de ce que `I1` ajoute, et la réserve
+imprimée est la seule preuve que la bourse a bien été débitée.
+
+Elle **n'imprime plus** le rapport du dernier soir : depuis `E2` c'est un panneau, et un
+panneau se regarde. Le réécrire en texte à côté aurait donné deux mises en forme du même
+rapport, dont une seule serait vérifiée par la capture — donc l'autre dériverait.
+
+Le harnais **HUD** est le seul dont `--shot-evenings` ne désigne pas un temps mais un
+**cas** : il ne joue rien, il fabrique des états — réserve pleine qui gaspille, famine,
+phase du milieu de journée — qu'un vrai run met une dizaine de journées à atteindre. Il
+réutilise le drapeau plutôt que d'en inventer un neuvième, ce que `dev_shot.gd` prévoit
+en posant que chaque harnais ignore ceux qui ne le concernent pas.
 
 **Les coordonnées de la sonde ne sont pas des pixels de l'image.** `project.godot` est
 en `stretch/mode="canvas_items"` : le viewport garde la résolution de base du projet
