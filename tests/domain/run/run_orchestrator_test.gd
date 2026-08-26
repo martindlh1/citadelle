@@ -138,6 +138,45 @@ func test_withdrawing_an_action_takes_it_off_the_board() -> void:
 	assert_bool(RunOrchestrator.withdraw(state, posted.action().id())).is_true()
 	assert_int(state.board().count()).is_equal(0)
 
+## Un retrait est une **annulation**, pas un sacrifice. Rien n'a été consommé quand il
+## tombe — aucun ouvrier n'a travaillé, la réserve n'a pas bougé —, donc la carte revient
+## là d'où elle vient.
+##
+## Le comportement inverse a tenu de `D2` à `W2`, défendu par un docstring qui renvoyait à
+## l'`OUVERT` de 3.5. Il confondait deux gestes : cet `OUVERT` porte sur les cartes **non
+## jouées en fin de phase**, celle-ci a été jouée et reprise dans la phase même.
+func test_withdrawing_gives_the_card_back() -> void:
+	var state := _open()
+	var held := state.deck().hand().cards().count(ActionTargeting.CARD_HARVEST)
+	var posted := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST)
+	assert_int(state.deck().hand().cards().count(ActionTargeting.CARD_HARVEST)) \
+		.is_equal(held - 1)
+	RunOrchestrator.withdraw(state, posted.action().id())
+	assert_int(state.deck().hand().cards().count(ActionTargeting.CARD_HARVEST)) \
+		.is_equal(held)
+	assert_int(state.deck().discard_size(CardData.POOL_ACTION)).is_equal(0)
+
+## Et ce que ça vaut vraiment : la carte reprise **se rejoue**. Sans ce cas, la précédente
+## passerait sur une carte rendue à une main dont plus rien ne pourrait la sortir.
+func test_a_card_given_back_can_be_played_again() -> void:
+	var state := _open()
+	var posted := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST)
+	RunOrchestrator.withdraw(state, posted.action().id())
+	var again := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST)
+	assert_bool(again.is_ok()).is_true()
+	assert_int(state.board().count()).is_equal(1)
+
+## Le revers de la garde de phase : un retrait refusé ne rend rien non plus. Sans ce cas,
+## un clic droit dans la mauvaise phase deviendrait une source de cartes gratuites.
+func test_a_refused_withdrawal_gives_nothing_back() -> void:
+	var state := _open()
+	var posted := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST)
+	var held := state.deck().hand().cards().count(ActionTargeting.CARD_HARVEST)
+	RunOrchestrator.end_phase(state)
+	assert_bool(RunOrchestrator.withdraw(state, posted.action().id())).is_false()
+	assert_int(state.deck().hand().cards().count(ActionTargeting.CARD_HARVEST)) \
+		.is_equal(held)
+
 ## Le retrait appartient à la phase qui **pose**, puisque c'est un jeu de carte à
 ## l'envers. Avec la journée de `data/`, où poser et affecter sont deux phases, il n'a
 ## donc jamais d'ouvrier à rappeler — on ne revient à une phase qui pose qu'après une

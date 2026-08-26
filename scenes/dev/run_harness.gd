@@ -283,8 +283,13 @@ func _withdraw_here() -> void:
 	if not RunManager.withdraw(action.id()):
 		_last_action = "Retrait refusé — %s ne le permet pas." % _phase_label()
 		return
-	_last_action = "Retiré : %s en %s." % [_label_of(action.card()), action.target()]
-	_refresh_targets()
+	_last_action = "Retiré : %s en %s — la carte revient en main." % [
+		_label_of(action.card()), action.target()]
+	# La main vient de changer, donc un **rang** dans la main ne désigne plus la même
+	# carte : la carte rendue s'insère dans son pool et décale tout ce qui suit. C'est le
+	# même piège que `D2` a payé au clavier, et la même réponse que `_play_here()` — tout
+	# geste qui touche la main repose ce qu'on tenait.
+	_release()
 
 ## Envoie un ouvrier sur l'action sous le curseur : le sélectionné, ou le meilleur.
 ##

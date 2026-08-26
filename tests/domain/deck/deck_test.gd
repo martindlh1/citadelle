@@ -115,6 +115,39 @@ func test_discarding_the_hand_empties_the_three_pools_at_once() -> void:
 	assert_int(deck.discard_size(CardData.POOL_ACTION)).is_equal(3)
 	assert_int(deck.discard_size(CardData.POOL_BUILDING)).is_equal(2)
 
+## L'inverse exact de `discard()`, et la porte qu'une annulation emprunte.
+func test_taking_a_card_back_returns_it_to_the_hand() -> void:
+	var deck := _deck()
+	deck.draw(CardData.POOL_ACTION, 3, _rng(SEED))
+	deck.discard(&"harvest")
+	assert_bool(deck.take_back(&"harvest")).is_true()
+	assert_int(deck.hand_size(CardData.POOL_ACTION)).is_equal(3)
+	assert_int(deck.discard_size(CardData.POOL_ACTION)).is_equal(0)
+	assert_bool(deck.hand().has(&"harvest")).is_true()
+
+## Le revers, sans lequel une fonction qui rendrait toujours vrai passerait le cas
+## précédent : on ne reprend pas une carte que la défausse n'a pas.
+func test_taking_back_a_card_the_discard_does_not_hold_changes_nothing() -> void:
+	var deck := _deck()
+	deck.draw(CardData.POOL_ACTION, 2, _rng(SEED))
+	assert_bool(deck.take_back(&"harvest")).is_false()
+	assert_int(deck.hand_size(CardData.POOL_ACTION)).is_equal(2)
+	assert_int(deck.discard_size(CardData.POOL_ACTION)).is_equal(0)
+
+## Reprendre puis défausser laisse le deck exactement comme il était. C'est ce qui fait
+## d'un retrait une **annulation** plutôt qu'un geste qui coûte : aucun exemplaire n'est
+## créé, aucun n'est perdu, et le total du pool ne bouge à aucun moment.
+func test_discarding_and_taking_back_leaves_the_deck_untouched() -> void:
+	var deck := _deck()
+	deck.draw(CardData.POOL_ACTION, 3, _rng(SEED))
+	var before := deck.hand().cards_in(CardData.POOL_ACTION)
+	var total := deck.total(CardData.POOL_ACTION)
+	deck.discard(&"harvest")
+	deck.take_back(&"harvest")
+	assert_array(deck.hand().cards_in(CardData.POOL_ACTION)).contains(before)
+	assert_int(deck.hand_size(CardData.POOL_ACTION)).is_equal(before.size())
+	assert_int(deck.total(CardData.POOL_ACTION)).is_equal(total)
+
 ## Premier geste du draft. La carte entre par la défausse et non par la pioche : elle
 ## ne doit pas passer devant celles qui attendent leur tour depuis deux phases.
 func test_a_drafted_card_enters_through_the_discard() -> void:
