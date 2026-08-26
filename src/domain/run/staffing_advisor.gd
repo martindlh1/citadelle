@@ -94,6 +94,10 @@ static func ranked_for(candidates: Array[StringName], labor: LaborForce,
 		var right := labor.efficiency(second, family)
 		if not is_equal_approx(left, right):
 			return left > right
+		var ahead := labor.track_xp(first, family)
+		var behind := labor.track_xp(second, family)
+		if ahead != behind:
+			return ahead > behind
 		return rank[first] < rank[second])
 	return sorted
 

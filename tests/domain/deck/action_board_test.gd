@@ -56,13 +56,16 @@ func test_a_refused_target_posts_nothing_at_all() -> void:
 
 ## Le cas du fichier. Deux verbes sur la même forêt, chacun avec son identité et ses
 ## ouvriers à lui. C'est ce qu'une clé par cellule rendait impossible.
-func test_two_actions_can_aim_at_the_same_cell() -> void:
+## Le board est le gardien de son propre invariant : rien n'entre sans passer par le
+## ciblage. Depuis que celui-ci refuse une seconde action sur une cible occupée, la seconde
+## pose est donc refusée ici aussi, sans qu'une ligne du board ait bougé — ce qui est
+## exactement ce que ce partage garantissait.
+func test_a_cell_carries_a_single_action() -> void:
 	var harvest := _post(ActionTargeting.CARD_HARVEST, FOREST)
-	var hunt := _post(ActionTargeting.CARD_HUNT, FOREST)
-	assert_object(hunt).is_not_null()
-	assert_int(hunt.id()).is_not_equal(harvest.id())
-	assert_int(_board.count()).is_equal(2)
-	assert_int(_board.at_cell(FOREST).size()).is_equal(2)
+	assert_object(harvest).is_not_null()
+	assert_object(_post(ActionTargeting.CARD_HUNT, FOREST)).is_null()
+	assert_int(_board.count()).is_equal(1)
+	assert_int(_board.at_cell(FOREST).size()).is_equal(1)
 
 ## Son revers, et il vient de la même règle : deux fois la **même** carte au même endroit
 ## rouvriraient des postes déjà ouverts. Le board le refuse parce que le ciblage le
@@ -83,13 +86,16 @@ func test_at_cell_finds_nothing_where_nothing_is_posted() -> void:
 	_post(ActionTargeting.CARD_HARVEST, FOREST)
 	assert_array(_board.at_cell(OTHER)).is_empty()
 
+## Les deux actions visent deux cellules depuis que le ciblage refuse d'en partager une.
+## Ce que le cas tient n'a pas changé : un retrait emporte l'action nommée et **elle
+## seule**.
 func test_withdrawing_removes_exactly_one_action() -> void:
 	var harvest := _post(ActionTargeting.CARD_HARVEST, FOREST)
-	var hunt := _post(ActionTargeting.CARD_HUNT, FOREST)
+	var dig := _post(ActionTargeting.CARD_TERRAFORM, PLAIN, PlayedAction.DIRECTION_UP)
 	assert_bool(_board.withdraw(harvest.id())).is_true()
 	assert_int(_board.count()).is_equal(1)
 	assert_bool(_board.has(harvest.id())).is_false()
-	assert_bool(_board.has(hunt.id())).is_true()
+	assert_bool(_board.has(dig.id())).is_true()
 
 func test_withdrawing_something_that_was_never_posted_says_so() -> void:
 	assert_bool(_board.withdraw(ActionBoard.NO_ACTION)).is_false()
@@ -121,11 +127,15 @@ func test_an_unknown_identifier_reads_as_nothing() -> void:
 
 ## L'ordre de pose est celui du plan, et c'est lui que le résolveur suit. Deux phases
 ## identiques jouées dans un ordre différent ne doivent pas rendre autre chose.
+## Trois cellules distinctes depuis que le ciblage refuse d'en partager une. Le sujet du
+## cas est l'**ordre** et non les verbes : le troisième creuse là où le second monte,
+## faute d'une seconde forêt où chasser.
 func test_the_plan_keeps_the_order_the_actions_were_posted_in() -> void:
 	var first := _post(ActionTargeting.CARD_HARVEST, FOREST)
 	var second := _post(ActionTargeting.CARD_TERRAFORM, PLAIN,
 		PlayedAction.DIRECTION_UP)
-	var third := _post(ActionTargeting.CARD_HUNT, FOREST)
+	var third := _post(ActionTargeting.CARD_TERRAFORM, OTHER,
+		PlayedAction.DIRECTION_DOWN)
 	var posted := _board.to_plan().actions()
 	assert_int(posted[0].id()).is_equal(first.id())
 	assert_int(posted[1].id()).is_equal(second.id())

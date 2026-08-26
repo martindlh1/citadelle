@@ -225,12 +225,21 @@ func test_the_duplicate_rule_follows_the_anchor_not_the_cell_clicked() -> void:
 	_assert_refused(ActionTargeting.CARD_HARVEST, HUT_TAIL,
 		TargetResult.REASON_ALREADY_POSTED)
 
-## Le revers, et c'est lui qui dit que la règle porte sur la carte et non sur la cellule.
-## Deux métiers sur une même terre restent deux actions distinctes — le cas même pour
-## lequel D2 a donné une identité aux actions.
-func test_two_different_cards_may_share_a_target() -> void:
+## **Une cible ne porte qu'une action, quelle qu'elle soit.** *(Renversé après `I2`.)*
+##
+## Ce cas affirmait le contraire, et `DESIGN.md` 3.5 avec lui : « deux cartes différentes
+## sur une même cellule restent acceptées ; c'est le doublon qui est refusé, pas le
+## partage ». Deux métiers sur une même terre étaient le cas pour lequel `D2` avait donné
+## une identité aux actions.
+##
+## Une partie jouée à la main l'a renversé, et pour une raison d'écran plutôt que de règle :
+## une case se désigne d'un seul curseur, donc Espace, le clic droit et le survol ne
+## peuvent atteindre que l'une des deux. Le domaine autorisait un geste que rien ne pouvait
+## viser. Voir `_already_posted()`, qui dit à quelles conditions ça se relèvera.
+func test_a_target_carries_a_single_action() -> void:
 	_plan = _plan_of(ActionTargeting.CARD_HARVEST, FOREST)
-	assert_bool(_validate(ActionTargeting.CARD_HUNT, FOREST).is_ok()).is_true()
+	_assert_refused(ActionTargeting.CARD_HUNT, FOREST,
+		TargetResult.REASON_ALREADY_POSTED)
 
 ## La même carte ailleurs n'a rien à voir avec celle qui est posée ici.
 func test_the_same_card_may_be_posted_on_another_target() -> void:
