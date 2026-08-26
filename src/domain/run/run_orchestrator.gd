@@ -124,6 +124,38 @@ static func staff(state: RunState, worker: StringName, action: int) -> bool:
 	state.assign_worker(worker, action)
 	return true
 
+## Remplit les postes libres au mieux et rend les ouvriers que ça vient de placer.
+##
+## Le bouton d'auto-affectation de `DESIGN.md` 3.4, et le même partage qu'à `I1` pour les
+## verbes de chantier : `StaffingAdvisor` **ordonne**, ce fichier **applique**. Le plan
+## est calculé une fois sur l'état d'avant, puis posé geste par geste à travers
+## `staff()` — donc à travers `staffing_refusal()`, qui reste le seul juge. Une porte
+## d'affectation qui court-circuiterait les cinq refus serait une seconde liste de
+## règles, et c'est exactement ce que `I1` a refusé en écrivant la première.
+##
+## Il ne déplace personne : `plan()` ne propose que des ouvriers libres, ce qui fait de la
+## surcharge manuelle un geste qui **tient**. On place à la main ceux dont on se soucie,
+## on appuie sur le bouton pour le reste, et l'ordre des deux gestes n'a pas d'importance.
+##
+## L'assertion tient l'invariant que l'advisor promet — un plan ne se fait pas refuser à
+## l'application, puisqu'il compte les postes de la même façon que `staffing_refusal()`.
+## Elle ne survit pas à un export release, et c'est sans danger : un refus y sortirait
+## simplement l'ouvrier de la liste rendue, sans rien casser.
+static func auto_staff(state: RunState) -> Array[StringName]:
+	assert(state != null, "auto-affectation sans run")
+	var staffed: Array[StringName] = []
+	if not state.cycle().permits(PhaseDef.ACTION_ASSIGN):
+		return staffed
+	var orders := StaffingAdvisor.plan(state.terrain(), state.city().to_snapshot(),
+		state.board().to_plan(), state.to_assignment(), state.labor(),
+		state.balance().actions)
+	for worker in orders:
+		var accepted := staff(state, worker, orders[worker])
+		assert(accepted, "le plan d'affectation a proposé %s, que staff() refuse" % worker)
+		if accepted:
+			staffed.append(worker)
+	return staffed
+
 ## Rappelle tous les ouvriers d'une action et rend leurs identifiants.
 static func unstaff(state: RunState, action: int) -> Array[StringName]:
 	assert(state != null, "rappel sans run")

@@ -114,6 +114,50 @@ static func take_upkeep(labor: LaborForce, ledger: Ledger,
 	return UpkeepReport.create(due, consumed,
 		_unfed(due - consumed, balance.upkeep_per_worker))
 
+## Famille de compétence que cette action emploie, ou &"" si elle ne fait produire
+## personne.
+##
+## Le seul juge de « cette action rapporte-t-elle quelque chose ». La question est posée
+## ici et nulle part ailleurs, et sa réponse vaut pour les deux passes.
+##
+## **Publique depuis W2**, et pour la raison exacte qui a rendu staffing_refusal()
+## publique à I1 : une seconde question se pose sur la même règle. L'auto-affectation
+## doit savoir quelle piste une action posée créditera pour classer les ouvriers dessus,
+## et redemander ailleurs laisserait l'écran classer sur une famille que le soir ne
+## crédite pas — le même genre d'écart que deux tables de ciblage auraient creusé à D2.
+## Elle ne sort pas de l'Économie pour autant : c'est StaffingAdvisor qui vient la lire,
+## depuis domain/run/, le seul dossier autorisé à interroger deux systèmes.
+##
+## Aucun nom de carte n'apparaît, et c'est le point. Les deux lectures de DESIGN.md 3.5
+## posent chacune leur question à data/balance/ : « cette carte tient-elle un poste ? »
+## dans un bâtiment, « cette carte tire-t-elle quelque chose de ce tag ? » à cru.
+## *Construire* et *Terraformer* répondent non aux deux, donc sortent de la production
+## sans être nommés, et un cinquième verbe entre sans qu'on ait à venir l'exclure d'une
+## liste.
+##
+## La première des deux questions n'était pas là d'abord, et son absence était un piège :
+## il ne restait alors que « ce bâtiment produit-il ? », si bien que **toute** action
+## posée sur une ferme achevée en aurait tiré une récolte, *Construire* comprise. Le
+## ciblage l'interdit — il refuse *Construire* sur un bâtiment fini —, mais faire reposer
+## la justesse du soir sur une règle écrite dans un autre système est la dette que I1
+## aurait payée en avançant les chantiers pendant la résolution.
+static func family_of(action: PlayedAction, terrain: TerrainQuery, city: CitySnapshot,
+		actions: ActionBalance) -> StringName:
+	if action.is_on_building():
+		if not actions.works_a_slot(action.card()):
+			return &""
+		var building := city.at_anchor(action.target())
+		if building == null:
+			return &""
+		if not building.is_complete():
+			return &""
+		if not building.data().produces():
+			return &""
+		return building.data().production.skill_family
+	if _bare_resource(action, terrain, actions).is_empty():
+		return &""
+	return actions.bare_skill_family
+
 ## Qui tient effectivement un poste, et sur quelle cellule.
 ##
 ## Les postes se remplissent dans l'ordre de l'affectation : sur une action
@@ -124,7 +168,7 @@ static func take_upkeep(labor: LaborForce, ledger: Ledger,
 ## une action que rien ne fait produire, ce que sont *Construire* et *Terraformer* tant
 ## que I1 ne les exécute pas.
 ##
-## C'est _family_of() qui tranche tout cela, en un seul endroit, et rien ne consomme une
+## C'est family_of() qui tranche tout cela, en un seul endroit, et rien ne consomme une
 ## ligne de travail sans savoir que son poste produit vraiment.
 ##
 ## Un ouvrier que l'affectation nomme mais que la main-d'œuvre ne connaît pas est
@@ -135,7 +179,7 @@ static func _work_lines(terrain: TerrainQuery, city: CitySnapshot, plan: ActionP
 		actions: ActionBalance) -> Array[WorkLine]:
 	var lines: Array[WorkLine] = []
 	for action in plan.actions():
-		var family := _family_of(action, terrain, city, actions)
+		var family := family_of(action, terrain, city, actions)
 		if family.is_empty():
 			continue
 		for worker in _manned(action, assign, labor):
@@ -160,7 +204,7 @@ static func _produce(terrain: TerrainQuery, city: CitySnapshot, plan: ActionPlan
 		actions: ActionBalance) -> Dictionary[StringName, int]:
 	var produced: Dictionary[StringName, int] = {}
 	for action in plan.actions():
-		var family := _family_of(action, terrain, city, actions)
+		var family := family_of(action, terrain, city, actions)
 		if family.is_empty():
 			continue
 		var per_worker := _yield_of(action, terrain, city, actions)
@@ -173,45 +217,9 @@ static func _produce(terrain: TerrainQuery, city: CitySnapshot, plan: ActionPlan
 					produced[resource] = running + gained
 	return produced
 
-## Famille de compétence que cette action emploie, ou &"" si elle ne fait produire
-## personne.
-##
-## Le seul juge de « cette action rapporte-t-elle quelque chose ». La question est posée
-## ici et nulle part ailleurs, et sa réponse vaut pour les deux passes.
-##
-## Aucun nom de carte n'apparaît, et c'est le point. Les deux lectures de DESIGN.md 3.5
-## posent chacune leur question à data/balance/ : « cette carte tient-elle un poste ? »
-## dans un bâtiment, « cette carte tire-t-elle quelque chose de ce tag ? » à cru.
-## *Construire* et *Terraformer* répondent non aux deux, donc sortent de la production
-## sans être nommés, et un cinquième verbe entre sans qu'on ait à venir l'exclure d'une
-## liste.
-##
-## La première des deux questions n'était pas là d'abord, et son absence était un piège :
-## il ne restait alors que « ce bâtiment produit-il ? », si bien que **toute** action
-## posée sur une ferme achevée en aurait tiré une récolte, *Construire* comprise. Le
-## ciblage l'interdit — il refuse *Construire* sur un bâtiment fini —, mais faire reposer
-## la justesse du soir sur une règle écrite dans un autre système est la dette que I1
-## aurait payée en avançant les chantiers pendant la résolution.
-static func _family_of(action: PlayedAction, terrain: TerrainQuery, city: CitySnapshot,
-		actions: ActionBalance) -> StringName:
-	if action.is_on_building():
-		if not actions.works_a_slot(action.card()):
-			return &""
-		var building := city.at_anchor(action.target())
-		if building == null:
-			return &""
-		if not building.is_complete():
-			return &""
-		if not building.data().produces():
-			return &""
-		return building.data().production.skill_family
-	if _bare_resource(action, terrain, actions).is_empty():
-		return &""
-	return actions.bare_skill_family
-
 ## Ce qu'un poste de cette action rend en un soir, avant le multiplicateur de l'ouvrier.
 ##
-## Lu sans garde : _family_of() a déjà établi que le bâtiment produit, ou que la cellule
+## Lu sans garde : family_of() a déjà établi que le bâtiment produit, ou que la cellule
 ## porte un tag que la carte sait exploiter.
 static func _yield_of(action: PlayedAction, terrain: TerrainQuery, city: CitySnapshot,
 		actions: ActionBalance) -> Dictionary[StringName, int]:
