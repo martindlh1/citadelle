@@ -11,7 +11,8 @@ extends GdUnitTestSuite
 const COMMODITY_ROOT := "res://data/commodities"
 
 func test_a_blank_commodity_reports_all_its_required_fields() -> void:
-	assert_array(CommodityData.new().missing_fields()).contains(["id", "label", "color"])
+	assert_array(CommodityData.new().missing_fields()) \
+		.contains(["id", "label", "color", "order"])
 
 ## Troisième copie de la sentinelle, après TerrainData et BuildingData. Ce cas est ce
 ## qui empêche les trois de dériver les unes des autres.
@@ -31,13 +32,40 @@ func test_an_unset_colour_is_reported() -> void:
 	commodity.color = CommodityData.UNSET_COLOR
 	assert_array(commodity.missing_fields()).contains(["color"])
 
-## Le libellé est le seul champ que le domaine ne regarde jamais — il est là pour le
-## HUD de E2. Le réclamer quand même évite d'arriver à E2 avec trois ressources
+## Le libellé est l'un des deux champs que le domaine ne regarde jamais — il est là pour
+## le HUD de E2. Le réclamer quand même évite d'arriver à E2 avec trois ressources
 ## anonymes à afficher.
 func test_a_missing_label_is_reported() -> void:
 	var commodity := _commodity(&"wood")
 	commodity.label = ""
 	assert_array(commodity.missing_fields()).contains(["label"])
+
+## Le rang est l'autre. Il commence à 1 précisément pour que ce cas existe : un champ
+## non renseigné vaut 0, et un rang 0 légitime aurait rendu l'oubli indétectable.
+func test_a_missing_rank_is_reported() -> void:
+	var commodity := _commodity(&"wood")
+	commodity.order = 0
+	assert_array(commodity.missing_fields()).contains(["order"])
+
+## **Le seul vrai piège du champ**, et le seul contrôle qu'une Resource de schéma ne
+## peut pas faire seule : elle ne lit jamais l'index, donc elle ne sait rien des autres.
+##
+## Deux ressources qui partagent un rang laisseraient leur ordre relatif au tri, donc
+## arbitraire — et un tri qui départage à égalité sur un StringName compare des
+## pointeurs, ce qui donne un ordre stable le temps d'une session et différent à la
+## suivante. La barre de ressources changerait d'ordre entre deux lancements sans que
+## rien n'ait bougé dans data/.
+func test_no_two_commodities_share_a_rank() -> void:
+	var taken: Dictionary[int, String] = {}
+	for file in DirAccess.get_files_at(COMMODITY_ROOT):
+		if file.get_extension() != "tres":
+			continue
+		var commodity := load("%s/%s" % [COMMODITY_ROOT, file]) as CommodityData
+		assert_bool(taken.has(commodity.order)) \
+			.override_failure_message("%s et %s partagent le rang %d"
+				% [taken.get(commodity.order, "?"), file, commodity.order]) \
+			.is_false()
+		taken[commodity.order] = file
 
 ## Chaque .tres du catalogue se charge, est complet, et porte l'identifiant de son
 ## nom de fichier. C'est cette convention que GameDatabase indexe.
@@ -66,4 +94,5 @@ func _commodity(id: StringName) -> CommodityData:
 	commodity.id = id
 	commodity.label = "Libellé de test"
 	commodity.color = Color(0.5, 0.4, 0.3)
+	commodity.order = 1
 	return commodity

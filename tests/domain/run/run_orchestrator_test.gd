@@ -333,10 +333,41 @@ func test_site_work_credits_the_construction_track() -> void:
 	assert_int(state.roster().worker(&"ana").xp()).is_equal(XP_PER_SHIFT)
 
 ## L'ordre de la résolution, et il n'est pas indifférent. Un entrepôt achevé ce soir ne
-## relève pas la réserve du même soir : la production se calcule sur la ville d'**avant**,
+## sauve pas la récolte du même soir : la production se calcule sur la ville d'**avant**,
 ## et les chantiers s'appliquent après. Sans cette règle, l'ordre des cartes posées
 ## déciderait du résultat — ce que `E1` a refusé pour l'écrêtage.
-func test_a_warehouse_finished_tonight_only_raises_the_cap_tomorrow() -> void:
+##
+## *(Réécrit à `E2`.)* `I1` tenait la même règle en affirmant que la **capacité** valait
+## encore 100 à la fin de cette phase-là. C'était affirmer un effet de bord plutôt que la
+## règle : ce que 2 protège est que la récolte du soir ne soit pas sauvée, pas que le
+## compteur affiché reste en arrière. Le cas asserte donc désormais ce qui compte
+## vraiment — la réserve était pleine quand la récolte est tombée, donc elle est perdue —,
+## ce qui est plus fort que ce que `I1` pouvait observer, et ce qui laisse la capacité
+## libre de se relever aussitôt. Voir le cas suivant.
+func test_a_warehouse_finished_tonight_does_not_save_tonights_harvest() -> void:
+	var state := _open(SEED, _one_open_phase())
+	_fill_the_reserve(state)
+	RunOrchestrator.play(state, CARD_STORE, SPOT)
+	var site := RunOrchestrator.play(state, SiteResolver.CARD_BUILD, SPOT).action()
+	var crop := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST).action()
+	RunOrchestrator.staff(state, &"ana", site.id())
+	RunOrchestrator.staff(state, &"bo", crop.id())
+	var report := RunOrchestrator.end_phase(state)
+	assert_array(report.completed()).contains_exactly([SPOT])
+	assert_int(report.production().produced()[&"wood"]).is_equal(1)
+	assert_dict(report.production().stored()).is_empty()
+	assert_int(report.production().total_wasted()).is_equal(1)
+
+## Et le revers, qui est le neuf de `E2` : la capacité, elle, monte **tout de suite**.
+##
+## Elle montait au soir suivant jusqu'ici, et personne ne l'avait vu parce qu'aucun écran
+## n'affichait la réserve en continu — la résolution suivante la reposait de toute façon.
+## Un HUD la met sous les yeux : l'entrepôt est fini sur la carte, et la jauge annonce
+## encore l'ancien plafond pendant toute une phase.
+##
+## Les deux cas se lisent ensemble : le soir garde sa récolte perdue, et le plafond est
+## déjà relevé quand la phase rend la main.
+func test_a_warehouse_finished_tonight_raises_the_cap_at_once() -> void:
 	var state := _open()
 	RunOrchestrator.play(state, CARD_STORE, SPOT)
 	var site := RunOrchestrator.play(state, SiteResolver.CARD_BUILD, SPOT).action()
@@ -344,10 +375,15 @@ func test_a_warehouse_finished_tonight_only_raises_the_cap_tomorrow() -> void:
 	RunOrchestrator.staff(state, &"ana", site.id())
 	var report := RunOrchestrator.end_phase(state)
 	assert_array(report.completed()).contains_exactly([SPOT])
-	assert_int(state.ledger().capacity()).is_equal(BASE_CAP)
-	RunOrchestrator.end_phase(state)
-	RunOrchestrator.end_phase(state)
 	assert_int(state.ledger().capacity()).is_equal(BASE_CAP + STORE_BONUS)
+
+## Et une phase sans entrepôt ne touche pas au plafond : sans ce revers, un
+## `set_capacity()` qui rendrait n'importe quoi passerait les deux cas ci-dessus dès lors
+## qu'il rendrait plus grand.
+func test_a_phase_that_finishes_nothing_leaves_the_cap_alone() -> void:
+	var state := _open()
+	_resolve_an_empty_day(state)
+	assert_int(state.ledger().capacity()).is_equal(BASE_CAP)
 
 ## L'upkeep tombe sur le roster entier, oisifs compris, et il tombe à la **fin de la
 ## journée**.
@@ -482,6 +518,17 @@ func _scripted(run_seed := SEED) -> RunState:
 func _resolve_an_empty_day(state: RunState) -> PhaseReport:
 	RunOrchestrator.end_phase(state)
 	return RunOrchestrator.end_phase(state)
+
+## Remplit la réserve jusqu'au plafond, pour que la récolte du soir n'ait nulle part où
+## entrer. C'est la seule façon d'observer l'écrêtage avec cet équilibrage : trois
+## ouvriers ne produiront jamais les cent unités qu'il faudrait pour déborder tout seuls.
+func _fill_the_reserve(state: RunState) -> void:
+	var top_up: Dictionary[StringName, int] = {}
+	top_up[&"wood"] = BASE_CAP - state.ledger().total()
+	state.ledger().deposit(top_up)
+	assert_bool(state.ledger().is_full()) \
+		.override_failure_message("la réserve n'est pas pleine avant le soir") \
+		.is_true()
 
 func _open(run_seed := SEED, phases: Array[PhaseDef] = []) -> RunState:
 	return RunState.open(run_seed, _make_grid(), _make_roster(), _make_catalogue(),
