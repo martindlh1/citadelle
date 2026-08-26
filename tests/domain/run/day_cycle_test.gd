@@ -65,6 +65,43 @@ func test_a_phase_answers_for_what_it_declares() -> void:
 	assert_bool(cycle.permits(PhaseDef.ACTION_ASSIGN)).is_true()
 	assert_bool(cycle.resolves()).is_true()
 
+## La fin de journée est la fin de la dernière phase, et rien d'autre. Ce n'est pas un
+## champ de `PhaseDef` parce qu'un booléen en data pourrait dire le contraire de la liste
+## qui le porte, et personne ne saurait lequel des deux croire.
+func test_only_the_last_phase_of_a_day_closes_it() -> void:
+	var cycle := _cycle_of(3, 2)
+	assert_bool(cycle.closes_the_day()).is_false()
+	cycle.advance()
+	assert_bool(cycle.closes_the_day()).is_false()
+	cycle.advance()
+	assert_bool(cycle.closes_the_day()).is_true()
+	cycle.advance()
+	assert_int(cycle.day()).is_equal(2)
+	assert_bool(cycle.closes_the_day()).is_false()
+
+## Une journée d'une seule phase se ferme à chaque phase, ce qui est cohérent et non un
+## cas particulier.
+func test_a_single_phase_day_closes_on_that_phase() -> void:
+	assert_bool(_cycle_of(1, 3).closes_the_day()).is_true()
+
+## Fermer la journée et résoudre sont deux questions distinctes : une journée coûte à
+## nourrir même si sa dernière phase ne produit rien.
+func test_closing_the_day_does_not_depend_on_resolving() -> void:
+	var phases: Array[PhaseDef] = [
+		_phase(&"first", [PhaseDef.ACTION_PLAY], true),
+		_phase(&"last", [PhaseDef.ACTION_PLAY], false)]
+	var cycle := DayCycle.create(phases, 1)
+	assert_bool(cycle.resolves()).is_true()
+	assert_bool(cycle.closes_the_day()).is_false()
+	cycle.advance()
+	assert_bool(cycle.resolves()).is_false()
+	assert_bool(cycle.closes_the_day()).is_true()
+
+func test_a_finished_run_closes_no_day() -> void:
+	var cycle := _cycle_of(1, 1)
+	cycle.advance()
+	assert_bool(cycle.closes_the_day()).is_false()
+
 ## Un run terminé n'autorise rien et ne résout rien. Sans cette réponse, l'UI d'un run
 ## fini interrogerait une phase qui n'existe plus.
 func test_a_finished_run_permits_nothing_and_resolves_nothing() -> void:

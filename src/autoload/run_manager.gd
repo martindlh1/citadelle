@@ -84,14 +84,14 @@ func unstaff(action: int) -> Array[StringName]:
 ## Termine la phase courante et publie ce qui en sort.
 ##
 ## Trois signaux possibles pour un seul geste, et c'est la seule logique de ce fichier :
-## un soir résolu, une phase entrante, et une fin de run. Ils sont émis dans cet ordre —
+## une phase résolue, une phase entrante, et une fin de run. Ils sont émis dans cet ordre —
 ## le rapport d'abord, parce qu'il décrit la phase qui vient de finir et non celle qui
 ## commence.
-func end_phase() -> EveningReport:
+func end_phase() -> PhaseReport:
 	assert(is_running(), "fin de phase hors run")
 	var report := RunOrchestrator.end_phase(_state)
 	if report != null:
-		EventBus.evening_resolved.emit(report)
+		EventBus.phase_resolved.emit(report)
 	if _state.cycle().is_over():
 		EventBus.run_finished.emit(_state.cycle().day())
 	else:

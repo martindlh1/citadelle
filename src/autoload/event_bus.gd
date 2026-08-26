@@ -28,8 +28,12 @@ signal run_ended(score: int)
 ## phase que RunManager expose.
 signal phase_changed(day: int, phase: StringName)
 
-## Un soir vient de se résoudre. La charge est le rapport, immuable.
-signal evening_resolved(report: EveningReport)
+## Une phase vient de se résoudre. La charge est le rapport, immuable.
+##
+## Un seul signal pour les deux sortes de résolution : le rapport porte la journée fermée
+## quand il y en a une, et `closes_the_day()` le dit. Un second signal serait une frontière
+## que personne ne franchit — aucun auditeur ne veut l'une sans l'autre.
+signal phase_resolved(report: PhaseReport)
 
 ## Le run a franchi sa dernière phase. Ce qu'il advient ensuite — score, écran de
 ## récompense — appartient à I2 ; ce signal existe pour que le harnais cesse de jouer.

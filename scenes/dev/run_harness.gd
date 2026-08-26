@@ -16,7 +16,7 @@ extends Node
 ##     curseur et se fait refuser quand la réserve ne suit pas. `D2` la posait
 ##     gratuitement et le disait en toutes lettres.
 ##   - **les deux verbes exécutés.** Un chantier monte vraiment d'un cran, et le relief se
-##     creuse vraiment sous un terrassement. Le rapport du soir les nomme.
+##     creuse vraiment sous un terrassement. Le rapport de phase les nomme.
 ##
 ## Il ne décide rien. Il traduit un clic en appel de `RunManager` et une réponse en
 ## couleur, comme les harnais Construction et Cartes avant lui. Aucun « if » sur le
@@ -106,7 +106,7 @@ func _ready() -> void:
 	_label = _make_label()
 	add_child(_label)
 
-	EventBus.evening_resolved.connect(_on_evening_resolved)
+	EventBus.phase_resolved.connect(_on_phase_resolved)
 	_refresh_targets()
 	_capture_if_asked()
 
@@ -289,10 +289,10 @@ func _end_phase() -> void:
 
 ## Le seul endroit du harnais qui réagit à un signal plutôt qu'à une touche, et c'est ce
 ## que `I0` avait dessiné : le domaine retourne, `RunManager` publie, l'écran écoute.
-func _on_evening_resolved(report: EveningReport) -> void:
-	_last_report = _evening_text(report)
+func _on_phase_resolved(report: PhaseReport) -> void:
+	_last_report = _phase_text(report)
 	# Le relief a pu bouger sous un terrassement, et la ville sous un chantier. Refaire
-	# les deux plutôt que de deviner lequel : une soirée par jour, le coût est nul.
+	# les deux plutôt que de deviner lequel : deux résolutions par jour, le coût est nul.
 	_world.show_grid(_state().grid())
 	_renderer.rebuild(_state().city())
 
@@ -445,29 +445,35 @@ func _hover_line() -> String:
 		"accepté, %d poste(s)" % verdict.capacity() if verdict.is_ok()
 			else String(verdict.reason())]
 
-## Le compte rendu du dernier soir résolu.
+## Le compte rendu de la dernière phase résolue.
 ##
 ## Il nomme ce que `D2` ne pouvait qu'annoncer : les crans posés, la terre déplacée, les
-## chantiers achevés. Et il compte les oisifs sur le **rapport du soir** et non sur celui
+## chantiers achevés. Et il compte les oisifs sur le **rapport de phase** et non sur celui
 ## de la production, qui compterait un bâtisseur parmi eux.
-func _evening_text(report: EveningReport) -> String:
+##
+## La ligne d'upkeep n'apparaît que sur la phase qui **ferme la journée**, parce qu'on
+## mange une fois par jour quel que soit le nombre de fois qu'on a récolté. Une ligne à
+## zéro les autres phases se lirait comme un soir où personne n'a mangé.
+func _phase_text(report: PhaseReport) -> String:
 	var production := report.production()
 	var lines := PackedStringArray()
-	lines.append("Jour %d, %s — %d poste(s) tenu(s), %d oisif(s)" % [report.day(),
-		report.phase(), report.manned_count(), report.idle().size()])
+	lines.append("Jour %d, %s — %d poste(s) tenu(s), %d oisif(s)%s" % [report.day(),
+		report.phase(), report.manned_count(), report.idle().size(),
+		"   ← fin de journée" if report.closes_the_day() else ""])
 	lines.append("  produit  %s" % _bundle(production.produced()))
 	lines.append("  stocké   %s   perdu au plafond %d" % [_bundle(production.stored()),
 		production.total_wasted()])
-	var upkeep := report.upkeep()
-	lines.append("  upkeep   %d dû, %d mangé, %d à jeun%s" % [upkeep.due(),
-		upkeep.consumed(), upkeep.unfed(),
-		"   ← famine" if upkeep.is_famine() else ""])
 	lines.append("  XP       %d distribuée, %d palier(s) de piste" % [
 		report.progress().total_xp(), report.progress().skill_level_ups().size()])
 	lines.append("  chantiers %s" % _sites_text(report))
+	if report.closes_the_day():
+		var upkeep := report.day_report().upkeep()
+		lines.append("  upkeep   %d dû, %d mangé, %d à jeun%s" % [upkeep.due(),
+			upkeep.consumed(), upkeep.unfed(),
+			"   ← famine" if upkeep.is_famine() else ""])
 	return "\n".join(lines)
 
-func _sites_text(report: EveningReport) -> String:
+func _sites_text(report: PhaseReport) -> String:
 	var sites := report.sites()
 	if sites.is_empty():
 		return "—"
@@ -631,17 +637,22 @@ func _capture_if_asked() -> void:
 ## Une journée jouée comme une main humaine la jouerait : on pose ce qu'on peut, on
 ## envoie les ouvriers, on finit la journée.
 ##
-## Elle s'arrête sur le nombre de phases de la journée et non sur un compte écrit ici :
-## une journée de trois phases doit se jouer sans qu'une ligne bouge.
+## Elle s'arrête sur la **fin de journée** et non sur un compte écrit ici : une journée de
+## trois phases se joue sans qu'une ligne bouge.
+##
+## Elle s'est d'abord arrêtée sur `resolves()`, ce qui revenait au même tant qu'une seule
+## phase par jour résolvait. Depuis que les deux le font, ça n'en jouait plus qu'une —
+## défaut que seule la capture pouvait montrer, puisqu'elle est le seul contrôle qui
+## compte les jours.
 func _scripted_day() -> void:
 	while not _state().cycle().is_over():
 		if _state().cycle().permits(PhaseDef.ACTION_PLAY):
 			_scripted_plays()
 		if _state().cycle().permits(PhaseDef.ACTION_ASSIGN):
 			_scripted_staffing()
-		var resolved := _state().cycle().resolves()
+		var closed := _state().cycle().closes_the_day()
 		_end_phase()
-		if resolved:
+		if closed:
 			return
 
 ## Pose une carte de chaque nature qui trouve une cible : un bâtiment payable, puis les

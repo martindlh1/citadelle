@@ -86,6 +86,21 @@ func resolves() -> bool:
 		return false
 	return phase().resolves
 
+## La phase courante est-elle la dernière de la journée ?
+##
+## C'est **la** définition d'une fin de journée, et c'est pourquoi ce n'est pas un champ
+## de `PhaseDef`. Une journée se ferme après sa dernière phase, point : un booléen en data
+## pourrait dire le contraire de la liste qui le porte, et personne ne saurait lequel des
+## deux croire.
+##
+## Ce qu'une fin de journée déclenche — l'upkeep, plus tard l'événement et le combat — est
+## indépendant de `resolves()`. Une journée coûte à nourrir même si sa dernière phase ne
+## produit rien.
+func closes_the_day() -> bool:
+	if is_over():
+		return false
+	return _index == _phases.size() - 1
+
 ## Passe à la phase suivante. Rend vrai si un nouveau jour vient de s'ouvrir.
 ##
 ## Le booléen porte l'information qu'un appelant ne peut pas déduire sans avoir gardé

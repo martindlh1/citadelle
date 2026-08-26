@@ -132,12 +132,19 @@ static func unstaff(state: RunState, action: int) -> Array[StringName]:
 		return none
 	return state.release_action(action)
 
-## Résout le soir : la séquence de `DESIGN.md` 2, réduite à ce qui existe.
+## Résout la phase courante : la séquence de `DESIGN.md` 2, réduite à ce qui existe.
 ##
-## Actions jouées — production **et** chantiers —, puis gain d'XP, puis rapport.
-## L'événement de 3.7 et le combat de `F1` entreront entre les deux, et l'ordre est déjà
-## le bon. L'upkeep est prélevé par le résolveur de production, à sa place dans la
-## séquence.
+## Actions jouées — production **et** chantiers —, puis gain d'XP, puis rapport. Et si
+## cette phase **ferme la journée**, l'upkeep par-dessus. L'événement de 3.7 et le combat
+## de `F1` entreront dans la fermeture de journée, à la place que la séquence leur garde.
+##
+## **Deux sortes de résolution, et c'est le cœur de la journée.** Une phase produit ; une
+## journée coûte. Jouer deux phases par jour ne doit pas faire manger deux fois, sans quoi
+## la structure de la journée deviendrait inséparable de son équilibrage — exactement ce
+## que 2 veut pouvoir échanger séparément.
+##
+## Une phase qui ne résout pas mais ferme la journée ne produit rien et prélève quand
+## même : une journée coûte à nourrir qu'on y ait travaillé ou non.
 ##
 ## **Les deux résolveurs voient la même ville**, celle d'avant le soir, et l'ordre compte :
 ## les chantiers s'appliquent **après** que la production a été calculée. Sans cette
@@ -146,55 +153,80 @@ static func unstaff(state: RunState, action: int) -> Array[StringName]:
 ## posées déciderait du résultat. C'est exactement ce que `E1` a refusé pour l'écrêtage, et
 ## pour la même raison : deux villes identiques bâties dans un ordre différent doivent
 ## rendre la même chose.
-static func resolve(state: RunState) -> EveningReport:
+static func resolve(state: RunState) -> PhaseReport:
 	assert(state != null, "résolution sans run")
 	assert(not state.cycle().is_over(), "résolution d'un run terminé")
+	var cycle := state.cycle()
 	var balance := state.balance()
-	var plan := state.board().to_plan()
-	var assign := state.to_assignment()
 	var labor := state.labor()
-	var snapshot := state.city().to_snapshot()
 
-	var production := ProductionResolver.resolve(state.terrain(), snapshot, plan, assign,
-		labor, state.ledger(), balance.economy, balance.actions)
-	var upkeep := ProductionResolver.take_upkeep(labor, state.ledger(), balance.economy)
-	var sites := SiteResolver.resolve(snapshot, plan, assign, labor, balance.actions)
-	var completed := _apply(state, sites)
+	var production := ProductionReport.create({}, {}, [], [])
+	var sites := SiteReport.empty()
+	var progress := ProgressReport.empty()
+	var completed: Array[Vector2i] = []
+	var lines: Array[WorkLine] = []
 
-	var lines := production.work()
-	lines.append_array(sites.work())
-	var progress := SkillResolver.award_lines(state.roster(), lines, balance.workforce)
+	if cycle.resolves():
+		var plan := state.board().to_plan()
+		var assign := state.to_assignment()
+		var snapshot := state.city().to_snapshot()
+		production = ProductionResolver.resolve(state.terrain(), snapshot, plan, assign,
+			labor, state.ledger(), balance.economy, balance.actions)
+		sites = SiteResolver.resolve(snapshot, plan, assign, labor, balance.actions)
+		completed = _apply(state, sites)
+		lines = production.work()
+		lines.append_array(sites.work())
+		progress = SkillResolver.award_lines(state.roster(), lines, balance.workforce)
 
-	return EveningReport.create(state.cycle().day(), state.cycle().phase().id, production,
-		upkeep, sites, progress, _idle(labor, lines), completed)
+	var day_report: DayReport = null
+	if cycle.closes_the_day():
+		day_report = close_the_day(state)
 
-## Termine la phase courante et passe à la suivante. Rend le rapport si elle résolvait,
-## null sinon.
+	return PhaseReport.create(cycle.day(), cycle.phase().id, production, sites, progress,
+		_idle(labor, lines), completed, day_report)
+
+## Ferme la journée : prélève l'upkeep et rend ce qu'elle a coûté.
+##
+## Une porte à part parce que c'est ici que 3.7 et `F1` viendront s'ajouter, et qu'ils s'y
+## ajouteront **par un champ de plus** plutôt qu'en déplaçant quoi que ce soit. La
+## séquence de 2 leur garde la place : « actions jouées → événement → upkeep → combat →
+## gain d'XP → rapport ».
+static func close_the_day(state: RunState) -> DayReport:
+	assert(state != null, "fermeture de journée sans run")
+	var balance := state.balance()
+	var upkeep := ProductionResolver.take_upkeep(state.labor(), state.ledger(),
+		balance.economy)
+	return DayReport.create(state.cycle().day(), upkeep)
+
+## Termine la phase courante et passe à la suivante. Rend un rapport si elle résolvait ou
+## si elle fermait la journée, null sinon.
 ##
 ## **Le board ne se vide qu'après une résolution**, jamais à chaque frontière de phase : il
 ## traverse la journée, puisque `D2` a fait de « poser une carte » et « y envoyer des
 ## ouvriers » deux gestes que rien n'oblige à tenir dans la même phase. Vider entre les
 ## deux effacerait ce que la première a fait.
 ##
-## Repiocher suit `resolves` et non le calendrier, ce qui est ce qui permet aux deux
-## modèles de journée de `DESIGN.md` 2 de se comporter sensément sans qu'un nom de phase
-## soit écrit : une journée à deux phases dont une résout rend une main par jour, une
-## journée à deux phases qui résolvent toutes les deux en rend deux.
+## Repiocher suit `resolves` et non le calendrier, ce qui permet aux modèles de journée de
+## `DESIGN.md` 2 de se comporter sensément sans qu'un nom de phase soit écrit : **une main
+## par phase qui résout**. Deux phases qui résolvent rendent donc deux mains par jour et
+## deux récoltes — mais un seul upkeep, parce que manger suit la journée et non la phase.
 ##
 ## Ce que ça décide du sort de la main non jouée — elle est défaussée — est l'état par
 ## défaut de l'`OUVERT` de 3.5 et non une réponse. `I2b` le tranchera.
-static func end_phase(state: RunState) -> EveningReport:
+static func end_phase(state: RunState) -> PhaseReport:
 	assert(state != null, "fin de phase sans run")
 	if state.cycle().is_over():
 		return null
-	var report: EveningReport = null
-	if state.cycle().resolves():
+	var resolves := state.cycle().resolves()
+	var report: PhaseReport = null
+	if resolves or state.cycle().closes_the_day():
 		report = resolve(state)
+	if resolves:
 		state.board().clear()
 		state.clear_staffing()
 		state.deck().discard_hand()
 	state.cycle().advance()
-	if report != null and not state.cycle().is_over():
+	if resolves and not state.cycle().is_over():
 		state.draw_phase()
 	return report
 

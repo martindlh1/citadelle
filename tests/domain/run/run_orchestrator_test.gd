@@ -296,7 +296,7 @@ func test_terraforming_upward_raises_the_cell() -> void:
 	RunOrchestrator.end_phase(state)
 	assert_int(state.grid().height_at(DIRT)).is_equal(GROUND + 1)
 
-## **Le cas qui porte `EveningReport.idle()`.** Le rapport de production ne connaît que
+## **Le cas qui porte `PhaseReport.idle()`.** Le rapport de production ne connaît que
 ## les postes de production, donc il compte un bâtisseur parmi les oisifs. Les deux
 ## lectures sont chacune juste dans leur système ; seule la journée voit les deux
 ## journaux, et c'est elle qui répond pour le soir entier.
@@ -343,12 +343,57 @@ func test_a_warehouse_finished_tonight_only_raises_the_cap_tomorrow() -> void:
 	RunOrchestrator.end_phase(state)
 	assert_int(state.ledger().capacity()).is_equal(BASE_CAP + STORE_BONUS)
 
-## L'upkeep tombe sur le roster entier, oisifs compris, et il tombe dans la même soirée.
-func test_an_evening_takes_the_upkeep() -> void:
+## L'upkeep tombe sur le roster entier, oisifs compris, et il tombe à la **fin de la
+## journée**.
+func test_closing_the_day_takes_the_upkeep() -> void:
 	var state := _open()
 	var report := _resolve_an_empty_day(state)
-	assert_int(report.upkeep().due()).is_equal(3)
+	assert_bool(report.closes_the_day()).is_true()
+	assert_int(report.day_report().upkeep().due()).is_equal(3)
+	assert_int(report.day_report().day()).is_equal(1)
 	assert_int(state.ledger().amount(&"food")).is_equal(OPENING_FOOD - 3)
+
+## **Le cas qui porte la correction.** On produit à chaque phase, on mange une fois par
+## jour : une phase qui ne ferme pas la journée ne prélève rien, et son rapport ne porte
+## aucune journée. Sans cette séparation, jouer deux phases par jour ferait manger deux
+## fois, et la structure de la journée deviendrait inséparable de son équilibrage.
+func test_a_phase_that_does_not_close_the_day_takes_no_upkeep() -> void:
+	var state := _open(SEED, _two_working_phases())
+	var report := RunOrchestrator.end_phase(state)
+	assert_bool(report.closes_the_day()).is_false()
+	assert_object(report.day_report()).is_null()
+	assert_int(state.ledger().amount(&"food")).is_equal(OPENING_FOOD)
+
+## Et le revers, sur la journée que `data/` porte : deux phases qui résolvent, deux
+## récoltes, **un seul** upkeep.
+func test_two_resolving_phases_produce_twice_and_eat_once() -> void:
+	var state := _open(SEED, _two_working_phases())
+	var first := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST).action()
+	RunOrchestrator.staff(state, &"ana", first.id())
+	var morning := RunOrchestrator.end_phase(state)
+	var second := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST).action()
+	RunOrchestrator.staff(state, &"ana", second.id())
+	var afternoon := RunOrchestrator.end_phase(state)
+	assert_int(morning.production().produced()[&"wood"]).is_equal(1)
+	assert_int(afternoon.production().produced()[&"wood"]).is_equal(1)
+	assert_bool(morning.closes_the_day()).is_false()
+	assert_bool(afternoon.closes_the_day()).is_true()
+	assert_int(afternoon.day_report().upkeep().due()).is_equal(3)
+	assert_int(state.ledger().amount(&"food")).is_equal(OPENING_FOOD - 3)
+	assert_int(state.cycle().day()).is_equal(2)
+
+## Une journée coûte à nourrir même si sa dernière phase ne produit rien. Le prélèvement
+## suit la fin de journée, pas `resolves`.
+func test_a_day_whose_last_phase_does_not_resolve_still_eats() -> void:
+	var phases: Array[PhaseDef] = [
+		_phase(&"first", [PhaseDef.ACTION_PLAY], true),
+		_phase(&"last", [PhaseDef.ACTION_PLAY], false)]
+	var state := _open(SEED, phases)
+	RunOrchestrator.end_phase(state)
+	var report := RunOrchestrator.end_phase(state)
+	assert_bool(report.closes_the_day()).is_true()
+	assert_int(report.day_report().upkeep().due()).is_equal(3)
+	assert_dict(report.production().produced()).is_empty()
 
 # --- Les frontières de phase ---------------------------------------------------------------
 
@@ -428,7 +473,7 @@ func _scripted(run_seed := SEED) -> RunState:
 
 # --- La mise en place -----------------------------------------------------------------------
 
-func _resolve_an_empty_day(state: RunState) -> EveningReport:
+func _resolve_an_empty_day(state: RunState) -> PhaseReport:
 	RunOrchestrator.end_phase(state)
 	return RunOrchestrator.end_phase(state)
 
@@ -442,6 +487,16 @@ func _open(run_seed := SEED, phases: Array[PhaseDef] = []) -> RunState:
 func _one_open_phase() -> Array[PhaseDef]:
 	var phases: Array[PhaseDef] = [
 		_phase(&"only", [PhaseDef.ACTION_PLAY, PhaseDef.ACTION_ASSIGN], true)]
+	return phases
+
+## La journée que `data/balance/` porte, sur des noms qui n'y sont pas : deux phases
+## identiques qui posent, affectent et résolvent toutes les deux. Seule la seconde ferme
+## la journée, parce qu'une journée se ferme après sa dernière phase — et pas parce qu'un
+## champ le dirait.
+func _two_working_phases() -> Array[PhaseDef]:
+	var both: Array = [PhaseDef.ACTION_PLAY, PhaseDef.ACTION_ASSIGN]
+	var phases: Array[PhaseDef] = [
+		_phase(&"first", both, true), _phase(&"second", both, true)]
 	return phases
 
 func _make_grid() -> HeightGrid:
