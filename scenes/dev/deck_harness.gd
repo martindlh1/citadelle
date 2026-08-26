@@ -349,11 +349,15 @@ func _unstaff_here() -> void:
 func _resolve_evening() -> void:
 	var plan := _board.to_plan()
 	var assign := _assignment()
+	var labor := _roster.to_labor(_workforce)
 	var report := ProductionResolver.resolve(_terrain, _city.to_snapshot(), plan, assign,
-		_roster.to_labor(_workforce), _ledger, _economy, _action_balance)
+		labor, _ledger, _economy, _action_balance)
+	# Un soir de ce harnais est une journée entière : il ne connaît pas les phases que I1
+	# a introduites, et n'a pas à les connaître — son sujet est la main, pas la journée.
+	var upkeep := ProductionResolver.take_upkeep(labor, _ledger, _economy)
 	var progress := SkillResolver.award(_roster, report, _workforce)
 	_evening += 1
-	_last_report = _evening_text(plan, report, progress)
+	_last_report = _evening_text(plan, report, upkeep, progress)
 	_board.clear()
 	_posted.clear()
 	_deck.discard_hand()
@@ -524,7 +528,7 @@ func _hover_line() -> String:
 ## Les ouvriers rentrés bredouilles sont nommés avec leur raison quand elle est connue —
 ## c'est là que se lit le périmètre de D2, et un « 2 oisifs » sec laisserait croire à une
 ## panne.
-func _evening_text(plan: ActionPlan, report: ProductionReport,
+func _evening_text(plan: ActionPlan, report: ProductionReport, upkeep: UpkeepReport,
 		progress: ProgressReport) -> String:
 	var lines := PackedStringArray()
 	lines.append("Soir %d — %d action(s) jouée(s), %d poste(s) tenu(s)"
@@ -533,8 +537,8 @@ func _evening_text(plan: ActionPlan, report: ProductionReport,
 	lines.append("  stocké   %s   perdu au plafond %d"
 		% [_bundle(report.stored()), report.total_wasted()])
 	lines.append("  upkeep   %d dû, %d mangé, %d à jeun%s"
-		% [report.upkeep(), report.consumed(), report.unfed(),
-			"   ← famine" if report.is_famine() else ""])
+		% [upkeep.due(), upkeep.consumed(), upkeep.unfed(),
+			"   ← famine" if upkeep.is_famine() else ""])
 	lines.append("  XP       %d distribuée, %d palier(s) de piste"
 		% [progress.total_xp(), progress.skill_level_ups().size()])
 	var stalled := _stalled(plan)

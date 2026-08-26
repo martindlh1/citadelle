@@ -22,8 +22,11 @@ var _day: int
 ## Identifiant de la phase qui a résolu. Lu depuis la `PhaseDef`, jamais écrit en dur.
 var _phase: StringName
 
-## Ce que l'Économie a produit, stocké et mangé.
+## Ce que l'Économie a produit et stocké.
 var _production: ProductionReport
+
+## Ce que le roster a coûté à nourrir.
+var _upkeep: UpkeepReport
 
 ## Ce que les chantiers et le terrassement ont fait.
 var _sites: SiteReport
@@ -50,16 +53,18 @@ var _completed: Array[Vector2i] = []
 ## de connaître le travail de chantier, donc de recevoir un rapport qu'un autre système
 ## produit, ce qui est exactement la dépendance que la ligne de contrat de 3.3 refuse.
 static func create(day: int, phase: StringName, production: ProductionReport,
-		sites: SiteReport, progress: ProgressReport, idle: Array[StringName],
-		completed: Array[Vector2i]) -> EveningReport:
+		upkeep: UpkeepReport, sites: SiteReport, progress: ProgressReport,
+		idle: Array[StringName], completed: Array[Vector2i]) -> EveningReport:
 	assert(day > 0, "rapport de soirée sans jour : %d" % day)
 	assert(production != null, "rapport de soirée sans production")
+	assert(upkeep != null, "rapport de soirée sans upkeep")
 	assert(sites != null, "rapport de soirée sans chantiers")
 	assert(progress != null, "rapport de soirée sans progression")
 	var report := EveningReport.new()
 	report._day = day
 	report._phase = phase
 	report._production = production
+	report._upkeep = upkeep
 	report._sites = sites
 	report._progress = progress
 	report._idle = idle.duplicate()
@@ -77,6 +82,10 @@ func phase() -> StringName:
 ## Ce que l'Économie a rendu.
 func production() -> ProductionReport:
 	return _production
+
+## Ce que le roster a coûté à nourrir.
+func upkeep() -> UpkeepReport:
+	return _upkeep
 
 ## Ce que les chantiers ont rendu.
 func sites() -> SiteReport:

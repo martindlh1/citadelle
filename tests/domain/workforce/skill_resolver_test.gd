@@ -144,7 +144,7 @@ func _report(work: Array) -> ProductionReport:
 	lines.assign(work)
 	var none: Dictionary[StringName, int] = {}
 	var idle: Array[StringName] = []
-	return ProductionReport.create(none, none, lines, idle, 0, 0, 0)
+	return ProductionReport.create(none, none, lines, idle)
 
 ## Une cabane à un poste qui rend 2 bois — assez pour que le premier palier fasse
 ## passer la récolte de 2 à 3, ce qu'un rendement de 1 ne montrerait pas.

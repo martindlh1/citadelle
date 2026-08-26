@@ -130,8 +130,13 @@ func _report_evenings() -> void:
 	_lines.append("soir  %-*s  mult.   XP  notes" % [PRODUCED_WIDTH, "produit (brut)"])
 	for evening in range(1, EVENINGS + 1):
 		_move_the_absent(evening)
+		var labor := _roster.to_labor(_workforce)
 		var report := ProductionResolver.resolve(_terrain, _city, _plan, _assign,
-			_roster.to_labor(_workforce), _ledger, _economy, _actions)
+			labor, _ledger, _economy, _actions)
+		# La réserve et la famine sont hors sujet ici, mais l'upkeep doit tomber quand
+		# même : sans lui la nourriture s'accumulerait et la réserve commune plafonnerait
+		# la récolte au bout de quelques soirs, ce qui fausserait la courbe mesurée.
+		ProductionResolver.take_upkeep(labor, _ledger, _economy)
 		var multiplier := _reference_multiplier()
 		var progress := SkillResolver.award(_roster, report, _workforce)
 		_count_shifts(report)

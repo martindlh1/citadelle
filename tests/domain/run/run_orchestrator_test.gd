@@ -187,6 +187,70 @@ func test_staffing_an_action_nobody_posted_is_refused() -> void:
 	RunOrchestrator.end_phase(state)
 	assert_bool(RunOrchestrator.staff(state, &"ana", 99)).is_false()
 
+## Les cinq refus se nomment.
+##
+## Ils l'ont d'abord tous été de la même façon — un booléen nu — au motif qu'ils se
+## voyaient à l'écran avant le clic. C'était faux à l'usage : la première partie jouée au
+## clavier a donné un « refusé » sans cause, la touche paraissant morte alors que la phase
+## courante l'expliquait entièrement. Un refus qui ne se nomme pas est indiscernable d'une
+## panne, et c'est ce que ces cas tiennent désormais.
+func test_the_phase_names_itself_when_it_refuses_a_staffing() -> void:
+	var state := _open()
+	var posted := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST)
+	assert_str(RunOrchestrator.staffing_refusal(state, &"ana", posted.action().id())) \
+		.is_equal(PlayResult.REASON_WRONG_PHASE)
+
+func test_a_full_action_names_itself() -> void:
+	var state := _open()
+	var bare := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST).action()
+	RunOrchestrator.end_phase(state)
+	RunOrchestrator.staff(state, &"ana", bare.id())
+	assert_str(RunOrchestrator.staffing_refusal(state, &"bo", bare.id())) \
+		.is_equal(RunOrchestrator.REASON_NO_ROOM)
+
+func test_a_worker_already_at_work_names_itself() -> void:
+	var state := _open()
+	var first := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST).action()
+	var second := RunOrchestrator.play(state, SiteResolver.CARD_TERRAFORM, DIRT, 0,
+		UP).action()
+	RunOrchestrator.end_phase(state)
+	RunOrchestrator.staff(state, &"ana", first.id())
+	assert_str(RunOrchestrator.staffing_refusal(state, &"ana", second.id())) \
+		.is_equal(RunOrchestrator.REASON_ALREADY_STAFFED)
+
+func test_an_absent_worker_names_itself() -> void:
+	var state := _open()
+	var bare := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST).action()
+	RunOrchestrator.end_phase(state)
+	state.roster().worker(&"ana").set_present(false)
+	assert_str(RunOrchestrator.staffing_refusal(state, &"ana", bare.id())) \
+		.is_equal(RunOrchestrator.REASON_ABSENT_WORKER)
+
+## Un absent et un inconnu sont deux choses différentes : le premier revient d'expédition,
+## le second n'a jamais existé. Les confondre ferait dire à l'écran « Ana est absente »
+## d'un nom que personne ne porte.
+func test_an_unknown_worker_names_itself() -> void:
+	var state := _open()
+	var bare := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST).action()
+	RunOrchestrator.end_phase(state)
+	assert_str(RunOrchestrator.staffing_refusal(state, &"nobody", bare.id())) \
+		.is_equal(RunOrchestrator.REASON_UNKNOWN_WORKER)
+
+func test_a_missing_action_names_itself() -> void:
+	var state := _open()
+	RunOrchestrator.end_phase(state)
+	assert_str(RunOrchestrator.staffing_refusal(state, &"ana", 99)) \
+		.is_equal(RunOrchestrator.REASON_NO_ACTION)
+
+## Et le revers : une affectation possible ne donne aucune raison. Sans ce cas, une
+## fonction qui refuserait tout passerait les six précédents.
+func test_an_allowed_staffing_gives_no_reason() -> void:
+	var state := _open()
+	var bare := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST).action()
+	RunOrchestrator.end_phase(state)
+	assert_str(RunOrchestrator.staffing_refusal(state, &"ana", bare.id())).is_empty()
+	assert_bool(RunOrchestrator.staff(state, &"ana", bare.id())).is_true()
+
 # --- Le soir ------------------------------------------------------------------------------
 
 ## Le cas qui referme la panne de `D2` : *Construire* avance vraiment un chantier.
@@ -283,7 +347,7 @@ func test_a_warehouse_finished_tonight_only_raises_the_cap_tomorrow() -> void:
 func test_an_evening_takes_the_upkeep() -> void:
 	var state := _open()
 	var report := _resolve_an_empty_day(state)
-	assert_int(report.production().upkeep()).is_equal(3)
+	assert_int(report.upkeep().due()).is_equal(3)
 	assert_int(state.ledger().amount(&"food")).is_equal(OPENING_FOOD - 3)
 
 # --- Les frontières de phase ---------------------------------------------------------------

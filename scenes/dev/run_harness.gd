@@ -229,17 +229,38 @@ func _staff_here() -> void:
 		return
 	var free := _state().free_workers()
 	if free.is_empty():
-		_last_action = "Plus aucun ouvrier libre."
+		_last_action = "Plus aucun ouvrier libre — tout le monde est déjà au travail."
 		return
 	if not RunManager.staff(free[0], action.id()):
-		_last_action = "%s : refusé — %d/%d poste(s), %s." % [
-			_label_of(action.card()), _state().staffed_on(action.id()).size(),
-			action.capacity(), _phase_label()]
+		_last_action = "%s en %s : %s" % [_label_of(action.card()), action.target(),
+			_staffing_refusal(free[0], action)]
 		return
 	_last_action = "%s -> %s en %s (%d/%d)." % [
 		_name_of(free[0]), _label_of(action.card()), action.target(),
 		_state().staffed_on(action.id()).size(), action.capacity()]
 	_refresh_markers()
+
+## Le refus d'affectation, en clair et avec le geste qui le lève.
+##
+## La raison vient du domaine et n'est pas redevinée ici : l'écran ne fait que traduire.
+## Sans cette traduction, la touche paraissait morte — le premier essai au clavier a
+## donné un « refusé » sans cause, alors que la phase courante l'expliquait entièrement.
+func _staffing_refusal(worker: StringName, action: PlayedAction) -> String:
+	var reason := RunOrchestrator.staffing_refusal(_state(), worker, action.id())
+	match reason:
+		PlayResult.REASON_WRONG_PHASE:
+			return "affecter n'est pas permis en phase « %s ». Entrée pour la finir." \
+				% _phase_label()
+		RunOrchestrator.REASON_NO_ROOM:
+			return "ses %d poste(s) sont pris. Retour arrière pour les rappeler." \
+				% action.capacity()
+		RunOrchestrator.REASON_ALREADY_STAFFED:
+			return "%s tient déjà une autre action." % _name_of(worker)
+		RunOrchestrator.REASON_ABSENT_WORKER:
+			return "%s est absent." % _name_of(worker)
+		RunOrchestrator.REASON_NO_ACTION:
+			return "cette action n'est plus posée."
+	return "refusé (%s)." % reason
 
 func _unstaff_here() -> void:
 	var action := _action_here()
@@ -437,9 +458,10 @@ func _evening_text(report: EveningReport) -> String:
 	lines.append("  produit  %s" % _bundle(production.produced()))
 	lines.append("  stocké   %s   perdu au plafond %d" % [_bundle(production.stored()),
 		production.total_wasted()])
-	lines.append("  upkeep   %d dû, %d mangé, %d à jeun%s" % [production.upkeep(),
-		production.consumed(), production.unfed(),
-		"   ← famine" if production.is_famine() else ""])
+	var upkeep := report.upkeep()
+	lines.append("  upkeep   %d dû, %d mangé, %d à jeun%s" % [upkeep.due(),
+		upkeep.consumed(), upkeep.unfed(),
+		"   ← famine" if upkeep.is_famine() else ""])
 	lines.append("  XP       %d distribuée, %d palier(s) de piste" % [
 		report.progress().total_xp(), report.progress().skill_level_ups().size()])
 	lines.append("  chantiers %s" % _sites_text(report))

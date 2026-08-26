@@ -6,9 +6,10 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ## 2026-08-25 — `I1` : la journée, la bourse, et les deux verbes enfin exécutés
 
-**État : terminé.** Cinq commits sur `feat/d1-deck`, à la suite de `D2`. Les trois
-commandes passent : boot sans erreur ni warning, tout `src/domain/` parse, **570 tests
-verts contre 467** à l'ouverture. Sixième jalon d'affilée sur la même branche.
+**État : terminé.** Sept commits sur `feat/d1-deck`, à la suite de `D2`, plus un correctif
+venu d'une première partie jouée à la main. Les trois commandes passent : boot sans erreur
+ni warning, tout `src/domain/` parse, **577 tests verts contre 467** à l'ouverture. Sixième
+jalon d'affilée sur la même branche.
 
 ### Ce qui a été livré
 
@@ -18,7 +19,7 @@ verts contre 467** à l'ouverture. Sixième jalon d'affilée sur la même branch
   les deux bornes de terrassement.
 - **Domaine** — `DayCycle`, `RunState`, `SiteResolver`, `RunOrchestrator`.
   `SkillResolver` ouvre `award_lines()`.
-- **Six suites neuves, 103 cas de plus.**
+- **Six suites neuves, 110 cas de plus.**
 - `RunManager` réécrit, trois signaux sur `EventBus`, `run_harness.gd`.
 - `DESIGN.md` 2, 3.2, 3.4, 3.5, 3.8, 4.1, 4.2 et 8 ; `CLAUDE.md` ; `README.md`.
 
@@ -132,6 +133,35 @@ qu'une journée laisse poser et affecter dans la même phase — donc dès qu'un
 ce qui est exactement le genre de variante que `I2b` mettra à l'épreuve. Le cas construit
 donc sa propre journée pour l'exercer, ce qui est aussi un rappel utile qu'une journée est
 de la data.
+
+### Le défaut que seul le clavier a trouvé — un refus sans cause
+
+*(Trouvé par l'humain juste après le jalon, corrigé dans la foulée.)* Espace sur une action
+posée répondait « refusé » sans dire pourquoi. La cause était entière et légitime : la
+phase **Construction** n'autorise que *poser*, et il faut Entrée pour atteindre
+**Affectation**. Le refus était juste ; c'est le silence qui ne l'était pas.
+
+L'origine est une justification que j'avais écrite un peu vite dans `RunOrchestrator` :
+`staff()` rendait un booléen nu, « les quatre refus possibles se voyant tous à l'écran
+avant le clic — la phase est affichée, la capacité est affichée, les ouvriers libres sont
+listés ». C'est vrai à la lettre et faux à l'usage. Le bandeau affiche bien la phase, mais
+rien ne reliait ce bandeau à une touche qui ne répond pas, et **un refus qui ne se nomme
+pas est indiscernable d'une panne** — exactement le diagnostic que `D2` avait posé sur les
+touches 4 et 5 qui « ne sélectionnaient pas ».
+
+La correction ne rajoute pas un DTO. `staffing_refusal()` devient le **seul juge** des cinq
+refus, `staff()` l'appelle, et l'écran l'appelle aussi pour traduire — le même partage que
+le fantôme de `C2` et la pose, qui interrogent tous deux `PlacementValidator`. Une seule
+liste de règles, donc rien qui puisse dériver. Sept cas de plus, dont un qui tient le
+revers : une affectation possible ne donne aucune raison, sans quoi une fonction qui
+refuserait tout passerait les six autres.
+
+Deux jalons de suite, le défaut que ni le parsing, ni les tests, ni une capture n'ont vu
+est venu d'une paire de mains. Le harnais ne se juge pas en le lisant.
+
+*(Une vérification annexe qui vaut d'être notée : le `match` de traduction est le premier
+du projet dont les motifs sont des constantes d'une **autre** classe. Une sonde jetable l'a
+confirmé plutôt que supposé — la forme est valide, y compris le repli par défaut.)*
 
 ### Le cas qui rend vraie une promesse de `I0`
 

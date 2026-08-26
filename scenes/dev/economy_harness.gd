@@ -230,7 +230,11 @@ func _report_evenings() -> void:
 		var plan := _plan()
 		var report := ProductionResolver.resolve(_terrain, _city.to_snapshot(), plan,
 			_assignment(plan), labor, _ledger, _economy, _actions)
-		if first_famine == 0 and report.is_famine():
+		# Un soir de ce harnais est une journée entière : il ne connaît pas les phases,
+		# et c'est très bien — le sujet qu'il mesure est l'écart entre ce qu'on récolte
+		# et ce qu'on mange, pas le découpage de la journée.
+		var upkeep := ProductionResolver.take_upkeep(labor, _ledger, _economy)
+		if first_famine == 0 and upkeep.is_famine():
 			first_famine = evening
 		if first_full == 0 and _ledger.is_full():
 			first_full = evening
@@ -241,7 +245,7 @@ func _report_evenings() -> void:
 			notes.append("← famine")
 		_lines.append(("%4d  %-*s %4d/%-4d %6d %6d %6d   %s"
 			% [evening, PRODUCED_WIDTH, _bundle_text(report.produced()), _ledger.total(),
-				_ledger.capacity(), report.upkeep(), report.consumed(), report.unfed(),
+				_ledger.capacity(), upkeep.due(), upkeep.consumed(), upkeep.unfed(),
 				", ".join(notes)]).rstrip(" "))
 	_lines.append("")
 	_lines.append(_verdict(first_famine, first_full))

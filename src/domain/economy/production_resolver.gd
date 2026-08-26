@@ -1,6 +1,12 @@
 class_name ProductionResolver
 extends RefCounted
-## La résolution d'un soir : qui a travaillé, ce que ça rapporte, ce que ça coûte.
+## La résolution d'une production : qui a travaillé, et ce que ça rapporte.
+##
+## Deux portes depuis I1, parce qu'une journée compte deux sortes de résolution. resolve()
+## est celle d'une **phase** : ce que les actions posées produisent. take_upkeep() est
+## celle d'une **journée** : ce que le roster coûte à nourrir. Elles tombaient ensemble
+## tant qu'une journée n'avait qu'un soir, et DESIGN.md 2 les listait pourtant déjà comme
+## deux étapes distinctes, avec l'événement entre les deux.
 ##
 ## Fonction pure au sens du domaine — tout lui est fourni, elle ne lit ni GameDatabase
 ## ni le moindre Node. Elle mute le Ledger, ce qui n'est pas une entorse : le ledger est
@@ -29,12 +35,12 @@ extends RefCounted
 ## C3 : il entrera comme un argument de plus, appliqué au rendement d'un poste juste
 ## avant le multiplicateur de l'ouvrier.
 ##
-## Ce qu'elle ne fait **pas encore**, et c'est le périmètre assumé de D2 : *Construire*
-## et *Terraformer*. Les deux se posent et s'affectent, mais leur effet mute le CityState
-## et la HeightGrid, donc l'état de deux autres systèmes. Un résolveur d'Économie qui les
-## muterait violerait la règle de dépendance ; le chemin propre est qu'il les rapporte et
-## que l'orchestrateur les applique, ce qui veut dire RunOrchestrator, donc I1. En
-## attendant, leurs ouvriers ne produisent rien et comptent comme oisifs.
+## Ce qu'elle ne fait pas, et ce n'est pas un oubli : *Construire* et *Terraformer*. Leur
+## effet mute le CityState et la HeightGrid, donc l'état de deux autres systèmes, et un
+## résolveur d'Économie qui les muterait violerait la règle de dépendance. C'est
+## SiteResolver qui les ordonne et RunOrchestrator qui les applique, depuis I1. Ici, leurs
+## ouvriers ne produisent rien et comptent comme oisifs — ce qui rend idle() juste dans ce
+## système et faux dans la journée, d'où le compte séparé du rapport de phase.
 
 ## Capacité de la réserve pour cette ville : la base, plus ce que les entrepôts
 ## **achevés** ajoutent.
@@ -53,13 +59,12 @@ static func capacity_for(city: CitySnapshot, balance: EconomyBalance) -> int:
 		capacity += building.data().storage_bonus
 	return capacity
 
-## Résout un soir de production : dépose la récolte, prélève l'upkeep, rend le rapport.
+## Résout une production : dépose la récolte sous le plafond, rend le rapport.
 ##
-## Ordre imposé par DESIGN.md 2 : production, puis plafond, puis upkeep. Il n'est pas
-## indifférent — nourrir avant d'écrêter rendrait la réserve pleine inoffensive, alors
-## que c'est justement là qu'elle doit faire mal.
+## Ordre imposé par DESIGN.md 2 : production, puis plafond. L'upkeep vient après et n'est
+## plus ici — voir take_upkeep().
 ##
-## La capacité est recalculée à chaque soir, entrepôts du moment compris. Si elle a
+## La capacité est recalculée à chaque résolution, entrepôts du moment compris. Si elle a
 ## baissé — un entrepôt détruit —, l'écrêtage qui suit n'apparaît pas dans le rapport :
 ## ce n'est pas une perte de production, et c'est au DamageReport de F1 de la porter.
 static func resolve(terrain: TerrainQuery, city: CitySnapshot, plan: ActionPlan,
@@ -73,8 +78,6 @@ static func resolve(terrain: TerrainQuery, city: CitySnapshot, plan: ActionPlan,
 	assert(ledger != null, "résolution sans réserve")
 	assert(balance != null, "résolution sans équilibrage")
 	assert(actions != null, "résolution sans équilibrage des actions")
-	assert(balance.upkeep_per_worker > 0,
-		"upkeep par ouvrier non renseigné : %d" % balance.upkeep_per_worker)
 
 	ledger.set_capacity(capacity_for(city, balance))
 
@@ -82,12 +85,34 @@ static func resolve(terrain: TerrainQuery, city: CitySnapshot, plan: ActionPlan,
 	var produced := _produce(terrain, city, plan, assign, labor, actions)
 	var stored := ledger.deposit(produced)
 
-	var upkeep := labor.size() * balance.upkeep_per_worker
-	var consumed := ledger.take(balance.upkeep_resource, upkeep)
-	var unfed := _unfed(upkeep - consumed, balance.upkeep_per_worker)
+	return ProductionReport.create(produced, stored, work, _idle(labor, work))
 
-	return ProductionReport.create(produced, stored, work, _idle(labor, work),
-		upkeep, consumed, unfed)
+## Prélève l'upkeep de la journée et rend qui n'a pas mangé.
+##
+## Séparé de resolve() depuis que la journée compte **deux sortes de résolution** : une
+## phase produit, une journée coûte. Les deux tombaient forcément ensemble tant qu'une
+## journée n'avait qu'un seul soir, et c'est cette coïncidence — et non une règle — qui
+## les avait réunis à `E1`. DESIGN.md 2 les a toujours listés comme deux étapes
+## distinctes de la séquence, avec l'événement entre les deux.
+##
+## Il ne regarde ni la ville ni les actions : ce qu'on doit ne dépend que de **qui est
+## là**. Un absent ne mange pas, puisqu'il n'entre pas dans la projection — décidé à `W1`,
+## et cette signature le redit en ne recevant rien d'autre que la main-d'œuvre.
+##
+## Partiel à dessein : manger la moitié de sa ration est précisément ce qui définit la
+## famine, et rendre faux aurait laissé la nourriture intacte un soir de disette.
+static func take_upkeep(labor: LaborForce, ledger: Ledger,
+		balance: EconomyBalance) -> UpkeepReport:
+	assert(labor != null, "upkeep sans main-d'œuvre")
+	assert(ledger != null, "upkeep sans réserve")
+	assert(balance != null, "upkeep sans équilibrage")
+	assert(balance.upkeep_per_worker > 0,
+		"upkeep par ouvrier non renseigné : %d" % balance.upkeep_per_worker)
+
+	var due := labor.size() * balance.upkeep_per_worker
+	var consumed := ledger.take(balance.upkeep_resource, due)
+	return UpkeepReport.create(due, consumed,
+		_unfed(due - consumed, balance.upkeep_per_worker))
 
 ## Qui tient effectivement un poste, et sur quelle cellule.
 ##

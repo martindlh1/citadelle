@@ -68,25 +68,58 @@ static func withdraw(state: RunState, action: int) -> bool:
 	state.release_action(action)
 	return state.board().withdraw(action)
 
-## Envoie cet ouvrier sur cette action. Faux si la phase, l'action ou l'ouvrier s'y
-## opposent.
+## Rien ne porte ce numéro d'action.
+const REASON_NO_ACTION := &"no_action"
+
+## Le roster ne connaît pas cet ouvrier.
+const REASON_UNKNOWN_WORKER := &"unknown_worker"
+
+## Il est absent — parti en expédition, et `DESIGN.md` 3.9 exige que rien ne puisse le
+## placer.
+const REASON_ABSENT_WORKER := &"absent_worker"
+
+## Il tient déjà une autre action. On le rappelle avant de le renvoyer ailleurs.
+const REASON_ALREADY_STAFFED := &"already_staffed"
+
+## Tous les postes de l'action sont pris.
+const REASON_NO_ROOM := &"no_room"
+
+## Pourquoi cet ouvrier ne peut pas aller sur cette action, ou &"" s'il le peut.
 ##
-## Un booléen et non un DTO à raison, contrairement à `play()` : les quatre refus possibles
-## se voient tous à l'écran avant le clic — la phase est affichée, la capacité est
-## affichée, les ouvriers libres sont listés —, alors qu'un refus de jeu dépend d'un
-## balayage de règles que seul le domaine connaît.
-static func staff(state: RunState, worker: StringName, action: int) -> bool:
+## **Ce n'est pas un doublon de `staff()`, c'en est le seul juge.** `staff()` l'appelle,
+## et un écran qui veut expliquer un refus l'appelle aussi — exactement comme le fantôme
+## de `C2` et la pose interrogent tous deux `PlacementValidator`, et comme la
+## surbrillance des cibles et `ActionBoard.post()` interrogent tous deux
+## `ActionTargeting`. Une seule liste de règles, donc rien qui puisse dériver.
+##
+## Il a d'abord manqué, et l'erreur mérite d'être écrite ici plutôt que dans le seul
+## journal : `staff()` rendait un booléen nu, au motif que « les refus se voient tous à
+## l'écran avant le clic ». C'était faux à l'usage. La phase est bien affichée dans un
+## bandeau, mais rien ne reliait ce bandeau à une touche qui ne répond pas, et le premier
+## essai au clavier a donné un « refusé » sans cause. Un refus qui ne se nomme pas est
+## indiscernable d'une panne.
+static func staffing_refusal(state: RunState, worker: StringName,
+		action: int) -> StringName:
 	assert(state != null, "affectation sans run")
 	if not state.cycle().permits(PhaseDef.ACTION_ASSIGN):
-		return false
+		return PlayResult.REASON_WRONG_PHASE
 	var posted := state.board().at(action)
 	if posted == null:
-		return false
-	if not state.roster().has(worker) or not state.roster().worker(worker).is_present():
-		return false
+		return REASON_NO_ACTION
+	if not state.roster().has(worker):
+		return REASON_UNKNOWN_WORKER
+	if not state.roster().worker(worker).is_present():
+		return REASON_ABSENT_WORKER
 	if state.is_staffed(worker):
-		return false
+		return REASON_ALREADY_STAFFED
 	if state.staffed_on(action).size() >= posted.capacity():
+		return REASON_NO_ROOM
+	return PlayResult.REASON_NONE
+
+## Envoie cet ouvrier sur cette action. Faux si la phase, l'action ou l'ouvrier s'y
+## opposent — `staffing_refusal()` dit lequel des cinq.
+static func staff(state: RunState, worker: StringName, action: int) -> bool:
+	if not staffing_refusal(state, worker, action).is_empty():
 		return false
 	state.assign_worker(worker, action)
 	return true
@@ -124,6 +157,7 @@ static func resolve(state: RunState) -> EveningReport:
 
 	var production := ProductionResolver.resolve(state.terrain(), snapshot, plan, assign,
 		labor, state.ledger(), balance.economy, balance.actions)
+	var upkeep := ProductionResolver.take_upkeep(labor, state.ledger(), balance.economy)
 	var sites := SiteResolver.resolve(snapshot, plan, assign, labor, balance.actions)
 	var completed := _apply(state, sites)
 
@@ -132,7 +166,7 @@ static func resolve(state: RunState) -> EveningReport:
 	var progress := SkillResolver.award_lines(state.roster(), lines, balance.workforce)
 
 	return EveningReport.create(state.cycle().day(), state.cycle().phase().id, production,
-		sites, progress, _idle(labor, lines), completed)
+		upkeep, sites, progress, _idle(labor, lines), completed)
 
 ## Termine la phase courante et passe à la suivante. Rend le rapport si elle résolvait,
 ## null sinon.

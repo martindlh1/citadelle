@@ -62,11 +62,13 @@ func before_test() -> void:
 	_balance = _make_balance(100, 1)
 
 func test_an_empty_evening_produces_nothing_and_owes_nothing() -> void:
-	var report := _resolve(CitySnapshot.empty(), [], LaborForce.empty(),
-		Ledger.create(100))
+	var ledger := Ledger.create(100)
+	var report := _resolve(CitySnapshot.empty(), [], LaborForce.empty(), ledger)
 	assert_dict(report.produced()).is_empty()
-	assert_int(report.upkeep()).is_equal(0)
-	assert_bool(report.is_famine()).is_false()
+	assert_int(report.work().size()).is_equal(0)
+	var upkeep := _upkeep(LaborForce.empty(), ledger)
+	assert_int(upkeep.due()).is_equal(0)
+	assert_bool(upkeep.is_famine()).is_false()
 
 func test_one_worker_on_a_two_slot_building_fills_one_slot() -> void:
 	var report := _resolve(_city, [&"ana", HUT], _crew([&"ana"]), Ledger.create(100))
@@ -136,12 +138,16 @@ func test_a_worker_absent_from_the_roster_is_ignored_entirely() -> void:
 	assert_int(report.work().size()).is_equal(0)
 
 ## Le second cas qui porte le jalon : l'upkeep tombe sur le roster entier, y compris
-## sur les trois qui n'ont rien fait. C'est ce qui rend le pool tendu.
+## sur ceux qui n'ont rien fait. C'est ce qui rend le pool tendu.
+##
+## Il ne passe plus par une résolution de production, et c'est le point : depuis `I1`, ce
+## qu'on doit ne dépend que de **qui est là**. La signature de take_upkeep() le redit en
+## ne recevant ni ville, ni plan, ni affectation.
 func test_upkeep_counts_the_whole_roster_including_the_idle() -> void:
-	var report := _resolve(_city, [&"ana", HUT],
-		_crew([&"ana", &"bo", &"cy", &"di"]), _stocked({FOOD: 50}))
-	assert_int(report.upkeep()).is_equal(4)
-	assert_int(report.consumed()).is_equal(4)
+	var upkeep := _upkeep(_crew([&"ana", &"bo", &"cy", &"di"]), _stocked({FOOD: 50}))
+	assert_int(upkeep.due()).is_equal(4)
+	assert_int(upkeep.consumed()).is_equal(4)
+	assert_int(upkeep.shortfall()).is_equal(0)
 
 func test_a_skilled_worker_produces_more() -> void:
 	var report := _resolve(_city, [&"ana", HUT], _skilled_crew(&"ana", 2.0),
@@ -315,46 +321,56 @@ func test_resolving_applies_the_capacity_of_the_evening() -> void:
 	_resolve(_city, [], LaborForce.empty(), ledger)
 	assert_int(ledger.capacity()).is_equal(200)
 
-## La production précède l'upkeep : ce que la ferme sort ce soir nourrit ce soir.
-func test_the_evening_harvest_feeds_the_same_evening() -> void:
-	var report := _resolve(_city, [&"ana", FARM], _crew([&"ana"]), Ledger.create(100))
+## La production précède l'upkeep, et c'est l'ordre de DESIGN.md 2. Ce que la ferme sort
+## dans la dernière phase d'une journée nourrit cette journée-là.
+##
+## Deux appels au lieu d'un depuis `I1`, et le cas tient toujours parce que c'est
+## l'orchestrateur qui les enchaîne dans cet ordre.
+func test_the_days_harvest_feeds_the_same_day() -> void:
+	var ledger := Ledger.create(100)
+	var crew := _crew([&"ana"])
+	var report := _resolve(_city, [&"ana", FARM], crew, ledger)
 	assert_int(report.produced()[FOOD]).is_equal(3)
-	assert_int(report.consumed()).is_equal(1)
-	assert_bool(report.is_famine()).is_false()
+	var upkeep := _upkeep(crew, ledger)
+	assert_int(upkeep.consumed()).is_equal(1)
+	assert_bool(upkeep.is_famine()).is_false()
 
 func test_exactly_enough_food_is_not_a_famine() -> void:
-	var report := _resolve(_city, [], _crew([&"ana", &"bo"]),
-		_stocked({FOOD: 2}))
-	assert_int(report.consumed()).is_equal(2)
-	assert_int(report.unfed()).is_equal(0)
-	assert_bool(report.is_famine()).is_false()
+	var upkeep := _upkeep(_crew([&"ana", &"bo"]), _stocked({FOOD: 2}))
+	assert_int(upkeep.consumed()).is_equal(2)
+	assert_int(upkeep.unfed()).is_equal(0)
+	assert_bool(upkeep.is_famine()).is_false()
 
 func test_a_short_reserve_leaves_workers_unfed() -> void:
 	var ledger := _stocked({FOOD: 2})
-	var report := _resolve(_city, [], _crew([&"ana", &"bo", &"cy", &"di"]),
-		ledger)
-	assert_int(report.upkeep()).is_equal(4)
-	assert_int(report.consumed()).is_equal(2)
-	assert_int(report.unfed()).is_equal(2)
-	assert_bool(report.is_famine()).is_true()
+	var upkeep := _upkeep(_crew([&"ana", &"bo", &"cy", &"di"]), ledger)
+	assert_int(upkeep.due()).is_equal(4)
+	assert_int(upkeep.consumed()).is_equal(2)
+	assert_int(upkeep.shortfall()).is_equal(2)
+	assert_int(upkeep.unfed()).is_equal(2)
+	assert_bool(upkeep.is_famine()).is_true()
 	assert_int(ledger.amount(FOOD)).is_equal(0)
 
 func test_an_empty_reserve_leaves_everyone_unfed() -> void:
-	var report := _resolve(_city, [], _crew([&"ana", &"bo"]),
-		Ledger.create(100))
-	assert_int(report.consumed()).is_equal(0)
-	assert_int(report.unfed()).is_equal(2)
+	var upkeep := _upkeep(_crew([&"ana", &"bo"]), Ledger.create(100))
+	assert_int(upkeep.consumed()).is_equal(0)
+	assert_int(upkeep.unfed()).is_equal(2)
 
 ## Arrondi vers le haut : à deux rations par ouvrier, un manque de trois laisse deux
 ## ouvriers sans ration entière. Une famine ne se sous-déclare jamais.
 func test_a_partial_ration_still_counts_as_unfed() -> void:
-	var balance := _make_balance(100, 2)
-	var report := ProductionResolver.resolve(_terrain(), _city, ActionPlan.empty(),
-		Assignment.empty(), _crew([&"ana", &"bo", &"cy"]), _stocked({FOOD: 3}),
-		balance, _actions())
-	assert_int(report.upkeep()).is_equal(6)
-	assert_int(report.consumed()).is_equal(3)
-	assert_int(report.unfed()).is_equal(2)
+	var upkeep := ProductionResolver.take_upkeep(_crew([&"ana", &"bo", &"cy"]),
+		_stocked({FOOD: 3}), _make_balance(100, 2))
+	assert_int(upkeep.due()).is_equal(6)
+	assert_int(upkeep.consumed()).is_equal(3)
+	assert_int(upkeep.unfed()).is_equal(2)
+
+## Un absent ne mange pas : il n'entre pas dans la projection, donc pas dans la note.
+## Décidé à `W1`, et cette signature le rend structurel — take_upkeep() ne reçoit rien
+## d'autre que la main-d'œuvre.
+func test_upkeep_only_counts_who_the_projection_shows() -> void:
+	assert_int(_upkeep(_crew([&"ana"]), _stocked({FOOD: 9})).due()).is_equal(1)
+	assert_int(_upkeep(LaborForce.empty(), _stocked({FOOD: 9})).due()).is_equal(0)
 
 ## Un seed et une suite d'actions doivent rejouer un run à l'identique. Deux
 ## résolutions des mêmes entrées ne peuvent pas diverger.
@@ -366,7 +382,8 @@ func test_two_identical_resolutions_agree() -> void:
 	assert_dict(first.produced()).is_equal(second.produced())
 	assert_dict(first.stored()).is_equal(second.stored())
 	assert_array(first.idle()).is_equal(second.idle())
-	assert_int(first.unfed()).is_equal(second.unfed())
+	assert_int(_upkeep(crew, _stocked({FOOD: 1})).unfed()) \
+		.is_equal(_upkeep(crew, _stocked({FOOD: 1})).unfed())
 
 ## Résout un soir décrit par une liste plate — [ouvrier, cellule, ouvrier, cellule].
 ##
@@ -379,6 +396,11 @@ func _resolve(city: CitySnapshot, played: Array, labor: LaborForce,
 		ledger: Ledger) -> ProductionReport:
 	return ProductionResolver.resolve(_terrain(), city, _plan(city, played),
 		_assign(city, played), labor, ledger, _balance, _actions())
+
+## La seconde porte du résolveur : ce que la journée coûte à nourrir. Elle ne reçoit ni
+## ville ni actions, ce qui est tout le sujet.
+func _upkeep(labor: LaborForce, ledger: Ledger) -> UpkeepReport:
+	return ProductionResolver.take_upkeep(labor, ledger, _balance)
 
 ## Capacité qu'un ciblage aurait donnée à une action de récolte sur cette cellule.
 ##
