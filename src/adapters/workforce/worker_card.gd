@@ -40,6 +40,14 @@ extends PanelContainer
 ## jugerait la jouabilité.
 signal picked()
 
+## La fiche vient d'être cliquée à droite : on veut rappeler cet ouvrier.
+##
+## Un second signal plutôt qu'un argument sur le premier, parce que ce sont deux
+## intentions et non deux façons de dire la même chose : l'une prend l'ouvrier en main pour
+## le placer, l'autre le retire de là où il est. Un booléen aurait obligé chaque auditeur à
+## commuter dessus.
+signal released()
+
 const CARD_WIDTH := 176
 
 ## Écarts internes.
@@ -178,8 +186,13 @@ func show_worker(worker: Worker, job: String, note: String, held: bool) -> void:
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var click := event as InputEventMouseButton
-		if click.pressed and click.button_index == MOUSE_BUTTON_LEFT:
+		if not click.pressed:
+			return
+		if click.button_index == MOUSE_BUTTON_LEFT:
 			picked.emit()
+			accept_event()
+		elif click.button_index == MOUSE_BUTTON_RIGHT:
+			released.emit()
 			accept_event()
 
 # --- Les pistes ---------------------------------------------------------------------------

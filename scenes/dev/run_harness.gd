@@ -93,6 +93,10 @@ enum Report { FULL, ESSENTIAL, HIDDEN }
 ## Nom de chaque cran, pour que la touche dise ce qu'elle vient de faire.
 const REPORT_NAMES: Array[String] = ["complet", "l'essentiel", "masqué"]
 
+const HOVER_BACKGROUND := Color(0.10, 0.11, 0.14, 0.88)
+const HOVER_RADIUS := 5
+const HOVER_PADDING := 8
+
 const REPORT_MARGIN := 16.0
 const REPORT_FONT_SIZE := 13
 const REPORT_OUTLINE_SIZE := 4
@@ -100,7 +104,7 @@ const REPORT_OUTLINE_SIZE := 4
 const CONTROLS := """La main    1-9 ou clic sur une carte : la prendre. Tab : pivoter, ou retourner un terrassement.
 La carte   clic gauche : jouer sur la case survolée. Clic droit : retirer.
 Le travail clic sur une fiche, puis sur une ligne d'action — ou Auto. Espace : envoyer sur la case survolée.
-           Retour arrière : rappeler.
+           Clic droit sur une fiche : la rappeler. Retour arrière : rappeler toute une action.
 Entrée     fonder le village, tenir la ligne, ou finir la phase — selon ce que le run attend.
 La caméra  Q/E : pivoter. Molette : zoomer. WASD : déplacer. R : recadrer.
 La vue     H : replier ce rapport. F1 : masquer tout le HUD."""
@@ -131,6 +135,31 @@ var _panel: ProductionPanel
 var _battle: BattlePanel
 var _crew: AssignmentPanel
 var _label: Label
+
+## La ligne de survol, sortie du rapport pliable et posée sous la barre de réserve.
+##
+## Elle en sort parce qu'elle est la seule ligne du texte qu'on lit **en visant** : ce qu'il
+## y a sous le curseur, sa hauteur, son terrain, et ce que la carte tenue y ferait. Toutes
+## les autres se lisent entre deux gestes. La laisser dans le rapport revenait à choisir
+## entre la voir et voir la carte — c'est-à-dire à perdre, en repliant le pavé avec H, la
+## seule ligne dont on a besoin pendant qu'on vise.
+##
+## **Elle a été posée deux fois en haut au centre, et deux captures l'ont refusée.** Cette
+## rangée-là est prise en étau : la barre de réserve la borne à gauche, le compte rendu de
+## phase à droite, et une bande centrée grandit des deux côtés — « Survol : » se dessinait
+## par-dessus « Minerai 0 ». Ce n'est pas une marge à régler, c'est la leçon de `W2` sur une
+## rangée plutôt que sur une colonne : deux vues qui grandissent l'une vers l'autre doivent
+## vivre dans le **même conteneur**, sans quoi elles se croisent au pire moment.
+##
+## Elle vit donc dans la colonne de gauche, juste sous la barre, où elle pousse au lieu de
+## recouvrir. Elle y gagne d'ailleurs un voisinage juste : ce qu'on survole et ce qu'on
+## possède se lisent d'un même regard, et le coût d'une carte tenue s'affiche à un
+## centimètre de la réserve qui doit le payer.
+##
+## Elle n'est **pas** dans le pavé pliable : H la laisse en place, F1 l'emporte avec le
+## reste du HUD. C'est exactement ce qu'on lui demande — toujours là, sauf quand on veut
+## regarder la carte nue.
+var _hover: Label
 
 ## Le libellé de la vague qu'on est en train de mener, et le jour où elle tombe.
 ##
@@ -226,9 +255,11 @@ func _ready() -> void:
 	_battle.battle_requested.connect(_fight)
 	_crew = AssignmentPanel.create(_state().catalogue())
 	_crew.worker_picked.connect(_on_worker_picked)
+	_crew.worker_released.connect(_on_worker_released)
 	_crew.action_picked.connect(_on_action_picked)
 	_crew.auto_requested.connect(_on_auto_requested)
 	_label = _make_label()
+	_hover = _make_hover()
 	_left_slot = _hud_slot(_make_left_column(), Control.SIZE_SHRINK_BEGIN,
 		Control.SIZE_SHRINK_BEGIN)
 	add_child(_left_slot)
@@ -261,6 +292,7 @@ func _process(_delta: float) -> void:
 	_bar.show_ledger(_state().ledger(), _last_delta)
 	_crew.show_state(_state(), _held_worker)
 	_label.text = _report()
+	_hover.text = _hover_line()
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -482,6 +514,29 @@ func _on_worker_picked(worker: StringName) -> void:
 		return
 	_last_action = "%s en main — cliquer une ligne d'action pour l'y envoyer." \
 		% _name_of(worker)
+
+## Rappelle cet ouvrier de là où il est, sans toucher à l'action.
+##
+## Le geste symétrique de la prise en main, et il manquait : rappeler quelqu'un demandait
+## jusqu'ici de viser son action sur la carte et de rappeler **tout le monde** avec Retour
+## arrière. Retirer un seul ouvrier d'un poste à deux places était donc impossible sans
+## défaire les deux.
+##
+## `RunState.release_worker()` répond, et il n'y a pas de porte d'orchestrateur pour ça :
+## rappeler un ouvrier ne pose aucune des cinq questions que `staffing_refusal()` juge —
+## il était placé, il ne l'est plus. La phase, elle, est bien gardée : le brouillon ne
+## survit pas à une résolution, et une phase qui n'affecte pas n'a personne à rappeler.
+func _on_worker_released(worker: StringName) -> void:
+	if not _state().cycle().permits(PhaseDef.ACTION_ASSIGN):
+		_last_action = "Rappeler n'est pas permis en phase « %s »." % _phase_label()
+		return
+	if not _state().release_worker(worker):
+		_last_action = "%s ne tenait aucun poste." % _name_of(worker)
+		return
+	if _held_worker == worker:
+		_held_worker = &""
+	_last_action = "%s rappelé." % _name_of(worker)
+	_refresh_markers()
 
 func _on_action_picked(action: int) -> void:
 	var posted := _state().board().at(action)
@@ -731,7 +786,6 @@ func _report() -> String:
 		return "\n".join(lines)
 	lines.append(_piles_line())
 	lines.append("")
-	lines.append(_hover_line())
 	lines.append(_last_action)
 	lines.append("")
 	lines.append(CONTROLS)
@@ -865,31 +919,49 @@ func _piles_line() -> String:
 			_state().deck().discard_size(pool)])
 	return "\n".join(lines)
 
-## Ce que le curseur désigne, et ce que la carte tenue y ferait — coût compris.
+## Ce que le curseur désigne, et ce que la carte tenue y ferait — sur **deux** lignes.
+##
+## Une seule jusqu'à ce qu'elle sorte du rapport pour aller en haut au centre, où la
+## première capture l'a montrée passant **sous la barre de ressources** : centrée, elle
+## grandit des deux côtés, et la version longue — cellule, hauteur, terrain, bâtiment, plus
+## le coût d'une carte tenue et son refus — fait deux fois la place disponible entre la
+## barre et le bord. « Survol : » se dessinait par-dessus « Minerai 0 ».
+##
+## Deux lignes courtes tiennent là où une longue ne tient pas, et elles se lisent mieux :
+## **ce qu'il y a**, puis **ce que ça ferait**. La seconde n'existe que si l'on tient
+## quelque chose, donc la bande ne prend deux lignes que lorsqu'elle a deux choses à dire.
+##
+## Le préfixe « Survol : » est parti avec le déménagement : une bande qui ne dit que ça n'a
+## pas à s'annoncer.
 func _hover_line() -> String:
 	var hovered := _world.cursor().hovered()
 	if not hovered.is_hit():
-		return "Survol : —"
+		return "—"
 	var cell := hovered.cell()
-	var line := "Survol : (%d, %d)   h = %d   %s" % [cell.x, cell.y, hovered.height(),
+	var line := "(%d, %d)   h = %d   %s" % [cell.x, cell.y, hovered.height(),
 		_state().terrain().terrain_at(cell).id]
 	if _state().awaits_its_heart():
-		return "%s   ->   %s, %s%s" % [line, _founding_label(), _orientation(),
-			"" if _founding_placement(cell).is_ok()
-				else "   <- %s" % _founding_placement(cell).reason()]
+		var verdict := _founding_placement(cell)
+		return "%s\n%s, %s%s" % [line, _founding_label(), _orientation(),
+			"" if verdict.is_ok() else "   <- %s" % verdict.reason()]
 	var building := _state().city().building_at(cell)
 	if building != null:
 		line += "   |   %s : %s" % [building.data().id, _site_state(building)]
 	var held := _held_card()
 	if held.is_empty():
 		return line
+	return "%s\n%s" % [line, _held_card_line(held, cell)]
+
+## Ce que la carte tenue ferait sur cette cellule : son coût si elle bâtit, son verdict de
+## ciblage sinon.
+func _held_card_line(held: StringName, cell: Vector2i) -> String:
 	var data := _building_of(held)
 	if data != null:
-		return "%s   ->   %s, %s, coût %s%s" % [line, _label_of(held), _orientation(),
+		return "%s, %s, coût %s%s" % [_label_of(held), _orientation(),
 			_cost_text(data.cost),
-			"" if _state().ledger().can_afford(data.cost) else "   ← réserve insuffisante"]
+			"" if _state().ledger().can_afford(data.cost) else "   <- réserve insuffisante"]
 	var verdict := _validate(held, cell)
-	return "%s   ->   %s : %s" % [line, _label_of(held),
+	return "%s : %s" % [_label_of(held),
 		"accepté, %d poste(s)" % verdict.capacity() if verdict.is_ok()
 			else String(verdict.reason())]
 
@@ -1065,6 +1137,8 @@ func _make_left_column() -> VBoxContainer:
 	column.add_theme_constant_override("separation", int(REPORT_MARGIN))
 	_bar.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	column.add_child(_bar)
+	_hover.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	column.add_child(_hover)
 	_battle.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
 	column.add_child(_battle)
 	column.add_child(_label)
@@ -1107,6 +1181,18 @@ func _make_right_column() -> VBoxContainer:
 	_crew.size_flags_horizontal = Control.SIZE_SHRINK_END
 	column.add_child(_crew)
 	return column
+
+## La bande de survol. Même fonte et même contour que le rapport, pour qu'on la lise comme
+## la même voix ; un fond discret parce qu'elle passe sur la carte et non sur le ciel.
+func _make_hover() -> Label:
+	var label := _make_label()
+	label.name = "RunHover"
+	var style := StyleBoxFlat.new()
+	style.bg_color = HOVER_BACKGROUND
+	style.set_corner_radius_all(HOVER_RADIUS)
+	style.set_content_margin_all(HOVER_PADDING)
+	label.add_theme_stylebox_override("normal", style)
+	return label
 
 ## Le rapport texte. Il n'a plus ni ancre ni décalage depuis `E2` : il est empilé sous la
 ## barre de ressources par la colonne de gauche, qui les place l'un après l'autre.

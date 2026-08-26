@@ -71,7 +71,7 @@ static func validate(card: StringName, target: Vector2i, terrain: TerrainQuery,
 	var verdict := _place_of(card, target, terrain, city, balance, direction)
 	if not verdict.is_ok():
 		return verdict
-	if _already_posted(card, verdict.target(), plan):
+	if _already_posted(verdict.target(), plan):
 		return TargetResult.refused(TargetResult.REASON_ALREADY_POSTED)
 	return verdict
 
@@ -89,24 +89,35 @@ static func _place_of(card: StringName, target: Vector2i, terrain: TerrainQuery,
 			return _terraform(target, terrain, city, balance, direction)
 	return TargetResult.refused(TargetResult.REASON_UNKNOWN_CARD)
 
-## Cette carte est-elle déjà posée sur cette cible ?
+## Quelque chose est-il déjà posé sur cette cible ?
 ##
 ## La comparaison se fait sur la cible **canonique**, celle que le verbe vient de rendre,
 ## et non sur la cellule désignée : deux clics sur deux coins d'une même ferme sont deux
 ## fois la même pose, et les laisser passer rouvrirait ses postes.
 ##
-## La règle porte sur la carte et non sur la cible seule, ce qui est tout le contraire
-## d'interdire deux actions par cellule — *Récolter* et *Chasser* sur une même forêt
-## restent acceptées, et c'est le cas pour lequel D2 a donné une identité aux actions.
+## **Une cible ne porte qu'une action, quelle qu'elle soit.** *(Renversé après `I2`.)* La
+## règle ne portait jusqu'ici que sur la carte, et `DESIGN.md` 3.5 l'écrivait noir sur
+## blanc : « deux cartes *différentes* sur une même cellule restent acceptées ; c'est le
+## doublon qui est refusé, pas le partage ». C'était le cas pour lequel `D2` avait donné
+## une identité aux actions — *Récolter* et *Chasser* sur une même forêt, « deux métiers
+## sur une même terre ».
 ##
-## Sa limite est connue et vaut d'être écrite : elle ne protège que d'un doublon **du même
-## nom**. Le jour où *Fabriquer* visera un atelier qui tient déjà une autre carte à
-## postes, il faudra comparer ce que chacune réclame plutôt que leurs noms. Aucune carte
-## du MVP n'ouvre ce cas — *Récolter* est la seule à tenir un poste de production.
-static func _already_posted(card: StringName, target: Vector2i,
-		plan: ActionPlan) -> bool:
+## Une partie jouée à la main a montré que le partage ne tient pas **à l'écran**. Deux
+## actions sur une case donnent une case qu'on désigne d'un seul curseur : Espace, le clic
+## droit et le survol ne peuvent en atteindre qu'une, et l'autre n'existe plus que dans une
+## liste de panneau bornée à trois lignes. Le domaine autorisait un geste que rien ne
+## pouvait viser.
+##
+## Le retour en arrière est donc **provisoire et assumé** : c'est la contrainte la moins
+## chère qui rend la carte lisible, et elle se lève le jour où un écran sait désigner l'une
+## des deux. Ce que 3.5 protégeait — que deux verbes puissent vivre sur la même terre —
+## reste vrai d'une journée à l'autre, pas dans la même phase.
+##
+## Elle rend au passage inutile la limite que ce docstring signalait : le partage d'un
+## bâtiment entre deux cartes à postes, que *Fabriquer* aurait ouvert, ne se pose plus.
+static func _already_posted(target: Vector2i, plan: ActionPlan) -> bool:
 	for action in plan.actions():
-		if action.card() == card and action.target() == target:
+		if action.target() == target:
 			return true
 	return false
 

@@ -134,18 +134,27 @@ func gain(family: StringName, amount: int) -> void:
 	_tracks[family].gain(amount)
 	_xp += amount
 
-## Ce que l'Économie voit de lui : un nom et un multiplicateur par piste entamée.
+## Ce que l'Économie voit de lui : un nom, un multiplicateur par piste entamée, et où il en
+## est dans chacune.
 ##
-## Les pistes vierges n'y figurent pas — LaborUnit replie sur BASE_EFFICIENCY, donc le
-## résultat est le même et le dictionnaire se lit comme la liste de ce qu'il a exercé.
-## Ni le niveau, ni l'XP, ni la présence ne traversent : la projection est exactement
+## Les pistes vierges n'y figurent pas — LaborUnit replie sur BASE_EFFICIENCY et sur zéro,
+## donc le résultat est le même et le dictionnaire se lit comme la liste de ce qu'il a
+## exercé. Ni le niveau ni la présence ne traversent : la projection est exactement
 ## l'endroit où DESIGN.md 3.4 veut que l'Économie cesse de savoir.
+##
+## **L'XP de piste traverse depuis I2**, et ce docstring disait le contraire. Elle ne
+## traverse pas pour produire quoi que ce soit — c'est efficiency() qui multiplie, et ça ne
+## bouge pas — mais pour **départager** deux ouvriers que le même palier rend identiques.
+## Le niveau, lui, reste dehors : c'est un palier de plus, donc la même égalité un cran plus
+## haut, et 3.4 le réserve à ce qu'un ouvrier a vécu plutôt qu'à ce qu'il sait faire.
 func to_labor_unit(balance: WorkforceBalance) -> LaborUnit:
 	assert(balance != null, "projection sans équilibrage")
 	var multipliers: Dictionary[StringName, float] = {}
+	var progress: Dictionary[StringName, int] = {}
 	for family in _tracks:
 		multipliers[family] = _tracks[family].efficiency(balance)
-	return LaborUnit.create(_id, multipliers)
+		progress[family] = _tracks[family].xp()
+	return LaborUnit.create(_id, multipliers, progress)
 
 ## Ce que le Combat voit de lui : un nom et **un** multiplicateur.
 ##

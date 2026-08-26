@@ -125,3 +125,22 @@ func _balance() -> WorkforceBalance:
 	balance.worker_xp_per_level = 25
 	balance.max_worker_level = 4
 	return balance
+
+## La projection porte l'XP de chaque piste entamée, et rien d'autre de neuf.
+##
+## Elle est entrée après `I2` pour que l'auto-affectation puisse départager deux ouvriers
+## que le même palier rend identiques. Le cas tient les deux moitiés : ce qui traverse, et
+## ce qui reste dehors — le **niveau** d'ouvrier, qui est un palier de plus et donc la même
+## égalité un cran plus haut.
+func test_the_labor_projection_carries_the_track_xp() -> void:
+	var worker := Worker.create(&"ana", "Ana")
+	worker.gain(HARVEST, 3)
+	var unit := worker.to_labor_unit(_balance())
+	assert_int(unit.track_xp(HARVEST)).is_equal(3)
+
+## Une piste vierge rend zéro, et non le repli de rendement : « aucun bonus » et « rien de
+## fait » sont deux valeurs neutres différentes.
+func test_an_untouched_track_projects_no_xp() -> void:
+	var unit := Worker.create(&"ana", "Ana").to_labor_unit(_balance())
+	assert_int(unit.track_xp(HARVEST)).is_equal(0)
+	assert_float(unit.efficiency(HARVEST)).is_equal(LaborUnit.BASE_EFFICIENCY)

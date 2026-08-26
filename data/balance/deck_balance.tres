@@ -8,7 +8,6 @@ starting_deck = Dictionary[StringName, int]({
 &"harvest": 4,
 &"build": 3,
 &"hunt": 2,
-&"terraform": 1,
 &"lumberjack_hut": 2,
 &"farm": 1,
 &"quarry": 1,

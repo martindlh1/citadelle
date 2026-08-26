@@ -4,6 +4,156 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-27 — la première partie jouée à la main, et ce qu'elle a rapporté
+
+**État : terminé.** Cinq commits sur `feat/i2-qol`, à la suite des trois QOL de la veille.
+Les trois commandes passent : boot sans erreur ni warning, tout `src/domain/` parse,
+**777 tests verts contre 771**. Quatre captures.
+
+C'est la première fois du projet qu'un jalon vient **entièrement** d'une passe humaine.
+`E2`, `W2` et `I2` avaient chacun trouvé leurs défauts en capture, ce qui est déjà autre
+chose qu'un test ; là, rien de ce qui suit n'aurait été trouvé sans quinze journées jouées
+au clavier.
+
+### Les deux bugs, et pourquoi le second était invisible
+
+**Deux actions sur une même case.** Le symptôme signalé — « ça bugue, on ne peut pas
+attribuer deux fois » — était plus large que ça : `_action_here()` ne rend que la
+**dernière** action posée sur une cellule, donc la touche qui affecte, le clic droit qui
+retire et la ligne de survol ne peuvent en atteindre qu'une. L'autre n'existait plus que
+dans une liste de panneau bornée à trois lignes.
+
+La correction demandée — interdire deux actions par case — **renverse une ligne écrite de
+`DESIGN.md` 3.5**, et c'est le cas même pour lequel `D2` avait donné une identité aux
+actions : *Récolter* et *Chasser* sur une même forêt, « deux métiers sur une même terre ».
+Elle est renversée quand même, et le journal doit dire l'argument exact : le domaine
+autorisait un geste que **rien à l'écran ne pouvait viser**. Une règle que le joueur ne
+peut ni voir ni employer n'est pas une règle, c'est une intention.
+
+Le retour en arrière est écrit comme provisoire dans les trois endroits qui comptent — le
+code, le cas de test, et 3.5 —, avec la condition qui le lèvera : un écran qui sait
+désigner l'une des deux.
+
+**L'auto-affectation classait par ordre du roster.** Le diagnostic tient en une phrase :
+un multiplicateur vient d'un **palier**, donc six ouvriers frais valent tous 1.00, et
+`ranked_for()` n'avait plus rien à comparer. Le départage par l'ordre du roster, écrit à
+`W2` comme dernier recours, était devenu le **seul** recours — pendant précisément les
+journées où le bouton sert le plus.
+
+Ce défaut ne pouvait pas se voir autrement. Les tests de `W2` comparaient des ouvriers aux
+multiplicateurs distincts, ce qui est le cas intéressant et le cas rare ; le cas fréquent,
+celui de six bleus, ne prouvait rien et n'était donc pas écrit. C'est un trou de couverture
+que seule une partie révèle.
+
+### Le contrat qui bouge, et le seul depuis `F1`
+
+`LaborUnit` porte l'XP de piste. Son docstring disait « ni les traits, ni l'XP, ni les
+blessures », et le refus était juste tant que rien ne posait la question — c'est la règle
+qui a fait attendre `CombatForce` jusqu'à `F1`. Le bouton d'auto-affectation la pose.
+
+Ce qui entre est l'**XP** et non le niveau, et la distinction porte tout : un niveau est un
+palier de plus, donc la même égalité un cran plus haut. Ce qui manquait est *où l'on en est
+à l'intérieur d'un palier*, et il n'y a que l'XP pour le dire. Elle ne donne aucun
+rendement et n'en donnera jamais : elle **ordonne**, elle ne calcule pas.
+
+Le choix a un effet de design qu'il faut assumer : préférer celui qui est le plus près du
+palier suivant **concentre** l'XP au lieu de l'étaler, donc le bouton fabrique des
+spécialistes. C'est ce que 3.4 réclame — « spécialiser rend excellent à un poste et
+médiocre ailleurs » — mais c'est une décision et non une correction.
+
+### Ce qu'un écran disait de travers
+
+**L'orange voulait dire deux choses.** Sur le panneau d'affectation, une action à qui il
+manque du monde s'affichait en orange — la couleur qui veut dire *danger* sur les trois
+autres panneaux : famine, écrêtage au plafond, pertes d'une vague. Une phase qui commence
+s'affichait donc entièrement en alarme. Le vert reste, parce que « cette ligne est finie »
+mérite un coup d'œil ; la fraction `1/2` portait déjà le compte, donc la couleur n'a jamais
+eu à le répéter.
+
+**Le sens d'un terrassement n'est visible nulle part.** La touche le retourne bien, mais
+seulement carte en main, et ni la ligne de survol ni les cibles allumées ne disent lequel
+des deux on fait. Une carte qu'on oriente à l'aveugle est pire qu'une carte qu'on subit,
+ce qui est exactement l'inverse de ce que `I1` cherchait en faisant du sens un choix de
+pose. La carte sort du deck de départ ; le verbe reste écrit et revient avec `P1`.
+
+### La bande de survol, posée trois fois
+
+Elle devait aller « en haut au milieu ». Elle y a été mise, et **deux captures l'ont
+refusée** : cette rangée est prise en étau entre la barre de réserve à gauche et le compte
+rendu de phase à droite, et une bande centrée grandit des deux côtés — « Survol : » se
+dessinait par-dessus « Minerai 0 ». La couper en deux lignes plus courtes n'a pas suffi.
+
+Ce n'est pas une marge à régler : c'est la leçon de `W2` appliquée à une **rangée** plutôt
+qu'à une colonne. Deux vues qui grandissent l'une vers l'autre doivent vivre dans le même
+conteneur. Elle est donc dans la colonne de gauche, sous la barre, où elle pousse au lieu
+de recouvrir — et elle y gagne un voisinage juste, le coût d'une carte tenue se lisant à un
+centimètre de la réserve qui doit le payer.
+
+Elle reste visible quand `H` replie le rapport, ce qui était tout l'objet de la demande :
+c'est la seule ligne qu'on lit **en visant**.
+
+### La règle de travail que j'ai dû me faire rappeler
+
+J'ai lancé la suite complète — deux minutes quarante-cinq — cinq ou six fois pour des
+changements qui touchaient deux fichiers. `-a` se répète et une suite isolée revient en
+treize secondes.
+
+La règle est notée : **suites concernées pendant l'itération, suite complète une fois par
+couche, avant le commit.** Le coût n'était pas le mien.
+
+### Le jalon `P1`, et pourquoi c'en est un
+
+La liste de confort ne va pas dans un coin de `JOURNAL.md` : elle devient une famille de
+jalons, `P`, avec une raison qui tient. Les jalons d'écran ont chacun livré la vue **dont
+leur système avait besoin** ; aucun n'avait pour charge ce qui rend une partie agréable à
+mener bout en bout. C'est une question qu'on ne peut poser qu'après avoir joué, donc après
+`I2` — et **avant** `I2b`, qui va demander à quelqu'un de jouer quinze journées d'affilée
+pour arbitrer un `.tres`.
+
+`P1` porte sept points, dont deux sont déjà faits parce qu'ils coûtaient une heure : le
+clic droit sur une fiche pour rappeler un seul ouvrier, et la ligne de survol qui survit au
+repli du rapport. Les cinq autres sont écrits en 8.
+
+### Quatre `OUVERT` de plus, tous sur les cartes
+
+Ils viennent de la même passe et se tiennent, ce qui est la raison de les écrire ensemble
+plutôt que de les trancher séparément :
+
+- **Une carte de bâtiment est-elle à usage unique ?** Les actions tournent ; un bâtiment
+  posé ne se rebâtit pas au même endroit. S'il est détruit à l'usage, le pool devient fini
+  et précieux — et il faut aussitôt un moyen d'en gagner : un choix parmi trois après une
+  vague, ou dans un événement de 3.7. Les deux se tranchent ensemble ou pas du tout.
+- **Conserver une carte, redessiner sa main, ce qu'un gouverneur de départ offre.** Trois
+  variantes d'une même question, et c'est l'`OUVERT` que 3.5 garde depuis `D1` : que fait-on
+  d'une main qu'on ne peut pas jouer.
+- **Un bâtiment large peut-il recevoir plusieurs fois la même action ?** Une empreinte de
+  quatre cellules est aujourd'hui **une** cible, donc elle accepte autant de travail qu'une
+  cabane 1×1. La taille devrait-elle acheter du débit, ou seulement des points de vie et de
+  la place ? La réponse décide de ce que valent les grands bâtiments dans le tableau de 4.1.
+
+### Prochain jalon
+
+**`I2b`** ou **`P1`**, dans l'ordre qu'on veut. `P1` est le seul jalon du projet dont le
+contenu vient d'une partie jouée plutôt que d'une déduction, donc le seul qui se périme si
+on attend — et il rend `I2b` nettement moins pénible à mener.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché.
+
+- **Les commandes ont deux ajouts** : **clic droit sur une fiche** rappelle cet ouvrier-là
+  sans défaire l'action, et **H** replie le rapport en gardant la ligne de survol, qui a
+  quitté le pavé pour se poser sous la barre de réserve.
+- **`data/balance/deck_balance.tres` a perdu une ligne** : *Terraformer* n'est plus dans le
+  deck de départ. La carte, le verbe et sa résolution sont intacts — c'est une ligne de data
+  à remettre quand `P1` aura montré le sens.
+- **Le panneau d'affectation montre cinq lignes d'action** au lieu de trois, et une action
+  incomplète n'est plus orange.
+- **Les deux branches ne sont pas fusionnées** : `feat/i2-full-loop` (5 commits) puis
+  `feat/i2-qol` (9), la seconde tirée de la première.
+
+---
+
 ## 2026-08-26 — `I2` : le run se fonde, se bat et se termine
 
 **État : terminé.** Cinq commits sur `feat/i2-full-loop`, tirée de `master`. Les trois

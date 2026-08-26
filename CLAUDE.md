@@ -105,6 +105,19 @@ frontière qui doit vraiment traverser se remarque : `PhaseReport` porte un
 `ProgressReport`, ce qui l'aurait fait entrer dans `contracts/` en traînant un interne
 des Effectifs derrière lui.
 
+**Le premier contrat qui a bougé depuis `F1` l'a fait après une partie jouée à la main.**
+*(Écrit après `I2`.)* `LaborUnit` a gagné l'XP de piste, et son docstring refusait
+explicitement de la porter — « ni les traits, ni l'XP, ni les blessures ». Ce refus était
+juste tant que rien ne posait la question, ce qui est exactement la règle qui a fait
+attendre `CombatForce` jusqu'à `F1`.
+
+Ce que le cas apprend en plus : **la question qui fait bouger un contrat peut venir d'un
+défaut d'usage plutôt que d'un système neuf.** Le bouton d'auto-affectation existait depuis
+`W2` et paraissait fini ; c'est en jouant quinze journées qu'on a vu qu'il classait par
+ordre de roster tant que personne n'avait franchi de palier — un multiplicateur venant d'un
+palier, six ouvriers frais valent tous 1.00. Aucun test ne le montrait, parce que les cas
+écrits comparaient des ouvriers **distincts**, ce qui est le cas intéressant et le cas rare.
+
 **`domain/run/` est le seul dossier autorisé à connaître les autres**, et c'est
 `DESIGN.md` 3.8 qui l'autorise nommément. Il tient les états internes de tous les
 systèmes ; aucun ne le connaît en retour.

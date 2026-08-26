@@ -134,6 +134,8 @@ Ce que ce multiplicateur multiplie est écrit et vérifié : les crans d'un soir
 
 Le nom de la famille vit dans `data/balance/`, comme celui de la famille qu'emploie une action à cru. Rien dans le code n'énumère les familles — les pistes se créent à l'usage —, donc en ajouter une n'a coûté aucune ligne de GDScript. *Terraformer* crédite la même : les deux verbes remuent la même terre.
 
+**`OUVERT`** — un bâtiment qui couvre plusieurs cellules peut-il recevoir **plusieurs fois** la même action ? *(Posé après `I2`.)* Deux *Construire* sur un chantier large, deux *Récolter* sur une ferme en L. La question naît de la contrainte provisoire de 3.5 — une cible ne porte qu'une action — et elle est plus large qu'elle : une empreinte de quatre cellules est aujourd'hui **une** cible, celle de son ancre, donc elle accepte exactement autant de travail qu'une cabane 1×1. Est-ce que la taille devrait acheter du débit, ou seulement des points de vie et de la place ? Les deux réponses sont défendables, et celle qu'on retiendra décide aussi de ce que valent les grands bâtiments dans le tableau de 4.1.
+
 #### Adjacence
 
 C'est la couche d'optimisation du jeu. Chaque bâtiment porte des règles de la forme *« +X de rendement par voisin taggé Y dans un rayon Z »*. Le système doit exposer un calcul de prévisualisation appelable pendant le placement fantôme : sans retour visuel en temps réel du delta, le système d'adjacence est invisible, donc inexistant.
@@ -246,6 +248,10 @@ Des effectifs à quinze, sur deux phases, pendant quinze jours, c'est plusieurs 
 
 **Ce que le bouton décide, et ce qu'il refuse de décider.** *(Tranché à `W2`.)* Il parcourt les actions **dans l'ordre de pose** et remplit les postes qui restent avec l'ouvrier libre le plus efficace dans la famille de cette action ; à égalité, l'ordre du roster départage. Il saute une action que rien ne crédite, et ne déplace **jamais** un ouvrier placé à la main — c'est ce qui fait de la surcharge manuelle un geste qui tient, quel que soit l'ordre dans lequel on s'y prend.
 
+**Il départage à multiplicateur égal par l'XP de piste.** *(Écrit après `I2`.)* Un multiplicateur vient d'un **palier**, donc six ouvriers frais valent tous 1.00 et le classement n'avait plus rien à comparer : il retombait sur l'ordre du roster, c'est-à-dire pendant toutes les journées où le bouton sert le plus. Préférer celui qui est le plus près du palier suivant concentre l'XP au lieu de l'étaler, ce qui est exactement la spécialisation que cette section réclame. L'XP ne renverse jamais un palier acquis — c'est le seul des deux que la production multiplie.
+
+C'est ce qui a fait entrer l'XP de piste dans la `LaborForce`, premier contrat à bouger depuis `F1`. Elle n'y donne aucun rendement : elle sert à **ordonner**, jamais à calculer.
+
 Il ne pondère **pas** par le rendement : une récolte à 3 et une case nue à 1 se valent devant lui. Pondérer rendrait un cran de chantier comparable à une récolte, ce qui est un arbitrage d'équilibrage et appartient à `I3`. Le bouton ne choisit donc jamais quelle action mérite un ouvrier — **l'ordre de pose est la priorité que le joueur a déjà exprimée**. Il ne choisit que *qui*, et c'est précisément la moitié évidente de la décision.
 
 **`OUVERT`** — taille des effectifs, et **recrutement** : le plafond de places existe, ce qui le remplit non. Croissance passive, événement, carte ? La question est adossée à celle du sort de la main non jouée en 3.5, et se tranchera au même playtest.
@@ -292,7 +298,13 @@ Une action posée porte sa propre **identité**, et c'est elle que l'affectation
 
 Elle porte aussi sa **capacité**, figée à la pose : les postes du bâtiment visé, les crans qui restent à un chantier, ou un chiffre d'équilibrage sur une case nue. C'est ce plafond que les ouvriers remplissent, et au-delà duquel ils chôment.
 
-**Une carte ouvre les postes de sa cible une fois.** Une seconde du même nom au même endroit les rouvrirait, et trois ouvriers produiraient dans une cabane qui n'en tient que deux — la carte cesserait d'être une permission pour devenir un multiplicateur. Deux cartes *différentes* sur une même cellule restent acceptées ; c'est le doublon qui est refusé, pas le partage.
+**Une carte ouvre les postes de sa cible une fois.** Une seconde du même nom au même endroit les rouvrirait, et trois ouvriers produiraient dans une cabane qui n'en tient que deux — la carte cesserait d'être une permission pour devenir un multiplicateur.
+
+**Et pour l'instant, une cible ne porte qu'une action, quelle qu'elle soit.** *(Renversé après `I2`.)* Cette section disait le contraire — « deux cartes *différentes* sur une même cellule restent acceptées ; c'est le doublon qui est refusé, pas le partage » —, et c'était le cas pour lequel `D2` avait donné une identité aux actions : *Récolter* et *Chasser* sur une même forêt, « deux métiers sur une même terre ».
+
+La règle n'a pas survécu à une partie jouée à la main, et pour une raison d'**écran** et non de design. Une case se désigne d'un seul curseur : la touche qui affecte, le clic qui retire et la ligne de survol ne peuvent atteindre qu'une des deux actions, et l'autre n'existe plus que dans une liste de panneau bornée. Le domaine autorisait un geste que rien ne pouvait viser — c'est-à-dire une règle que le joueur ne pouvait ni voir ni employer.
+
+Le retour en arrière est **provisoire et assumé** : c'est la contrainte la moins chère qui rend la carte lisible, et elle se lève le jour où un écran sait désigner l'une des deux — un cycle au clic, un menu, ou une pile visible sur la case. Ce que le partage protégeait reste vrai d'une journée à l'autre ; il cesse de l'être dans la même phase.
 
 **Retirer une action rend sa carte.** *(Tranché à `W2`.)* Le retrait est une **annulation**, pas un sacrifice : il n'est possible que dans la phase qui a posé, et à ce moment rien n'a été consommé — aucun ouvrier n'a travaillé, la réserve n'a pas bougé. Il n'y a donc rien à faire payer, et une carte qui ne reviendrait pas punirait une cible mal visée plutôt qu'une décision.
 
@@ -313,6 +325,10 @@ Deux **bornes de relief** encadrent le terrassement, dans `data/balance/`, et el
 La caserne fait exister *S'entraîner*, l'atelier *Fabriquer*, le camp d'exploration *Explorer*. Ces actions n'ont **pas** de version à cru : sans le bâtiment, la carte est injouable.
 
 C'est une flèche neuve dans l'architecture — jusqu'ici rien ne remontait de la ville vers les cartes. Le sens à respecter est **le Deck interroge la ville**, via un contrat qui énumère ce qui est débloqué ; la ville ne pousse rien dans le deck. Un système du domaine ne notifie personne, il répond.
+
+**`OUVERT` — la nature d'une carte de bâtiment.** *(Posé après `I2`.)* Les actions tournent : jouées, défaussées, remélangées quand la pioche s'épuise. Un bâtiment devrait-il faire de même ? La piste est qu'il soit **à usage unique** — détruit quand il est posé, puisqu'on ne bâtit pas deux fois la même ferme au même endroit — ce qui rendrait le pool des bâtiments fini et donc précieux. Elle en appelle immédiatement une autre : **comment en gagne-t-on ?** Un choix parmi trois, à la façon d'un roguelite, après une vague ou dans un événement de 3.7. Les deux se tranchent ensemble ou pas du tout.
+
+**`OUVERT` — garder, redessiner, et ce qu'un départ offre.** *(Posé après `I2`.)* Trois questions voisines qui touchent toutes au même endroit du tour. Un moyen de **conserver** une carte d'une phase à l'autre — un pouvoir, une règle de héros de départ, une méta-progression de 6. Un principe de **redraw**, qui est la réponse classique à une main impayable. Et ce qu'un gouverneur de départ change au deck, que 6. annonce sans le décrire. Elles ne se posent qu'après l'`OUVERT` ci-dessous, dont elles sont des variantes : toutes répondent à « que fait-on d'une main qu'on ne peut pas jouer ».
 
 **`OUVERT`** — taille de la main et du deck, et sort des cartes non jouées en fin de phase. Défausser toute la main crée de la tension et empêche la thésaurisation, mais frustre quand on pioche trois bâtiments impayables. Alternatives à tester : conserver une carte, défausser contre une petite ressource, ou main persistante avec limite de jeu par tour. La question se pose désormais **par pool**, ce qui la complique — trois pioches, trois défausses, trois tailles de main. Décision reportée après le premier playtest de la boucle complète.
 
@@ -492,6 +508,8 @@ Les places de roster de l'habitation y sont entrées à `W1`, ce qui a sorti ce 
 
 *Chasser* est la façon d'obtenir de la nourriture avant d'avoir une ferme : la version à cru d'un besoin qui devient ensuite un bâtiment. Un bâtiment de chasse pourra s'ajouter plus tard sans rien changer à la règle.
 
+***Terraformer* est sorti du deck de départ après `I2`**, et le verbe reste écrit. Ce n'est pas un renoncement : son **sens** — monter ou descendre — ne s'affiche nulle part. La touche le retourne bien, mais seulement carte en main, et ni la ligne de survol ni les cibles allumées ne disent lequel des deux on s'apprête à faire. Une carte qu'on oriente à l'aveugle est pire qu'une carte qu'on subit, ce qui est précisément l'inverse de ce que 3.5 cherchait en faisant du sens un choix de pose. Elle revient dans le deck le jour où l'écran montre où va la terre — `P1`.
+
 **`data/cards/` ne contient que les quatre premières.** *(Écrit à `D1`.)* La colonne MVP n'est pas indicative : les trois dernières n'ont ni résolution, ni bâtiment pour les débloquer, et les écrire aujourd'hui reviendrait à mettre dans le deck des cartes injouables pour plusieurs jalons. Elles entrent avec `X1`, `X2` et `X3`, en même temps que la colonne **Débloque** de 4.1.
 
 Ce qu'une action **fait** n'est pas dans `data/` non plus, et ne le sera pas : les sept verbes se résolvent chacun autrement, donc une *nature* d'action est du code de `src/domain/`. La carte porte son identité et son pool ; c'est tout ce que le deck consomme. Même règle qu'en 3.3 pour les bâtiments.
@@ -594,6 +612,44 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 - **I2b** — Playtest : arbitrage de la **structure de journée** (2.) et du sort de la main non jouée (3.5). Les deux se testent en échangeant un `.tres`.
 - **I3** — Passe de contenu et d'équilibrage, **arbitrage des `OUVERT`** restants.
 
+### Confort — `P`
+
+*(Ouvert après `I2`, sur une passe complète jouée à la main.)* Une famille à part, et il
+faut dire pourquoi elle n'est pas simplement « de l'UI qu'on fera plus tard ».
+
+Les jalons d'écran — `E2`, `W2`, l'écran de `I2` — ont chacun livré la vue **dont leur
+système avait besoin** : la réserve pour l'Économie, l'affectation pour les Effectifs, la
+bataille pour le Combat. Aucun n'avait pour charge ce qui rend une partie *agréable* à
+mener bout à bout, et c'est une question qu'on ne peut poser qu'après avoir joué — donc
+après `I2`, et avant que `I2b` demande à quelqu'un de jouer quinze journées d'affilée pour
+arbitrer un `.tres`.
+
+- **P1** — **La passe de confort.** Ce que la première partie complète a réclamé :
+  - **Affecter à la souris de bout en bout.** Sélectionner une fiche puis appuyer sur une
+    barre est un mélange de deux vocabulaires. Un glisser-déposer, ou un clic sur la fiche
+    puis un clic sur la case, mais pas les deux moitiés dans deux langues.
+  - **Le coût sur la carte elle-même**, et non seulement sur la ligne de survol quand on la
+    tient. Une main de sept cartes dont on ne connaît le prix qu'une par une se joue à
+    l'aveugle.
+  - **Distinguer les phases autrement qu'en toutes lettres.** Une lumière qui change, un
+    signe qui bascule — quelque chose qu'on lit sans lire. Attention : le libellé vient de
+    la `PhaseDef` et 2. interdit qu'un nom de phase entre dans le code, donc ce que la
+    vue commute doit venir de la data, comme la couleur d'un terrain.
+  - **Voir les piles.** Une pioche et une défausse consultables, plutôt que trois compteurs.
+    C'est aussi ce qui rendra jouable l'`OUVERT` de 3.5 sur les cartes non jouées : on ne
+    peut pas arbitrer ce qu'on ne voit pas.
+  - **Le sens d'un terrassement**, qui décide du retour de la carte dans le deck de départ
+    *(cf. 4.2)*.
+  - **La liste des actions posées, pour de bon** — une liste qui défile ou une place à elle,
+    plutôt qu'un plafond de lignes calibré à la main sur la hauteur du HUD.
+  - **Désigner l'une des deux actions d'une même case**, ce qui lèverait la contrainte
+    provisoire de 3.5.
+
+  Les deux premiers gestes de la liste sont **déjà faits** : le clic droit sur une fiche
+  rappelle son ouvrier, et la ligne de survol a quitté le rapport pliable pour rester
+  visible pendant qu'on vise. Ils l'ont été parce qu'ils coûtaient une heure et que `I2b`
+  se joue avec.
+
 ### Différés — `X`
 
 Écrits après `I2`, jamais avant. Ils ne contraignent que l'abstraction, pas le calendrier.
@@ -610,7 +666,7 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
   Ce qu'il contraint en attendant, et c'est sa seule raison d'être écrit maintenant : **aucun rapport ne doit inventer sa propre conséquence.** Un système qui rencontre un état le **compte** et le rapporte ; il ne décide pas de ce qu'il fait. C'est ce que `UpkeepReport` fait déjà des non-nourris, et ce que `DamageReport` fait des pertes.
   *(Relevé après `F1`.)* Le format de combat de 3.6 le fait passer de confortable à **structurant**, et lui donne sa première forme concrète : les points de vie sont la ressource d'une manche, un ouvrier à zéro meurt, et ce qu'un **survivant** emporte est un effet progressif selon la part de vie perdue. Sans lui, un combat n'a que deux issues — rien, ou définitif —, et le joueur qui a bien joué ne sent rien du tout. C'est le premier état dont on connaisse déjà et la source et la graduation.
 
-**Ordre suivant** — `I2b`. La boucle est jouable du début à la fin, donc la question n'est plus « qu'est-ce qui manque » mais « est-ce que ça se joue ». Les deux arbitrages de ce jalon — la structure de la journée en 2, le sort de la main non jouée en 3.5 — se testent en échangeant un `.tres`, et c'est la première fois du projet qu'un jalon ne demande pas d'écrire une ligne de GDScript.
+**Ordre suivant** — `I2b`, et **`P1` peut s'intercaler à tout moment** : c'est le seul jalon dont le contenu vient d'une partie jouée plutôt que d'une déduction, donc le seul qui se périme si on attend. La boucle est jouable du début à la fin, donc la question n'est plus « qu'est-ce qui manque » mais « est-ce que ça se joue ». Les deux arbitrages de ce jalon — la structure de la journée en 2, le sort de la main non jouée en 3.5 — se testent en échangeant un `.tres`, et c'est la première fois du projet qu'un jalon ne demande pas d'écrire une ligne de GDScript.
 
 `I3` suit avec les chiffres, et il en a désormais une liste précise plutôt qu'une intention : **la nourriture d'abord**, qui est le déséquilibre le plus visible d'un run entier — la famine tombe dès la cinquième journée et ne s'arrête plus —, puis le calendrier des vagues, le barème du score, et le `breach_per_casualty` que `F1` avait déjà signalé comme le plus fragile de ses cinq.
 
