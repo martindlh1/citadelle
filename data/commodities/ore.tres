@@ -7,3 +7,4 @@ script = ExtResource("1_commodity_data")
 id = &"ore"
 label = "Minerai"
 color = Color(0.42, 0.5, 0.6, 1)
+order = 4

@@ -26,11 +26,29 @@ const UNSET_COLOR := Color(0.0, 0.0, 0.0, 1.0)
 ## Par convention il reprend le nom du fichier .tres.
 @export var id: StringName
 
-## Libellé affichable. Le HUD de E2 le lira ; rien dans le domaine ne le regarde.
+## Libellé affichable. Le HUD de E2 le lit ; rien dans le domaine ne le regarde.
 @export var label: String
 
 ## Couleur au HUD, en attendant de vraies icônes. Même rôle que sur un terrain.
 @export var color: Color
+
+## Rang d'affichage, de gauche à droite. Le HUD le lit ; le domaine l'ignore.
+##
+## Il existe parce que l'ordre des ressources à l'écran est une décision, et qu'elle
+## n'avait aucun endroit où vivre. GameDatabase.list_commodity_ids() trie par
+## identifiant, donc en anglais interne — la nourriture, qui est celle qui tue,
+## atterrissait entre le minerai et la pierre. La seule alternative était une liste
+## d'identifiants écrite dans un .gd, c'est-à-dire exactement ce que DESIGN.md 3.3
+## refuse en sortant l'ensemble des ressources de l'énumération du code.
+##
+## Il commence à 1 et non à 0, pour la raison qui vaut sur tout data/balance/ : un
+## champ non renseigné vaut 0, et un rang 0 légitime le rendrait indétectable.
+##
+## Deux ressources ne doivent pas le partager — ce fichier ne peut pas le vérifier
+## seul, une Resource de schéma ne lisant jamais l'index, et c'est un cas de test qui
+## le tient. Des rangs égaux rendraient l'ordre de la barre arbitraire, donc différent
+## d'une session à l'autre : le même piège que le tri de deux StringName.
+@export_range(1, 99, 1) var order: int
 
 ## Champs non renseignés. Vide = ressource exploitable.
 ## Vérifié au boot par GameDatabase, comme les terrains et les bâtiments.
@@ -42,4 +60,6 @@ func missing_fields() -> PackedStringArray:
 		missing.append("label")
 	if color == UNSET_COLOR:
 		missing.append("color")
+	if order <= 0:
+		missing.append("order")
 	return missing

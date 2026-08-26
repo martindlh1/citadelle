@@ -7,3 +7,4 @@ script = ExtResource("1_commodity_data")
 id = &"wood"
 label = "Bois"
 color = Color(0.55, 0.38, 0.24, 1)
+order = 2
