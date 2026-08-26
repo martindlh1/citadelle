@@ -196,6 +196,58 @@ func test_a_zero_capacity_reserve_accepts_nothing() -> void:
 	assert_dict(ledger.deposit(_bundle([WOOD, 10]))).is_empty()
 	assert_int(ledger.total()).is_equal(0)
 
+# --- retrait au prorata -----------------------------------------------------------------
+
+## Le pendant exact de l'écrêtage d'un dépôt : on prend au prorata de ce que chaque
+## ressource pèse. Quarante bois et vingt nourritures perdent deux pour un.
+func test_a_share_is_taken_in_proportion() -> void:
+	var ledger := Ledger.from_stock(_bundle([WOOD, 40, FOOD, 20]), 100)
+	var taken := ledger.take_share(6)
+	assert_int(taken[WOOD]).is_equal(4)
+	assert_int(taken[FOOD]).is_equal(2)
+	assert_int(ledger.total()).is_equal(54)
+
+## **Le cas qui compte.** Deux réserves identiques rangées dans un ordre différent perdent
+## exactement la même chose — c'est ce que E1 exige de la répartition d'une récolte qui
+## déborde, et c'est pour ça que cette règle vit ici plutôt que chez le Combat.
+func test_the_order_of_the_reserve_decides_nothing() -> void:
+	var forward := Ledger.from_stock(_bundle([WOOD, 40, FOOD, 20]), 100)
+	var backward := Ledger.from_stock(_bundle([FOOD, 20, WOOD, 40]), 100)
+	assert_dict(backward.take_share(7)).is_equal(forward.take_share(7))
+
+## Prendre plus que le total vide la réserve, sans creuser sous zéro. Un pillage n'a pas à
+## savoir ce qu'il y avait.
+func test_taking_more_than_the_reserve_holds_empties_it() -> void:
+	var ledger := Ledger.from_stock(_bundle([WOOD, 10, FOOD, 5]), 100)
+	var taken := ledger.take_share(100)
+	assert_int(taken[WOOD]).is_equal(10)
+	assert_int(taken[FOOD]).is_equal(5)
+	assert_int(ledger.total()).is_equal(0)
+
+func test_taking_nothing_takes_nothing() -> void:
+	var ledger := Ledger.from_stock(_bundle([WOOD, 10]), 100)
+	assert_dict(ledger.take_share(0)).is_empty()
+	assert_int(ledger.amount(WOOD)).is_equal(10)
+
+func test_taking_from_an_empty_reserve_takes_nothing() -> void:
+	assert_dict(Ledger.create(100).take_share(10)).is_empty()
+
+## Le total pris est celui demandé, reste de division compris : une part fractionnaire
+## perdue ferait qu'une vague emporterait moins que ce qu'elle a percé.
+func test_the_whole_demand_is_taken() -> void:
+	var ledger := Ledger.from_stock(_bundle([WOOD, 10, FOOD, 10, &"stone", 10]), 100)
+	var taken := ledger.take_share(7)
+	var total := 0
+	for resource in taken:
+		total += taken[resource]
+	assert_int(total).is_equal(7)
+
+## Une ressource dont la part tombe à zéro n'apparaît pas dans le retrait. L'invariant
+## « aucune clé à zéro » vaut pour ce que le Ledger rend comme pour ce qu'il garde.
+func test_a_share_rounded_to_nothing_is_not_reported() -> void:
+	var ledger := Ledger.from_stock(_bundle([WOOD, 100, FOOD, 1]), 200)
+	assert_bool(ledger.take_share(2).has(FOOD)).is_false()
+
 ## Lot construit depuis une liste plate — [ressource, quantité, ressource, quantité].
 ## L'ordre d'insertion est celui de la liste, ce dont deux cas ci-dessus se servent.
 func _bundle(flat: Array) -> Dictionary[StringName, int]:

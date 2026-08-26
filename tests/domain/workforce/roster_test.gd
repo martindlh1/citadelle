@@ -15,6 +15,11 @@ extends GdUnitTestSuite
 
 const HARVEST := &"harvest"
 
+## La famille que le Combat crédite. Inventée ici comme HARVEST l'est : DESIGN.md 3.4 pose
+## que la liste des familles n'est pas close, donc une suite qui reprendrait l'identifiant
+## de data/balance/ figerait exactement ce que le design garde ouvert.
+const COMBAT := &"combat"
+
 func test_an_empty_roster_holds_and_projects_nothing() -> void:
 	var roster := Roster.empty()
 	assert_int(roster.size()).is_equal(0)
@@ -111,6 +116,53 @@ func test_the_roster_does_not_enforce_the_cap_itself() -> void:
 	for index in 20:
 		workers.append(Worker.create(StringName("w%d" % index), "w%d" % index))
 	assert_int(Roster.create(workers).size()).is_equal(20)
+
+# --- la seconde projection ------------------------------------------------------------
+
+## La CombatForce sort du même roster que la LaborForce, et c'est ce qui fait tenir le
+## vivier unique de DESIGN.md 3.4 : ce n'est plus une discipline d'écriture, c'est ce que
+## ces deux fonctions font en partant du même present().
+func test_the_combat_projection_carries_the_present() -> void:
+	var roster := _roster([&"ana", &"bo"])
+	assert_array(roster.to_combat(COMBAT, _balance()).fighters()) \
+		.contains_exactly([&"ana", &"bo"])
+
+## Un absent ne se bat pas, comme il ne mange pas. Même ligne, même raison : la projection
+## ne montre que les présents, ce que DESIGN.md 3.9 exige d'honorer d'avance.
+func test_an_absent_worker_does_not_fight() -> void:
+	var roster := _roster([&"ana", &"bo"])
+	roster.worker(&"ana").set_present(false)
+	assert_array(roster.to_combat(COMBAT, _balance()).fighters()).contains_exactly([&"bo"])
+
+## La piste Combat traverse, et c'est tout ce que le Combat reçoit d'un ouvrier.
+func test_the_combat_projection_carries_the_combat_track() -> void:
+	var roster := _roster([&"ana"])
+	roster.worker(&"ana").gain(COMBAT, 20)
+	assert_float(roster.to_combat(COMBAT, _balance()).efficiency(&"ana")).is_equal(2.0)
+
+## **Le cas qui distingue les deux projections.** Un excellent récoltant est un combattant
+## ordinaire : la LaborUnit répond par métier, la CombatUnit par un seul chiffre, et lire
+## la mauvaise piste ne se verrait qu'au bout de dix journées de courbe.
+func test_a_great_harvester_is_a_plain_fighter() -> void:
+	var roster := _roster([&"ana"])
+	roster.worker(&"ana").gain(HARVEST, 20)
+	assert_float(roster.to_combat(COMBAT, _balance()).efficiency(&"ana")) \
+		.is_equal(CombatUnit.BASE_EFFICIENCY)
+
+## La famille est un argument et non une constante : DESIGN.md 3.4 pose que la liste des
+## familles n'est pas close et qu'aucun code ne l'énumère. Le cas le prouve en projetant
+## sur une famille qui n'existe dans aucun .tres.
+func test_the_projection_reads_the_family_it_is_given() -> void:
+	var roster := _roster([&"ana"])
+	roster.worker(&"ana").gain(&"sailing", 20)
+	assert_float(roster.to_combat(&"sailing", _balance()).efficiency(&"ana")).is_equal(2.0)
+
+## Les deux valeurs de repli sont la même, et le cas l'épingle plutôt que de le supposer :
+## CombatUnit recopie la constante de LaborUnit au lieu de l'importer, pour ne pas faire
+## dépendre un contrat d'un autre. Une copie qui dériverait ferait valoir un bleu
+## différemment aux champs et sur la ligne.
+func test_both_contracts_agree_on_what_a_novice_is_worth() -> void:
+	assert_float(CombatUnit.BASE_EFFICIENCY).is_equal(LaborUnit.BASE_EFFICIENCY)
 
 func _roster(ids: Array[StringName]) -> Roster:
 	var workers: Array[Worker] = []
