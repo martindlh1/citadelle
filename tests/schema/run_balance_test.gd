@@ -171,6 +171,26 @@ func test_the_real_file_carries_its_calendar() -> void:
 		assert_array(slot.missing_fields()).is_empty()
 		assert_object(slot.wave).is_instanceof(WaveDef)
 
+## Le bâtiment d'ouverture sort-il **achevé** ?
+##
+## `DESIGN.md` 4.1 le promet depuis `C4` : « le "—" du Cœur dans la colonne Chantier est un
+## zéro, ce qui lui évite un chemin de pose particulier ». Le domaine n'écrit aucun cas
+## spécial pour ça, donc la promesse ne tient que par la data — un `build_actions` glissé
+## sur ce bâtiment ouvrirait un chantier que rien ne pourrait avancer, puisque *Construire*
+## se joue avec une main qui n'est tirée qu'après la fondation.
+##
+## Le nom n'est pas écrit ici : il est lu sur le `.tres`, comme partout ailleurs.
+func test_the_starting_building_needs_no_site_work() -> void:
+	var balance := load(BALANCE_PATH) as RunBalance
+	if balance.starting_building.is_empty():
+		return
+	var building := load("res://data/buildings/%s.tres" % balance.starting_building) \
+		as BuildingData
+	assert_object(building) \
+		.override_failure_message("starting_building nomme un bâtiment absent de data/") \
+		.is_not_null()
+	assert_int(building.build_actions).is_equal(0)
+
 ## Le fichier livré est-il exploitable de bout en bout ?
 ##
 ## Il double le contrôle de `GameDatabase` au boot, et c'est voulu : le boot refuse de

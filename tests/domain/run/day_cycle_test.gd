@@ -137,6 +137,48 @@ func test_a_run_walks_every_phase_of_every_day() -> void:
 	assert_int(walked).is_equal(12)
 
 ## Une journée de phases anonymes, toutes permissives, la dernière résolvant.
+
+# --- Un run qui s'arrête avant sa dernière journée -----------------------------------------
+
+## `DESIGN.md` 5 donne deux défaites — le Cœur détruit, le roster vide — et aucune n'attend
+## la dernière journée. Il fallait donc que « le run est fini » puisse devenir vrai au
+## milieu, et le faire **ici** plutôt qu'en ajoutant un second drapeau ailleurs est ce qui
+## garde une seule vérité.
+func test_a_cycle_can_be_ended_where_it_stands() -> void:
+	var cycle := _cycle_of(1, 3)
+	cycle.advance()
+	assert_bool(cycle.is_over()).is_false()
+	cycle.end()
+	assert_bool(cycle.is_over()).is_true()
+
+## Le bénéfice de n'avoir qu'une vérité : tous les gardes déjà écrits se ferment sans
+## qu'une ligne ait bougé. C'est le cas qui le vérifie plutôt que de l'affirmer.
+func test_an_ended_cycle_permits_nothing_and_resolves_nothing() -> void:
+	var cycle := _cycle_of(1, 3)
+	cycle.end()
+	assert_bool(cycle.permits(PhaseDef.ACTION_PLAY)).is_false()
+	assert_bool(cycle.permits(PhaseDef.ACTION_ASSIGN)).is_false()
+	assert_bool(cycle.resolves()).is_false()
+	assert_bool(cycle.closes_the_day()).is_false()
+
+func test_an_ended_cycle_does_not_advance() -> void:
+	var cycle := _cycle_of(1, 3)
+	cycle.end()
+	assert_bool(cycle.advance()).is_false()
+	assert_bool(cycle.is_over()).is_true()
+
+## Une victoire se constate **après** que le dernier jour est passé, donc sur un cycle déjà
+## terminé. Le geste doit donc y être inoffensif, sans quoi refermer un run gagné
+## repousserait sa dernière journée d'un cran.
+func test_ending_an_over_cycle_changes_nothing() -> void:
+	var cycle := _cycle_of(1, 1)
+	cycle.advance()
+	cycle.advance()
+	var day := cycle.day()
+	cycle.end()
+	assert_int(cycle.day()).is_equal(day)
+	assert_bool(cycle.is_over()).is_true()
+
 func _cycle_of(phases_per_day: int, days: int) -> DayCycle:
 	var names: Array[StringName] = [&"first", &"second", &"third", &"fourth"]
 	var phases: Array[PhaseDef] = []
