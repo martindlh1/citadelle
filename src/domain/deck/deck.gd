@@ -130,6 +130,33 @@ func discard(card: StringName) -> bool:
 		return true
 	return false
 
+## Reprend en main un exemplaire de cette carte depuis la défausse. Rend false si la
+## défausse n'en tient aucun.
+##
+## L'exact inverse de discard(), et il existe pour un geste précis : **annuler**. Retirer
+## une action posée est un jeu de carte à l'envers — rien n'a encore été consommé, aucun
+## ouvrier n'a travaillé, aucune ressource n'est sortie —, donc la carte doit revenir là
+## d'où elle vient. Sans cette porte, le retrait était un sacrifice qui punissait un clic
+## raté plutôt qu'une décision.
+##
+## **Ce n'est pas une réponse à l'OUVERT de DESIGN.md 3.5.** Celui-ci porte sur le sort
+## des cartes **non jouées en fin de phase** ; celle-ci a été jouée et reprise dans la
+## phase même. Les deux gestes ne tombent ni au même moment ni sur les mêmes cartes, et
+## I2b garde sa question entière.
+##
+## L'exemplaire repris est le **dernier tombé**, ce qui n'a aucune conséquence observable
+## — deux exemplaires d'une même carte sont interchangeables — mais fixe l'ordre, donc
+## garde deux runs partis du même seed identiques jusque dans la composition des piles.
+func take_back(card: StringName) -> bool:
+	for pool in CardData.POOLS:
+		var at: int = _discard[pool].rfind(card)
+		if at < 0:
+			continue
+		_discard[pool].remove_at(at)
+		_hand[pool].append(card)
+		return true
+	return false
+
 ## Défausse toute la main, les trois pools, et rend le nombre de cartes défaussées.
 ##
 ## Une capacité, pas une politique : rien ici ne dit qu'une phase se termine ainsi. Qui

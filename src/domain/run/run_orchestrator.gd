@@ -56,16 +56,31 @@ static func play(state: RunState, card: StringName, cell: Vector2i, turns := 0,
 ## chôme —, mais c'est une façon coûteuse de perdre de la main-d'œuvre, et la rattraper au
 ## même endroit que le retrait évite d'avoir à y penser.
 ##
-## La carte, elle, ne revient pas en main : elle est à la défausse depuis qu'on l'a jouée.
-## C'est l'état par défaut et non une réponse — le sort des cartes est l'`OUVERT` de 3.5,
-## et `I2b` le tranchera devant un vrai playtest.
+## **La carte revient en main**, et c'est une correction plutôt qu'un ajout. Ce docstring
+## affirmait le contraire — « elle est à la défausse depuis qu'on l'a jouée, c'est l'état
+## par défaut et non une réponse » — en renvoyant à l'`OUVERT` de 3.5. Il confondait deux
+## gestes : cet `OUVERT` porte sur les cartes **non jouées en fin de phase**, alors qu'un
+## retrait reprend une carte **jouée**, dans la phase même, avant que quoi que ce soit
+## n'ait été consommé. Rien n'a produit, aucun ouvrier n'a travaillé, la réserve n'a pas
+## bougé : il n'y a rien à faire payer.
+##
+## Le prix de l'ancienne lecture se voyait au clavier et nulle part ailleurs : le clic
+## droit n'était pas une annulation mais un sacrifice, et il punissait une cible mal
+## visée plutôt qu'une décision. Le scumming qu'on aurait pu craindre en retour —  poser
+## pour lire la capacité, retirer, reposer ailleurs — n'existe pas : le ciblage annonce
+## déjà la capacité **avant** le jeu, et la surbrillance montre les cibles légales.
+##
+## Une **carte de bâtiment** ne passe pas par ici : elle ouvre un chantier, que rien ne
+## retire. « Que rend un chantier annulé ? » est l'`OUVERT` de 3.2, et il reste entier.
 static func withdraw(state: RunState, action: int) -> bool:
 	assert(state != null, "retrait sans run")
 	if not state.cycle().permits(PhaseDef.ACTION_PLAY):
 		return false
-	if not state.board().has(action):
+	var posted := state.board().at(action)
+	if posted == null:
 		return false
 	state.release_action(action)
+	state.deck().take_back(posted.card())
 	return state.board().withdraw(action)
 
 ## Rien ne porte ce numéro d'action.
