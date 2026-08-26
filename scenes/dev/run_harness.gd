@@ -78,7 +78,7 @@ La caméra  Q/E : pivoter. Molette : zoomer. WASD : déplacer. R : recadrer."""
 
 ## Marge basse du panneau d'affectation : la hauteur que la main occupe, plus son écart.
 ## Sans elle le panneau descendrait sur les cartes, la main étant ancrée en bas.
-const HAND_CLEARANCE := 92.0
+const HAND_CLEARANCE := 88.0
 
 var _metrics: TerrainMetrics
 var _world: DevWorld

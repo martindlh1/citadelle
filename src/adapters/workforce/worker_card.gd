@@ -90,6 +90,9 @@ const ABSENT_TEXT := "absent"
 ## intéressante, et elle mérite de se voir avant.
 const CAPPED_MARK := " · max"
 
+## XP totale, montrée quand aucun palier n'est à annoncer.
+const XP_TEXT := "%d XP"
+
 ## Préfixe du niveau d'ouvrier. Court exprès : c'est un repère, pas une phrase.
 const LEVEL_PREFIX := "N"
 
@@ -146,7 +149,6 @@ static func create(balance: WorkforceBalance) -> WorkerCard:
 	card._job = _make_text("", ROW_FONT_SIZE, FREE_COLOR)
 	column.add_child(card._job)
 	card._note = _make_text("", ROW_FONT_SIZE, NOTE_COLOR)
-	card._note.visible = false
 	column.add_child(card._note)
 
 	card.add_child(column)
@@ -169,8 +171,7 @@ func show_worker(worker: Worker, job: String, note: String, held: bool) -> void:
 	_fill_tracks(worker)
 	_job.text = ABSENT_TEXT if absent else (job if not job.is_empty() else FREE_TEXT)
 	_job.add_theme_color_override("font_color", _job_color(absent, job))
-	_note.text = note
-	_note.visible = not note.is_empty()
+	_show_note(worker, note)
 	add_theme_stylebox_override("panel", _make_style(held))
 	modulate.a = ABSENT_ALPHA if absent else 1.0
 
@@ -214,6 +215,26 @@ func _fill_tracks(worker: Worker) -> void:
 			worker.skill_level(family, _balance),
 			CAPPED_MARK if worker.is_skill_capped(family, _balance) else ""]
 		_track_values[index].text = "×%.2f" % worker.efficiency(family, _balance)
+
+## La dernière ligne : un palier qu'on vient de franchir, ou l'XP totale à défaut.
+##
+## Elle est **toujours là**, et c'est une décision de mise en page avant d'être une
+## d'information. Une ligne qui n'apparaît qu'au palier ferait grandir la fiche au moment
+## exact où le compte rendu de phase est le plus long — donc où la colonne de droite a le
+## moins de place —, et la grille entière sauterait sous l'œil. C'est la raison qui garde
+## les quatre colonnes de `ResourceBar` en place même à zéro.
+##
+## Ce qu'elle montre le reste du temps n'est donc pas du remplissage : l'XP totale est
+## l'axe du **niveau d'ouvrier**, celui que les pistes n'expliquent pas, et c'est aussi ce
+## qui rend lisible un ouvrier qui monte sans que rien ne bouge dans ses pistes — la
+## situation même que `X5` rendra intéressante.
+func _show_note(worker: Worker, note: String) -> void:
+	if note.is_empty():
+		_note.text = XP_TEXT % worker.xp()
+		_note.add_theme_color_override("font_color", KEY_COLOR)
+		return
+	_note.text = note
+	_note.add_theme_color_override("font_color", NOTE_COLOR)
 
 func _job_color(absent: bool, job: String) -> Color:
 	if absent:

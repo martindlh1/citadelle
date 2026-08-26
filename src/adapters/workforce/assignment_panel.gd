@@ -55,10 +55,14 @@ const CARD_COLUMNS := 3
 ## Une borne et non une place « qui devrait suffire ». La première capture de `W2` a
 ## montré ce qu'un panneau sans borne fait dans un HUD de taille fixe : il grandit avec le
 ## plateau jusqu'à recouvrir son voisin, et le défaut n'apparaît qu'à la phase la plus
-## chargée — donc le plus tard possible. Quatre est ce que la hauteur laisse une fois le
+## chargée — donc le plus tard possible. Trois est ce que la hauteur laisse une fois le
 ## compte rendu de phase et la main servis ; au-delà, la ligne de reste le dit et les
 ## actions restent atteignables sur la carte, où Espace les affecte.
-const MAX_ROWS := 4
+##
+## C'est une borne de **harnais**, pas de jeu : elle vient d'un HUD posé sur un viewport
+## de 1152×648 déjà occupé par une barre, un compte rendu et une main. L'écran de `I2`
+## aura à la traiter pour de bon — une liste qui défile, ou une place à elle.
+const MAX_ROWS := 3
 
 ## Ce que la ligne de reste annonce.
 const MORE_TEXT := "… et %d autre(s), sur la carte."
