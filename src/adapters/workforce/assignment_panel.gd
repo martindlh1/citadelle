@@ -40,6 +40,14 @@ extends PanelContainer
 ## Une fiche vient d'être cliquée.
 signal worker_picked(worker: StringName)
 
+## On veut rappeler cet ouvrier de là où il est, sans toucher à l'action.
+##
+## Le geste symétrique de `worker_picked`, et il manquait : jusqu'ici rappeler quelqu'un
+## demandait de viser son action sur la carte et de rappeler **tout le monde** avec Retour
+## arrière. Retirer un seul ouvrier d'un poste à deux places était donc impossible sans
+## défaire les deux.
+signal worker_released(worker: StringName)
+
 ## Une action posée vient d'être cliquée.
 signal action_picked(action: int)
 
@@ -55,14 +63,19 @@ const CARD_COLUMNS := 3
 ## Une borne et non une place « qui devrait suffire ». La première capture de `W2` a
 ## montré ce qu'un panneau sans borne fait dans un HUD de taille fixe : il grandit avec le
 ## plateau jusqu'à recouvrir son voisin, et le défaut n'apparaît qu'à la phase la plus
-## chargée — donc le plus tard possible. Trois est ce que la hauteur laisse une fois le
-## compte rendu de phase et la main servis ; au-delà, la ligne de reste le dit et les
-## actions restent atteignables sur la carte, où Espace les affecte.
+## chargée — donc le plus tard possible.
 ##
-## C'est une borne de **harnais**, pas de jeu : elle vient d'un HUD posé sur un viewport
-## de 1152×648 déjà occupé par une barre, un compte rendu et une main. L'écran de `I2`
-## aura à la traiter pour de bon — une liste qui défile, ou une place à elle.
-const MAX_ROWS := 3
+## **Trois à `W2`, cinq après `I2`**, et le desserrage n'est pas arbitraire : le panneau de
+## bataille a quitté cette colonne, ce qui y a rendu de la place, et cinq est ce qu'une main
+## peut poser en une phase — `hand_size` vaut cinq cartes d'action. Le plafond couvre donc
+## le cas courant au lieu de tronquer dès la quatrième pose, ce qu'une partie jouée à la
+## main a signalé comme gênant.
+##
+## Ça reste une borne de **harnais**, et le chiffre se mesure en capture plutôt qu'il ne se
+## devine : c'est un HUD posé sur un viewport déjà occupé par une barre, un compte rendu et
+## une main. L'écran du jeu aura à traiter la question pour de bon — une liste qui défile,
+## ou une place à elle — et c'est `P1`.
+const MAX_ROWS := 5
 
 ## Ce que la ligne de reste annonce.
 const MORE_TEXT := "… et %d autre(s), sur la carte."
@@ -83,7 +96,13 @@ const COUNT_COLOR := Color(0.62, 0.66, 0.72)
 const FULL_COLOR := Color(0.55, 0.82, 0.50)
 
 ## Une action à qui il manque du monde.
-const HUNGRY_COLOR := Color(0.95, 0.62, 0.35)
+##
+## Neutre et non orange depuis `I2`. L'orange veut dire *danger* sur les trois autres
+## panneaux — famine, écrêtage au plafond, pertes d'une vague — et ici il voulait dire
+## « pas encore rempli », c'est-à-dire l'état normal d'une action qu'on vient de poser. Une
+## phase qui commence s'affichait donc tout en alarme, et le contresens a été signalé par
+## la première personne à jouer une partie entière.
+const WAITING_COLOR := Color(0.84, 0.86, 0.90)
 
 const TITLE_FONT_SIZE := 14
 const ROW_FONT_SIZE := 11
@@ -248,11 +267,20 @@ func _row_text(state: RunState, action: PlayedAction, assign: Assignment) -> Str
 		action.target(), held.size(), action.capacity(),
 		", ".join(names) if not names.is_empty() else NO_ONE]
 
-## Vert quand les postes sont tenus, orange quand il en manque. C'est la seule chose que
+## Vert quand les postes sont tenus, neutre tant qu'il en manque. C'est la seule chose que
 ## le panneau juge, et ce n'est pas une règle : c'est une soustraction.
+##
+## **L'orange en est sorti après `I2`**, et c'était un vrai contresens de lecture. Il veut
+## dire *danger* sur les trois autres panneaux — famine, écrêtage au plafond, pertes d'une
+## vague —, et ici il voulait dire « pas encore rempli », c'est-à-dire l'état normal d'une
+## action qu'on vient de poser. Une phase qui commence s'affichait donc tout en alarme.
+##
+## Le vert reste, parce qu'il dit quelque chose que la fraction ne dit pas d'un coup d'œil :
+## cette ligne-là est finie, on peut passer à la suivante. Et la fraction `1/2` porte déjà
+## le compte, donc la couleur n'a jamais eu à le répéter.
 func _row_color(action: PlayedAction, assign: Assignment) -> Color:
 	if StaffingAdvisor.room_on(action, assign) > 0:
-		return HUNGRY_COLOR
+		return WAITING_COLOR
 	return FULL_COLOR
 
 # --- Les fiches ---------------------------------------------------------------------------
@@ -267,6 +295,7 @@ func _fill_cards(state: RunState, assign: Assignment, held: StringName) -> void:
 		if not _cards.has(id):
 			var card := WorkerCard.create(state.balance().workforce)
 			card.picked.connect(_on_card_picked.bind(id))
+			card.released.connect(_on_card_released.bind(id))
 			_cards[id] = card
 			_grid.add_child(card)
 		var note: String = _notes.get(id, "")
@@ -295,6 +324,9 @@ func _label_of(card: StringName) -> String:
 
 func _on_card_picked(worker: StringName) -> void:
 	worker_picked.emit(worker)
+
+func _on_card_released(worker: StringName) -> void:
+	worker_released.emit(worker)
 
 func _on_row_pressed(index: int) -> void:
 	if index >= _row_actions.size():
