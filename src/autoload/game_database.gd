@@ -14,6 +14,7 @@ const CATEGORY_TERRAIN := &"terrain"
 const CATEGORY_BUILDINGS := &"buildings"
 const CATEGORY_COMMODITIES := &"commodities"
 const CATEGORY_CARDS := &"cards"
+const CATEGORY_WAVES := &"waves"
 const ID_BALANCE := &"balance"
 
 ## Catégorie -> (identifiant -> Resource).
@@ -27,6 +28,7 @@ func _ready() -> void:
 	_assert_buildings_are_complete()
 	_assert_commodities_are_complete()
 	_assert_cards_are_complete()
+	_assert_waves_are_complete()
 	_assert_resources_are_known()
 	_assert_cards_are_known()
 	EventBus.database_ready.emit.call_deferred()
@@ -71,6 +73,14 @@ func get_card(id: StringName) -> CardData:
 ## seed.
 func list_card_ids() -> Array[StringName]:
 	return list_ids(CATEGORY_CARDS)
+
+## Vague indexée, ou null si l'identifiant est inconnu.
+func get_wave(id: StringName) -> WaveDef:
+	return get_resource(CATEGORY_WAVES, id) as WaveDef
+
+## Identifiants de vague connus, triés.
+func list_wave_ids() -> Array[StringName]:
+	return list_ids(CATEGORY_WAVES)
 
 ## Resource indexée, ou null si la paire (catégorie, identifiant) est inconnue.
 func get_resource(category: StringName, id: StringName) -> Resource:
@@ -166,6 +176,25 @@ func _assert_cards_are_complete() -> void:
 		var missing := card.missing_fields()
 		assert(missing.is_empty(),
 			"champs non renseignés dans data/cards/%s.tres : %s" % [id, ", ".join(missing)])
+
+## Et sur les vagues : une puissance à zéro se contient toute seule, donc un fichier vide
+## se lirait comme une vague facile au lieu de se signaler.
+##
+## Sixième copie de la même boucle, et le seuil annoncé à C1 est franchi — « le jour où il
+## y aura six catégories, une base commune vaudra le coup ». Il ne l'a toujours pas : la
+## base commune exigerait de passer par une Resource nue pour appeler missing_fields(), ce
+## qui coûterait le typage des six. Le seuil était mal choisi, et c'est la sixième
+## répétition qui le montre — ce n'est pas leur nombre qui déciderait, c'est le jour où
+## GDScript saura contraindre une classe de base de Resource sans perdre le type.
+func _assert_waves_are_complete() -> void:
+	for id in list_wave_ids():
+		var wave := get_wave(id)
+		assert(wave != null, "data/waves/%s.tres n'est pas une WaveDef" % id)
+		if wave == null:
+			continue
+		var missing := wave.missing_fields()
+		assert(missing.is_empty(),
+			"champs non renseignés dans data/waves/%s.tres : %s" % [id, ", ".join(missing)])
 
 ## Les identifiants de ressource nommés ailleurs existent-ils dans le catalogue ?
 ##

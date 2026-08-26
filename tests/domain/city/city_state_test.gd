@@ -13,6 +13,10 @@ const SIZE := Vector2i(6, 6)
 const RAISED_X := 4
 const RAISED_HEIGHT := 2
 
+## PV de tous les bâtiments de travail de ce fichier. Un seul chiffre : les cas de dégâts
+## parlent de la porte, jamais de l'équilibrage.
+const HIT_POINTS := 5
+
 var _plain: TerrainData
 var _water: TerrainData
 var _grid: HeightGrid
@@ -314,6 +318,71 @@ func test_removing_a_site_frees_its_cells_like_any_building() -> void:
 	assert_int(_city.count()).is_equal(0)
 	assert_bool(_city.is_occupied(Vector2i(2, 2))).is_false()
 
+# --- dégâts ---------------------------------------------------------------------------
+
+## Un bâtiment frappé sans tomber reste en place, et son compte de points le suit.
+func test_a_building_that_survives_a_blow_stays_up() -> void:
+	_city.place(_terrain, _hut(), Vector2i(0, 0))
+	assert_bool(_city.damage(Vector2i(0, 0), HIT_POINTS - 1)).is_false()
+	assert_int(_city.count()).is_equal(1)
+	assert_int(_city.building_at(Vector2i(0, 0)).hit_points_left()).is_equal(1)
+
+## Deux coups s'accumulent. Sans quoi un bâtiment se soignerait entre deux vagues, ce que
+## rien dans DESIGN.md ne propose et qui rendrait la seconde vague indolore.
+func test_blows_add_up() -> void:
+	_city.place(_terrain, _hut(), Vector2i(0, 0))
+	_city.damage(Vector2i(0, 0), 2)
+	_city.damage(Vector2i(0, 0), 2)
+	assert_int(_city.building_at(Vector2i(0, 0)).damage()).is_equal(4)
+
+## **Le cas qui porte la porte.** Un bâtiment tombé est retiré dans le même geste : le
+## laisser debout dans les deux index le ferait occuper ses cellules et relever encore la
+## réserve. C'est ce qui distingue damage() d'advance(), qui n'a rien à tenir.
+func test_a_building_that_falls_leaves_the_city() -> void:
+	_city.place(_terrain, _keep(), Vector2i(1, 1))
+	assert_bool(_city.damage(Vector2i(1, 1), HIT_POINTS)).is_true()
+	assert_int(_city.count()).is_equal(0)
+	assert_bool(_city.has_anchor(Vector2i(1, 1))).is_false()
+
+## Et il libère **toutes** ses cellules, pas seulement son ancre. Une empreinte de quatre
+## cases dont trois resteraient occupées interdirait de rebâtir sur ses ruines.
+func test_a_fallen_building_frees_its_whole_footprint() -> void:
+	_city.place(_terrain, _keep(), Vector2i(1, 1))
+	_city.damage(Vector2i(1, 1), HIT_POINTS)
+	assert_bool(_city.is_occupied(Vector2i(2, 2))).is_false()
+
+## Un coup plus fort que ce qu'il restait ne creuse pas sous zéro : le bâtiment tombe, et
+## le compte de points reste lisible.
+func test_an_overwhelming_blow_does_not_dig_below_zero() -> void:
+	var hut := _hut()
+	_city.place(_terrain, hut, Vector2i(0, 0))
+	assert_bool(_city.damage(Vector2i(0, 0), HIT_POINTS * 10)).is_true()
+	assert_int(_city.count()).is_equal(0)
+
+## Un chantier encaisse comme le reste, et tombe comme le reste. C'est la perte que
+## DESIGN.md 3.2 veut qu'on puisse raconter ; qui la raconte est le DamageReport.
+func test_a_site_takes_blows_like_any_building() -> void:
+	_city.place(_terrain, _site(&"site", 3), Vector2i(0, 0))
+	assert_bool(_city.damage(Vector2i(0, 0), HIT_POINTS)).is_true()
+	assert_int(_city.count()).is_equal(0)
+
+## Les dégâts traversent l'instantané, sans quoi le Combat frapperait toujours des murs
+## neufs et une seconde vague ne finirait jamais ce que la première avait entamé.
+func test_a_snapshot_carries_the_damage() -> void:
+	_city.place(_terrain, _hut(), Vector2i(0, 0))
+	_city.damage(Vector2i(0, 0), 2)
+	var snapshot := _city.to_snapshot()
+	assert_int(snapshot.at_anchor(Vector2i(0, 0)).damage()).is_equal(2)
+	assert_int(snapshot.at_anchor(Vector2i(0, 0)).hit_points_left()) \
+		.is_equal(HIT_POINTS - 2)
+
+## Et il ne suit pas les coups d'après, comme il ne suit pas les crans d'après.
+func test_a_snapshot_does_not_follow_later_damage() -> void:
+	_city.place(_terrain, _hut(), Vector2i(0, 0))
+	var snapshot := _city.to_snapshot()
+	_city.damage(Vector2i(0, 0), 2)
+	assert_int(snapshot.at_anchor(Vector2i(0, 0)).damage()).is_equal(0)
+
 func _single() -> Array[Vector2i]:
 	var offsets: Array[Vector2i] = [Vector2i.ZERO]
 	return offsets
@@ -347,6 +416,7 @@ func _building(id: StringName, offsets: Array[Vector2i]) -> BuildingData:
 	var building := BuildingData.new()
 	building.id = id
 	building.footprint = offsets
+	building.hit_points = HIT_POINTS
 	return building
 
 func _make_terrain(id: StringName, build: TerrainData.Build) -> TerrainData:

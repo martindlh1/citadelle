@@ -1,0 +1,9 @@
+[gd_resource type="Resource" script_class="WaveDef" format=3]
+
+[ext_resource type="Script" path="res://src/schema/wave_def.gd" id="1_wave_def"]
+
+[resource]
+script = ExtResource("1_wave_def")
+id = &"raid"
+label = "Razzia"
+power = 20

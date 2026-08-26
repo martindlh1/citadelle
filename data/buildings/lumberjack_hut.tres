@@ -19,3 +19,4 @@ height = 0.6
 build_actions = 1
 footprint = Array[Vector2i]([Vector2i(0, 0)])
 production = SubResource("Resource_lumberjack_hut_production")
+hit_points = 4

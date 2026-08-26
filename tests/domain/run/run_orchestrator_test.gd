@@ -46,6 +46,14 @@ const DAYS := 6
 
 const CONSTRUCTION := &"construction"
 const HARVEST := &"harvest"
+const COMBAT := &"combat"
+
+## PV de tous les bâtiments de travail, et places de déploiement du bloc de combat. Deux
+## places pour trois ouvriers : la borne de DESIGN.md 3.6 mord, ce qui est la seule chose
+## qu'elle doit faire ici.
+const HIT_POINTS := 4
+const SLOTS := 2
+const BREACH_PER_CASUALTY := 4
 
 const UP := PlayedAction.DIRECTION_UP
 const DOWN := PlayedAction.DIRECTION_DOWN
@@ -656,6 +664,142 @@ func _fill_the_reserve(state: RunState) -> void:
 		.override_failure_message("la réserve n'est pas pleine avant le soir") \
 		.is_true()
 
+# --- Ce qu'une vague fait au run --------------------------------------------------------
+
+## Une vague contenue ne coûte rien : ni bâtiment, ni ouvrier, ni réserve. Le cas le plus
+## important des huit, parce que c'est celui qu'un joueur qui a bien joué doit obtenir.
+func test_a_held_wave_leaves_the_run_alone() -> void:
+	var state := _open()
+	_raise(state, CARD_STORE, SPOT)
+	var before := state.ledger().total()
+	var report := RunOrchestrator.fight(state, _wave(_defense(state)))
+	assert_bool(report.is_held()).is_true()
+	assert_int(state.city().count()).is_equal(1)
+	assert_int(state.roster().size()).is_equal(3)
+	assert_int(state.ledger().total()).is_equal(before)
+
+## Une brèche casse pour de bon : le bâtiment quitte la ville et libère sa cellule.
+func test_a_wave_that_breaks_through_takes_the_building_out() -> void:
+	var state := _open()
+	_raise(state, CARD_STORE, SPOT)
+	var report := RunOrchestrator.fight(state, _wave(_defense(state) + HIT_POINTS))
+	assert_array(report.damage().destroyed()).is_equal([SPOT])
+	assert_int(state.city().count()).is_equal(0)
+	assert_bool(state.city().is_occupied(SPOT)).is_false()
+
+## **Le cas que `E2` avait annoncé mot pour mot.** Le docstring de `_restore_capacity()`
+## dit depuis ce jalon : « le jour où le `DamageReport` de `F1` détruira un entrepôt, c'est
+## cette même ligne qui écrêtera ». La voici, et elle écrête — sans quoi la jauge
+## annoncerait une capacité que plus aucun mur ne porte.
+func test_a_destroyed_warehouse_lowers_the_reserve() -> void:
+	var state := _open()
+	_raise(state, CARD_STORE, SPOT)
+	assert_int(state.ledger().capacity()).is_equal(BASE_CAP + STORE_BONUS)
+	RunOrchestrator.fight(state, _wave(_defense(state) + HIT_POINTS))
+	assert_int(state.ledger().capacity()).is_equal(BASE_CAP)
+
+## La vague emporte ce que la brèche lui vaut, et c'est le `Ledger` qui décide **quoi** :
+## le rapport de combat n'a jamais vu le stock.
+func test_the_wave_carries_off_what_the_breach_is_worth() -> void:
+	var state := _open()
+	var before := state.ledger().total()
+	var report := RunOrchestrator.fight(state, _wave(_defense(state) + 4))
+	assert_int(report.damage().plunder()).is_equal(4)
+	assert_int(report.total_plundered()).is_equal(4)
+	assert_int(state.ledger().total()).is_equal(before - 4)
+
+## Une réserve vide ne donne rien, et l'écart entre l'ordre et le fait se lit sur le
+## rapport de bataille. « Ils ont tout pris » et « ils sont repartis les mains vides » sont
+## deux fins de vague différentes.
+func test_an_empty_reserve_gives_nothing_up() -> void:
+	var state := _open()
+	state.ledger().take_share(state.ledger().total())
+	var report := RunOrchestrator.fight(state, _wave(_defense(state) + 4))
+	assert_int(report.damage().plunder()).is_equal(4)
+	assert_int(report.total_plundered()).is_equal(0)
+
+## Les morts quittent le vivier. Seuls les **engagés** tombent : trois ouvriers, deux
+## places, celui qui est resté au village est en sécurité quoi qu'il arrive.
+func test_the_fallen_leave_the_roster() -> void:
+	var state := _open()
+	var report := RunOrchestrator.fight(state,
+		_wave(_defense(state) + BREACH_PER_CASUALTY))
+	assert_int(report.damage().lost().size()).is_equal(1)
+	assert_int(state.roster().size()).is_equal(2)
+	assert_bool(state.roster().has(report.damage().lost()[0])).is_false()
+
+## **Un mort ne progresse pas**, et c'est une phrase que `SkillResolver` porte depuis `W1`
+## sans qu'aucun code n'ait eu à la faire vraie. L'ordre des quatre applications suffit :
+## on retire, puis on crédite, et le résolveur saute un ouvrier qu'il ne connaît plus.
+func test_the_fallen_earn_nothing() -> void:
+	var state := _open()
+	var report := RunOrchestrator.fight(state,
+		_wave(_defense(state) + BREACH_PER_CASUALTY))
+	var rewarded: Array[StringName] = []
+	for gain in report.progress().gains():
+		rewarded.append(gain.worker())
+	assert_array(rewarded).not_contains(report.damage().lost())
+
+## Tenir la ligne se paie, et dans la famille que `data/balance/` nomme. Le Combat crédite
+## une piste comme un chantier depuis `I1`, sans une ligne de GDScript qui l'énumère.
+func test_holding_the_line_pays_the_combat_track() -> void:
+	var state := _open()
+	RunOrchestrator.fight(state, _wave(_defense(state)))
+	assert_int(state.roster().worker(&"ana").track_xp(COMBAT)).is_equal(XP_PER_SHIFT)
+
+## Un homme resté au village ne gagne rien : il n'était pas sur la ligne. C'est le revers
+## exact de « il ne défend rien », et les deux viennent de la même borne.
+func test_a_man_left_at_the_village_earns_nothing() -> void:
+	var state := _open()
+	RunOrchestrator.fight(state, _wave(_defense(state)))
+	assert_int(state.roster().worker(&"cy").track_xp(COMBAT)).is_equal(0)
+
+## **Une vague ne demande pas la permission à la phase.** Les quatre autres portes de ce
+## fichier interrogent le cycle avant d'agir ; celle-ci non, et c'est délibéré : une vague
+## tombe à la fin d'une journée, pas pendant un geste. La lui faire refuser dans une phase
+## qui n'autorise rien reviendrait à ranger le combat parmi les gestes du joueur.
+func test_a_wave_does_not_ask_the_phase() -> void:
+	var state := _open()
+	RunOrchestrator.end_phase(state)
+	var report := RunOrchestrator.fight(state, _wave(_defense(state) + HIT_POINTS))
+	assert_bool(report.is_held()).is_false()
+
+## Le déterminisme, sur le chemin neuf : deux runs partis du même seed et frappés par la
+## même vague perdent les mêmes gens. Sans le départage par l'ordre du roster, ils
+## enverraient deux personnes différentes mourir et ni la ville ni la réserve ne le
+## montreraient.
+func test_the_same_seed_loses_the_same_people() -> void:
+	var first := _open()
+	var second := _open()
+	var here := RunOrchestrator.fight(first, _wave(_defense(first) + BREACH_PER_CASUALTY))
+	var there := RunOrchestrator.fight(second,
+		_wave(_defense(second) + BREACH_PER_CASUALTY))
+	assert_array(there.damage().lost()).is_equal(here.damage().lost())
+
+## Ce que le village oppose à l'instant, tel que le résolveur le calculera.
+func _defense(state: RunState) -> int:
+	var balance := state.balance()
+	return InstantCombatResolver.defense_of(state.city().to_snapshot(),
+		state.roster().to_combat(balance.combat.combat_skill_family, balance.workforce),
+		balance.combat)
+
+## Pose ce bâtiment et le mène à son dernier cran, hors de toute phase. Le harnais d'un
+## test a le droit de bâtir sans jouer de carte : le sujet est la vague, pas la pose.
+func _raise(state: RunState, id: StringName, anchor: Vector2i) -> void:
+	state.city().place(state.terrain(), state.building(id), anchor)
+	while not state.city().building_at(anchor).is_complete():
+		state.city().advance(anchor)
+	state.ledger().set_capacity(
+		ProductionResolver.capacity_for(state.city().to_snapshot(),
+			state.balance().economy))
+
+func _wave(power: int) -> WaveDef:
+	var wave := WaveDef.new()
+	wave.id = &"test_wave"
+	wave.label = "Vague d'essai"
+	wave.power = power
+	return wave
+
 func _open(run_seed := SEED, phases: Array[PhaseDef] = []) -> RunState:
 	return RunState.open(run_seed, _make_grid(), _make_roster(), _make_catalogue(),
 		_make_buildings(), _make_balance(phases))
@@ -751,6 +895,7 @@ func _building(id: StringName, wood: int, actions: int) -> BuildingData:
 	var cells: Array[Vector2i] = [Vector2i.ZERO]
 	data.footprint = cells
 	data.build_actions = actions
+	data.hit_points = HIT_POINTS
 	var cost: Dictionary[StringName, int] = {}
 	if wood > 0:
 		cost[&"wood"] = wood
@@ -764,7 +909,20 @@ func _make_balance(phases: Array[PhaseDef]) -> BalanceData:
 	balance.deck = _deck()
 	balance.actions = _actions()
 	balance.run = _run(phases)
+	balance.combat = _combat()
 	return balance
+
+## Deux places de déploiement pour trois ouvriers — la borne mord, ce qui est le seul
+## réglage de ce bloc qui change quelque chose aux cas ci-dessus. Un homme par point de
+## défense, un mort par brèche de quatre.
+func _combat() -> CombatBalance:
+	var combat := CombatBalance.new()
+	combat.base_deployment_slots = SLOTS
+	combat.defense_per_fighter = 1
+	combat.combat_skill_family = COMBAT
+	combat.breach_per_casualty = BREACH_PER_CASUALTY
+	combat.plunder_per_breach = 1
+	return combat
 
 func _economy() -> EconomyBalance:
 	var economy := EconomyBalance.new()

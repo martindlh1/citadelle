@@ -86,7 +86,9 @@ La caméra tourne par pas de 90°, ce qui est l'intérêt du vrai 3D par rapport
 
 Les **tags de terrain** cessent d'être décoratifs avec les actions : c'est eux qui décident où une action à cru peut se jouer. *Récolter* sur une case `forest` rend du bois sans qu'aucun bâtiment existe.
 
-**`OUVERT`** — le relief joue-t-il encore *autrement* ? Deux pistes restent entières : avantage défensif en hauteur, et accès aux ressources selon l'altitude. Le contrat expose déjà hauteur et planéité, donc les deux restent ouvertes sans refonte.
+**`OUVERT`** — le relief joue-t-il encore *autrement* ? Une piste reste entière : l'accès aux ressources selon l'altitude. Le contrat expose déjà hauteur et planéité, donc elle reste ouverte sans refonte.
+
+*(À moitié refermé après `F1`.)* L'**avantage en hauteur** cesse d'être une piste : le format de combat retenu en 3.6 fait du relief une contrainte de déplacement — monter coûte, une marche trop haute bloque. Ce n'est pas encore le bonus défensif qu'on imaginait, mais c'est mieux, parce que ça se joue au lieu de se subir : un plateau devient une position, et le terrassement de cette section devient un geste militaire autant qu'économique.
 
 ### 3.2 Construction
 
@@ -170,6 +172,8 @@ Deux bénéfices immédiats. La cohérence devient **structurelle** au lieu d'ê
 
 **`OUVERT`** — la conséquence de la famine. Perte d'efficacité le lendemain, blessure, départ, mort ? Le rapport d'upkeep porte déjà le compte des non-nourris : les quatre restent ouvertes sans que le contrat bouge. C'est le jour où l'une sera choisie que ce rapport entrera dans `contracts/`, puisque ce jour-là ce sont les Effectifs qui le liront.
 
+*(Précisé à `F1`.)* Cette question a désormais un **toit** plutôt qu'une réponse : elle appartient au système d'**états d'ouvrier** de `X6`, où la faim rejoindra la blessure et ce qui viendra après. Trois des quatre issues listées ci-dessus décrivent le même objet — un ouvrier qui porte quelque chose et le porte dans le temps —, et les trancher une par une à mesure que les systèmes les rencontrent produirait trois mécaniques qui ne se parlent pas. Ce qui reste ouvert n'est donc plus « que fait la famine », mais « que fait un état », et c'est une question de moins.
+
 **`HORS MVP` — artisanat.** L'atelier et l'action *Fabriquer* convertiront des ressources brutes en ressources ouvrées. Rien n'est écrit tant que la boucle n'est pas jouable, mais la réserve commune et le catalogue de `data/` accueillent une cinquième ressource sans refonte.
 
 ### 3.4 Effectifs — main-d'œuvre et combattants
@@ -217,6 +221,8 @@ Les deux alternatives écartées — deux viviers séparés à la *As We Descend
 La limite est connue et assumée : si le combat devient très tactique, un paysan sans équipement y est peu utile. La réponse prévue est l'action ***S'entraîner*** — investir dans un ouvrier qu'on a déjà plutôt qu'en recruter un autre — plutôt qu'un second vivier.
 
 Le contrat, lui, ne change pas d'un mot : `LaborForce` et `CombatForce` restent deux projections, et rien hors de `domain/workforce/` ne suppose qu'elles viennent de la même liste. Ce qui était un report devient une simple discipline d'écriture.
+
+*(Écrit à `F1`.)* La `CombatForce` existe, et elle est le **miroir strict** de la `LaborForce` : tout le roster présent, sans distinction. Ce n'est pas un doublon, c'est la même symétrie qu'entre les deux — l'Économie reçoit tout le monde et n'en emploie que ce que l'`Assignment` place, le Combat reçoit tout le monde et n'en engage que ce que le déploiement de 3.6 tient. Le filtre appartient au consommateur, jamais à la projection. Une unité y porte **un** multiplicateur et non un par famille, ce qui est le seul écart réel entre les deux contrats et vient de ce que le Combat est une famille et le travail plusieurs.
 
 #### Les ouvriers sont l'énergie, et ils sont nominatifs
 
@@ -306,21 +312,81 @@ C'est une flèche neuve dans l'architecture — jusqu'ici rien ne remontait de l
 
 > **Contrat** — `CitySnapshot` + `CombatForce` + `WaveDef` → `DamageReport`. C'est **le seul** contrat qui compte. Tout ce qui se passe entre les deux est remplaçable sans toucher au reste du jeu.
 
-Format non arrêté. Les pistes envisagées — tower-defense sur la grille du village, auto-battler observé, tactique au tour par tour dans une vue dédiée — ont toutes le même contrat d'entrée et de sortie.
-
 **Contrainte désormais fixée : le vivier est unique** *(cf. 3.4)*. Le format retenu devra rendre un ouvrier ordinaire utile au combat, ou assumer que l'on immobilise l'économie pour tenir une ligne. Ce n'est plus une question ouverte que `F2` tranchera, c'est une contrainte d'entrée que `F2` doit satisfaire.
 
-**Stratégie de développement.** Une première implémentation `InstantCombatResolver`, purement arithmétique et sans vue, sert de bouchon pour boucler la boucle de jeu au plus tôt. Le vrai système de combat, avec sa propre vue et sa propre scène, se développe ensuite en parallèle du reste, alimenté par des `CitySnapshot` fabriqués à la main. Le jour où il est prêt, on échange l'implémentation dans l'orchestrateur : une ligne.
+#### Le format — tactique au tour par tour, sur la grille du village
 
-Le `DamageReport` doit couvrir dès maintenant les cas dont les autres systèmes ont besoin : bâtiments détruits ou endommagés, **chantiers interrompus**, pertes et blessures parmi les effectifs engagés, XP de combat gagnée, ressources pillées.
+*(Tranché après `F1`, en discussion.)* Les trois pistes envisagées — tower-defense, auto-battler observé, tactique au tour par tour — avaient le même contrat ; c'est la troisième. Référence assumée : *The Last Spell*, avec beaucoup moins d'unités.
 
-**`OUVERT`** — format, vue, durée, degré de contrôle du joueur, direction et nature des vagues, rôle du relief. C'est `F2` qui tranchera.
+**Deux tours par manche, par camp.** Un tour où l'on déplace les ouvriers déployés et où chacun agit ; un tour où les ennemis se déplacent et frappent. Pas d'initiative entrelacée : c'est ce qui rend les intentions ci-dessous possibles, et c'est le format le plus lisible à trois pions.
+
+**Les ennemis annoncent leur tour entier.** Chaque ennemi affiche, pendant le tour du joueur, **où il ira et quelle case il frappera** — pas seulement son action, mais sa planification complète. Une intention qui ne dirait que « il attaquera » laisserait une incertitude qui viderait la promesse : l'information doit être complète, sinon le tour du joueur n'est plus un puzzle mais un pari.
+
+**Une intention frappe la case, pas la cible.** Esquiver l'annule — l'attaque s'exécute dans le vide. C'est ce qui fait du déplacement la décision centrale plutôt qu'un préambule à l'attaque. Conséquence gardée volontairement ouverte : si un **autre** corps se trouve sur la case au moment de l'exécution, il prend le coup, ennemi compris. Les effets de poussée qui feraient de cette règle un vrai puzzle de manipulation ne sont pas au périmètre de `F2` — mais la règle est écrite dans ce sens dès maintenant, pour n'avoir pas à la retourner le jour où ils arriveront.
+
+**Ils visent les ouvriers à portée, les bâtiments sinon.** Une seule ligne d'IA, et c'est elle qui empêche la stratégie dominante la plus bête du format : sur une carte de 32×32 très majoritairement vide, fuir en rond serait autrement gratuit. Ici fuir est un **troc** — on garde ses gens, ils mangent les murs —, et c'est exactement ce que le rapport de sortie sait déjà dire.
+
+**Le champ de bataille est le village, entier.** Pas de recadrage ni d'arène : la caméra zoome sur le côté attaqué, et c'est suffisant. La contrepartie est que **la vague entre à la lisière du bâti et non au bord de la carte** — seize cases de marche avant le premier contact seraient quatre tours où personne ne décide rien.
+
+**La direction s'annonce à l'avance**, par une flèche à l'écran. Ce n'est pas du confort : 3.2 veut qu'on pense à la bataille en posant un bâtiment, et une direction révélée le soir même transformerait cette prévoyance en loterie. C'est aussi ce qui donne au relief et à l'empreinte d'un bâtiment un second sens, celui que l'`OUVERT` de 3.1 cherchait.
+
+**Le relief joue, et c'est la première chose qui l'emploie autrement que comme contrainte de pose.** Monter coûte, une marche trop haute bloque. Le terrassement de 3.1 devient donc un geste militaire autant qu'économique.
+
+#### Ce qu'une manche gagne, et ce qu'elle coûte
+
+**Une vague est une razzia, pas un duel.** Tenir N tours suffit à ce qu'elle reparte ; **battre tous les ennemis** donne un bonus par-dessus. Il n'y a donc pas de victoire ni de défaite au combat, seulement une facture — ce qu'ils ont cassé et emporté entre-temps. La défaite d'un **run** reste celle de 5. : le Cœur détruit ou le roster vide.
+
+C'est aussi ce qui rend la borne de tours honnête. Sans elle, une manche s'étire ; avec elle mais sans objectif ennemi, elle s'esquive. Les deux ensemble donnent une pression qui monte et une sortie qui se paie.
+
+**Un ouvrier à zéro point de vie meurt.** C'est le choix le plus dur et il sert le pitch : une unité expérimentée perdue est une vraie perte, et chaque dégât compte. Il a un revers qu'il faut nommer — **sans blessure, un combat n'a que deux issues, rien ou définitif**, et le joueur qui a bien joué ne sent rien du tout. Les points de vie sont la ressource **de la manche** ; ce qu'un survivant en emporte est un **effet progressif selon la part de vie perdue**, et c'est `X6` qui l'écrira. Le combat rend donc `X6` structurant plutôt que confortable.
+
+#### Ce que `F2` livre, et ce qu'il ne livre pas
+
+Deux verbes : **se déplacer** et **attaquer**. Plus les intentions, le relief dans le déplacement, les bâtiments qui bloquent et qui tombent, et la borne de tours.
+
+**Les capacités spéciales n'y sont pas**, et c'est la seule chose que ce document retient volontairement d'un format qu'il vient d'accepter. Un système de capacités générique — ciblage, effets, coûts — est un jeu entier, et il tuerait `F2` avant qu'on sache si le format tient. Elles ont déjà leur place : `X5` demande depuis `W1` « ce qu'un palier de niveau d'ouvrier offre », et la réponse est là. **Une capacité est ce qu'un palier de piste Combat débloque** — ce qui enracine le combat dans le roster nominatif au lieu d'en faire un jeu d'échecs greffé, et donne enfin une raison d'être à *S'entraîner* (`X3`).
+
+Les états — poison, étourdissement, saignement — sont `X6` et rien d'autre. `F2` ne doit pas en inventer un seul, il en inventerait quatre.
+
+**Stratégie de développement.** Une première implémentation `InstantCombatResolver`, purement arithmétique et sans vue, sert de bouchon pour boucler la boucle de jeu au plus tôt — c'est `F1`, et c'est fait. Le vrai système se développe ensuite en parallèle, alimenté par des `CitySnapshot` fabriqués à la main.
+
+*(Corrigé après `F1`.)* Ce paragraphe promettait que l'échange serait « une ligne dans l'orchestrateur ». **C'est faux pour un format au tour par tour**, et le savoir maintenant coûte moins cher que de le découvrir à `I2`. Un résolveur rend un rapport ; un combat tactique **attend le joueur**, pendant des dizaines de frames et de clics, et le domaine n'a pas le droit d'`await`.
+
+Ce qui est vrai en revanche, et c'est ce que `F1` a livré sans le chercher : `RunOrchestrator.fight()` sépare déjà **produire** le rapport — une ligne — et **l'appliquer** aux trois systèmes — tout le reste. L'applicateur ne bouge pas. Le producteur, lui, cesse d'être une fonction pour devenir un **état** : un plateau mutable dans `domain/combat/`, des fonctions pures qui appliquent un geste à la fois, et un `DamageReport` au bout. L'adapter pilote le milieu, comme il pilote déjà une phase.
+
+Le `DamageReport` doit couvrir dès maintenant les cas dont les autres systèmes ont besoin : bâtiments détruits ou endommagés, **chantiers interrompus**, pertes parmi les effectifs engagés, XP de combat gagnée, ressources pillées.
+
+*(Corrigé à `F1`.)* Cette liste disait « pertes **et blessures** », et la blessure en est retirée : elle appartient au système d'états de `X6`, avec la faim de 3.3. Ce n'est pas un renoncement mais un déménagement — une blessure a besoin d'un état qui dure, un `Worker` n'en porte aucun aujourd'hui, et l'inventer dans le rapport d'un système neuf aurait décidé pour les Effectifs de ce qu'un état fait. Le champ entrera dans ce rapport le jour où il aura quelque part où atterrir.
+
+#### Le déploiement, et pourquoi il est capé
+
+*(Tranché à `F1`.)* Un combat s'ouvre par un **déploiement** : on choisit qui va sur la ligne, dans un nombre de places **borné**. La borne est une base d'équilibrage plus ce que certains bâtiments ajoutent — la caserne au premier chef —, exactement comme l'entrepôt relève la réserve et l'habitation les places du roster. C'est le troisième plafond du jeu bâti sur le même modèle, et le troisième champ plat d'un `BuildingData`.
+
+C'est ce qui fait exister au combat la tension que le pitch promet. Sans borne, tout le roster se bat, un ouvrier de plus est un défenseur de plus, et « envoyer son meilleur récoltant en milice » ne coûte rien puisqu'on les envoie tous. Avec elle, une place est rare : la donner à son meilleur récoltant est un vrai choix, et **construire une caserne devient une décision de guerre** plutôt qu'un déblocage d'action.
+
+Deux conséquences que le contrat porte déjà. Seuls les **engagés** meurent et gagnent de l'XP de combat — les autres sont au village. Et le plafond se lit sur la ville **achevée** : une caserne en chantier n'ouvre aucune place, pour la raison qui vaut depuis `C4` — un toit qu'on n'a pas posé ne loge personne.
+
+*Qui* se déploie est un geste, et `F1` ne l'écrit pas : il engage automatiquement les plus aguerris jusqu'à la borne. C'est un bouchon du même ordre que le Cœur posé au centre à `I1` — l'écran qui pose la question appartient à `F2`, et la règle automatique lui survivra comme bouton par défaut.
+
+#### Ce que le bouchon calcule, et ce qui reste jetable
+
+*(Écrit à `F1`.)* L'arithmétique tient en une ligne : la ville et les engagés opposent une **défense**, la vague une **puissance**, et la différence est une **brèche** qui se dépense. Rien n'y est définitif — c'est un bouchon, et `F2` le remplacera entier.
+
+Une seule de ses règles mérite d'être ici plutôt que dans le code, parce qu'elle se discute : **une brèche casse d'abord ce qui la retenait**, puis ce qui cède le plus vite. Défense décroissante, puis points de vie croissants. Elle a deux vertus — la palissade sert vraiment à quelque chose, et le Cœur se retrouve en dernier sans qu'une ligne de code n'écrive son nom, puisqu'il est le plus solide du tableau de 4.1. Elle ignore délibérément l'ordre de pose : deux villes identiques bâties dans un ordre différent doivent perdre la même chose, ce que 3.3 exige déjà de l'écrêtage.
+
+**`OUVERT`** — ce qui reste après la discussion qui a suivi `F1`, et c'est nettement moins qu'avant : **la nature des vagues** — qui vient, combien, avec quelles portées —, **la borne de tours** d'une manche, et **le bonus** que vaut un nettoyage complet. Les trois sont des chiffres et du contenu, donc `I3` et `F2` ; aucun ne remet en cause le format.
+
+Le format, la vue, le degré de contrôle du joueur, la direction des vagues et le rôle du relief **ne sont plus ouverts** : ils sont ci-dessus.
+
+L'ordre des dégâts du bouchon, lui, reste **explicitement jetable** : il disparaît le jour où une vague vient d'une direction plutôt que d'un chiffre, ce qui est désormais daté.
 
 ### 3.7 Événements
 
 > **Contrat** — un modificateur tiré chaque soir, appliqué avant ou après la production selon son type.
 
-Source d'aléatoire quotidien indépendante de la pioche. Pistes : arrivée d'ouvriers, tempête qui détruit une défense, filon révélé, disette, caravane marchande, éclaireur qui révèle la prochaine vague.
+Source d'aléatoire quotidien indépendante de la pioche. Pistes : arrivée d'ouvriers, tempête qui détruit une défense, filon révélé, disette, caravane marchande.
+
+*(Précisé après `F1`.)* L'« éclaireur qui révèle la prochaine vague » sort de cette liste : 3.6 fait de la direction d'une vague une **information de base**, annoncée par une flèche à l'écran, parce que sans elle on ne peut pas poser un bâtiment en pensant à la bataille. Ce qui reste à un éclaireur événementiel est donc ce qu'il révélerait **de plus** — la composition, la portée, le nombre —, et c'est un meilleur événement : il ajoute de la lecture au lieu de rendre jouable ce qui ne l'était pas sans lui.
 
 ### 3.8 Cycle de jour
 
@@ -336,6 +402,14 @@ C'est ce qui a permis à deux choses annoncées de longue date de devenir vraies
 
 **Le déterminisme cesse d'être une consigne.** Un seed plus une suite de gestes rejoue un run à l'identique — la réserve, le relief, l'avancement des chantiers, l'XP —, et c'est vérifié plutôt que promis.
 
+#### La fin de journée devra cesser d'être atomique
+
+*(Écrit après `F1`, avant d'en avoir besoin.)* Le combat de 3.6 **clôt la journée** : il se déclenche à la fermeture, après la résolution de la dernière phase et après l'upkeep, exactement à la place que la séquence de 2 lui garde. Et il attend le joueur pendant des dizaines de tours.
+
+Or la fin d'une phase est aujourd'hui **un seul geste indivisible** — résoudre, vider le plateau, avancer. La rupture interactive tombe au milieu. Le cycle devra donc **refuser d'avancer tant qu'une bataille est en attente**, ce qui est un état de plus sur le run et une porte de moins qui fait tout d'un coup.
+
+C'est écrit ici plutôt que découvert à `I2` parce que le coût des deux n'est pas le même : une demi-heure aujourd'hui, un écran à moitié câblé à défaire ensuite. Le rapport de journée n'accueillera d'ailleurs pas un rapport de bataille mais **la vague en attente** ; ce que la bataille a coûté revient par la seconde porte.
+
 ### 3.9 Expéditions — `HORS MVP`
 
 L'action *Explorer*, débloquée par le camp d'exploration, envoie des ouvriers **hors de la carte** pour plusieurs jours. Ils reviennent avec un événement dont l'issue dépend de leurs pistes de compétence — butin, découverte, blessure, ou personne ne revient.
@@ -350,35 +424,43 @@ Ce n'est pas une carte, c'est un système : il lui faut un état persistant entr
 
 ### 4.1 Bâtiments
 
-Chiffres à prendre comme point de départ d'équilibrage, pas comme cible. La colonne **Chantier** est le nombre d'actions *Construire* à jouer pour l'achever.
+Chiffres à prendre comme point de départ d'équilibrage, pas comme cible. La colonne **Chantier** est le nombre d'actions *Construire* à jouer pour l'achever ; la colonne **Dépl.** ce que le bâtiment ajoute aux places de déploiement de 3.6, par-dessus la base d'équilibrage.
 
-| Bâtiment | Coût | Chantier | Production | Déf. | PV | Débloque |
-|---|---|---|---|---|---|---|
-| Cœur | posé au départ | — | — | 0 | 30 | — |
-| Camp de bûcheron | 0 | 1 | 2 slots, +2 bois — Récolte | 0 | 4 | — |
-| Ferme | 10 bois | 2 | 2 slots, +3 nourriture — Récolte | 0 | 4 | — |
-| Carrière | 15 bois | 2 | 2 slots, +2 pierre — Récolte | 0 | 6 | — |
-| Mine | 25 bois, 10 pierre | 3 | 2 slots, +2 minerai — Récolte | 0 | 8 | — |
-| Habitation | 20 bois | 2 | +2 places de roster | 0 | 5 | — |
-| Entrepôt | 20 bois | 2 | +100 de réserve | 0 | 6 | — |
-| Palissade | 5 bois | 1 | — | 3 | 4 | — |
-| Tour de guet | 15 bois, 10 pierre | 3 | 1 slot, +8 déf. si occupée | 8 | 10 | — |
-| Caserne | 30 bois, 15 pierre | 3 | 1 slot | 0 | 10 | *S'entraîner* |
-| Marché | 30 bois, 10 minerai | 3 | 1 slot, 2 échanges 3:1 | 0 | 6 | — |
-| Atelier | 25 bois, 15 minerai | 3 | 1 slot | 0 | 8 | *Fabriquer* |
-| Camp d'exploration | 20 bois, 10 minerai | 2 | 1 slot | 0 | 6 | *Explorer* |
+| Bâtiment | Coût | Chantier | Production | Déf. | PV | Dépl. | Débloque |
+|---|---|---|---|---|---|---|---|
+| Cœur | posé au départ | — | — | 0 | 30 | 0 | — |
+| Camp de bûcheron | 0 | 1 | 2 slots, +2 bois — Récolte | 0 | 4 | 0 | — |
+| Ferme | 10 bois | 2 | 2 slots, +3 nourriture — Récolte | 0 | 4 | 0 | — |
+| Carrière | 15 bois | 2 | 2 slots, +2 pierre — Récolte | 0 | 6 | 0 | — |
+| Mine | 25 bois, 10 pierre | 3 | 2 slots, +2 minerai — Récolte | 0 | 8 | 0 | — |
+| Habitation | 20 bois | 2 | +2 places de roster | 0 | 5 | 0 | — |
+| Entrepôt | 20 bois | 2 | +100 de réserve | 0 | 6 | 0 | — |
+| Palissade | 5 bois | 1 | — | 3 | 4 | 0 | — |
+| Tour de guet | 15 bois, 10 pierre | 3 | 1 slot, +8 déf. si occupée | 8 | 10 | 0 | — |
+| Caserne | 30 bois, 15 pierre | 3 | 1 slot | 0 | 10 | **+1** | *S'entraîner* |
+| Marché | 30 bois, 10 minerai | 3 | 1 slot, 2 échanges 3:1 | 0 | 6 | 0 | — |
+| Atelier | 25 bois, 15 minerai | 3 | 1 slot | 0 | 8 | 0 | *Fabriquer* |
+| Camp d'exploration | 20 bois, 10 minerai | 2 | 1 slot | 0 | 6 | 0 | *Explorer* |
 
 La **palissade** est entrée par la pratique et non par le design : `C2` l'a créée pour son empreinte en L, la seule forme non rectangulaire du projet, donc le seul cas qui exerce vraiment la rotation du fantôme et le validateur. Elle est inscrite ici à `E1b` pour que ce tableau redise ce que `data/` contient. Une défense de départ bon marché y a sa place de toute façon.
 
 Les bonus d'adjacence ne sont pas dans cette table : ils viennent avec `C3`, qui décidera de leur forme avant de les chiffrer.
 
-**Ce que `data/` porte, et ce qu'il ne porte pas encore.** *(Constaté à `E1b`.)* Un champ arrive avec le système qui le lit : la colonne **Chantier** y est entrée à `C4`, **Déf.** et **PV** viendront à `F1`.
+**Ce que `data/` porte, et ce qu'il ne porte pas encore.** *(Constaté à `E1b`, complété à `F1`.)* Un champ arrive avec le système qui le lit : la colonne **Chantier** y est entrée à `C4`, **Déf.**, **PV** et **Dépl.** à `F1`. Il ne reste dehors que **Débloque**, ci-dessous, et les bonus d'adjacence de `C3`.
+
+La **caserne** cesse à ce jalon d'être une coquille : ses places de déploiement sont la première chose qu'elle fasse, et elles arrivent avant l'action qu'elle débloquera à `X3`. C'est un renversement de ce que le tableau laissait croire — on la bâtissait pour *S'entraîner*, on la bâtira d'abord pour tenir la ligne — et il est délibéré : un bâtiment dont le seul intérêt est de débloquer une carte n'a rien à faire dans un MVP dont cette carte est absente.
+
+La colonne **Dépl.** est celle où le zéro règne le plus largement — douze bâtiments sur treize —, et c'est le troisième champ plat construit sur ce modèle après `storage_bonus` et `roster_places`. Les trois relèvent un plafond global et ne décrivent aucune nature ; c'est ce qui les distingue du bloc `production` de 3.3, et ce qui leur vaut d'échapper à la doctrine du zéro : réclamer un chiffre que presque personne ne porte refuserait de démarrer sur des données correctes.
+
+*(Corrigé juste après `F1`.)* La caserne y valait **+2**, et c'était trop : sur une base de trois places, un seul bâtiment ajoutait deux tiers de la ligne d'un coup. Une place de déploiement se gagne **très progressivement** — c'est un pion de plus à jouer chaque tour, donc autant de la profondeur que de la longueur *(cf. 3.6)*. À +1, bâtir une seconde caserne redevient une décision au lieu d'être une évidence.
 
 **Débloque** était annoncée pour `D1` et n'y est pas entrée. *(Tranché à `D1`.)* Les trois actions qu'elle concerne — *S'entraîner*, *Fabriquer*, *Explorer* — sont marquées `MVP : non` en 4.2 et ne sont donc pas au catalogue de cartes ; un champ qui ne débloquerait rien serait une frontière que personne ne franchit, ce qui est exactement l'argument qui a sorti `CombatForce` de `W1`. Elle entrera avec `X3`, `X2` et `X1`, en même temps que les cartes qu'elle verrouille. Le coût du report est connu et faible : un champ sur `BuildingData`, trois `.tres` à rouvrir, et une lecture de plus sur `CitySnapshot.completed()` — qui a déjà trois consommateurs et la porte ouverte.
 
 Le « — » du Cœur dans la colonne Chantier est un **zéro**, comme son « posé au départ » dans la colonne Coût est un coût vide. C'est ce qui lui évite un chemin de pose particulier : un bâtiment qui ne réclame aucune action est achevé dès qu'il est posé, sans que rien n'ait à connaître le cas. *(Vérifié à `I1`, où l'ouverture d'un run le pose vraiment : il sort achevé, sans une ligne de cas particulier. Son « posé au départ » est un champ de `data/balance/` — l'identifiant d'un bâtiment écrit dans du GDScript aurait été le nombre magique que les conventions refusent. Le poser au centre est un bouchon : l'écran qui le demandera au joueur appartient à `I2`.)* Le prix assumé de ce choix est qu'un `build_actions` oublié dans un `.tres` vaut 0 et fait sauter le chantier en silence ; un cas de test exige donc qu'au moins un bâtiment de `data/` en déclare un, ce qui rattrape la disparition du format entier. *(Tranché à `C4`.)*
 
 Les places de roster de l'habitation y sont entrées à `W1`, ce qui a sorti ce bâtiment de la coquille vide où `E1b` l'avait laissé. La conséquence à ne pas confondre avec un oubli : **cinq bâtiments portent « 1 slot » dans ce tableau et n'ont pourtant aucun bloc `production`** — tour de guet, caserne, marché, atelier, camp d'exploration. Leur poste n'est pas un poste de production ; il héberge une défense, un échange ou une action débloquée, et la nature qui le décrira n'existe pas encore. Leur écrire un `slots = 1` que rien ne lit ferait mentir la data et détruirait la garantie que `E1b` vient d'acheter — un bloc qui existe produit.
+
+*(Toujours vrai à `F1`, et il fallait le vérifier.)* La tour de guet porte « +8 déf. **si occupée** », et `F1` était le jalon nommé pour la lire. Elle n'entre pourtant pas : **aucun verbe de 4.2 ne tient un poste de défense.** Il faudrait une carte pour y envoyer quelqu'un, et l'inventer ferait un huitième verbe hors de ce tableau. `F1` ne lit donc que le `Déf.` **plat** de la colonne, celui qu'un bâtiment offre du seul fait d'être debout, et la tour de guet vaut 8 sans qu'on ait à la garnir. Le poste occupé attend son verbe, comme les quatre autres attendent le leur.
 
 ### 4.2 Actions
 
@@ -466,9 +548,13 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
   La ligne de ce jalon annonçait un geste **atomique** — une carte pour un ouvrier — et c'était une erreur de design, pas une simplification : voir 3.5.
 
 ### Combat — `F`
-- **F1** — `InstantCombatResolver` arithmétique, **`CombatForce`** et `DamageReport` complets, tests. Bouchon.
-- **F2** — Prototype du vrai combat, sur snapshots fabriqués. *Format à définir, vivier unique imposé.*
-- **F3** — Vue de combat intégrée, échange de l'implémentation dans l'orchestrateur.
+- **F1** ✅ — **Bouchon de combat.** `InstantCombatResolver` sous `domain/combat/`, `CombatUnit`, `CombatForce` et `DamageReport` dans `contracts/`, `WaveDef` et `CombatBalance` dans `src/schema/`, `BattleReport` dans `domain/run/`, et `RunOrchestrator.fight()` qui applique. Les colonnes **Déf.**, **PV** et **Dépl.** de 4.1 entrées dans `data/`, plus `data/waves/`. `Roster.to_combat()` et `CityState.damage()` — la troisième porte mutante de la ville, et la seule qui retire elle-même ce qu'elle tue.
+  Le jalon a **ajouté une règle de design** plutôt que d'en appliquer une : le **déploiement capé** ci-dessus en 3.6, qui vient de l'humain comme le second axe de progression à `W1`. C'est lui qui fait exister au combat la tension du pitch, et il sort la caserne de sa coquille avant l'action qu'elle débloquera à `X3`.
+  Il **touche trois DTO de `contracts/`** — deux neufs, plus `WorkLine` qui gagne un `NO_CELL` parce qu'on ne défend pas le village *en* une case. Et il **retire** une ligne de `CLAUDE.md` : `WaveDef` n'est pas un contrat mais une `Resource`, comme `PhaseDef`. Une blessure est sortie du `DamageReport` pour `X6`, ce qui est la troisième correction de `DESIGN.md` par un jalon après `D2` et `W2`.
+  Ce qu'il ne fait pas, et c'est écrit dans son harnais : rien ne déclenche une vague. La fréquence est l'`OUVERT` de 2, la défaite est en 5, et les deux sont `I2`.
+- **F2** — Prototype du vrai combat, sur snapshots fabriqués. **Le format n'est plus à définir** : tactique au tour par tour sur la grille du village, intentions ennemies complètes, deux verbes — se déplacer, attaquer. Voir 3.6, écrit en discussion après `F1`.
+  Il livre un **plateau mutable** dans `domain/combat/` et des fonctions pures qui appliquent un geste à la fois, et non un résolveur : c'est là que la promesse de « l'échange en une ligne » est tombée, et 3.6 dit pourquoi. Il ne livre **ni capacités** — `X5` — **ni états** — `X6`.
+- **F3** — Vue de combat intégrée, et la fin de journée qui cesse d'être atomique *(cf. 3.8)*. L'applicateur de `RunOrchestrator.fight()` ne bouge pas ; c'est le producteur qui change de nature.
 
 ### Intégration — `I`
 - **I0** ✅ — Squelette : projet, arborescence, autoloads, `EventBus`, `GameDatabase`.
@@ -487,8 +573,16 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
 - **X3** — Entraînement : caserne et *S'entraîner* *(3.4)*.
 - **X4** — Powers : le troisième pool se remplit *(3.5)*.
 - **X5** — Ce qu'un palier de **niveau d'ouvrier** offre : le choix de compétence *(3.4)*. `W1` écrit l'accumulateur et les paliers, qui se gagnent et se lisent ; ce qu'ils débloquent est du contenu et de l'UI, et se décide devant un roster qui a vraiment vécu quinze jours.
+  *(Précisé après `F1`.)* La réponse a désormais une forme : **une capacité de combat est ce qu'un palier de piste Combat débloque** *(cf. 3.6)*. C'est ce qui a permis à `F2` de n'avoir que deux verbes sans que le combat soit plat à terme, et ce qui enracine ces capacités dans le roster nominatif plutôt que dans un catalogue hors-sol. Le jalon cesse d'être une question ouverte pour devenir du contenu à écrire.
+- **X6** — **États d'ouvrier** : la faim, la blessure, et ce qui viendra ensuite *(3.3, 3.4, 3.6)*.
+  Trois systèmes ont buté sur le même manque et l'ont chacun contourné à leur façon : `E1` a laissé la famine « se constater sans se punir », `F1` a sorti la blessure du `DamageReport`, et l'`OUVERT` de 3.3 listait quatre issues dont trois décrivent le même objet. Un `Worker` porte aujourd'hui une présence et de l'XP, rien qui dure et qui pèse.
+  Ce jalon est ici et non plus haut pour une raison de méthode et non de calendrier : un système d'états se conçoit **devant la liste de ceux qui existent vraiment**, et cette liste n'est complète qu'une fois la boucle jouable — la faim vient de l'upkeep, la blessure du combat, et le reste des événements de 3.7, qui ne sont pas écrits. En trancher un seul aujourd'hui, dans le rapport du système qui le rencontre, produirait trois mécaniques qui ne se parlent pas et qu'il faudrait défaire.
+  Ce qu'il contraint en attendant, et c'est sa seule raison d'être écrit maintenant : **aucun rapport ne doit inventer sa propre conséquence.** Un système qui rencontre un état le **compte** et le rapporte ; il ne décide pas de ce qu'il fait. C'est ce que `UpkeepReport` fait déjà des non-nourris, et ce que `DamageReport` fait des pertes.
+  *(Relevé après `F1`.)* Le format de combat de 3.6 le fait passer de confortable à **structurant**, et lui donne sa première forme concrète : les points de vie sont la ressource d'une manche, un ouvrier à zéro meurt, et ce qu'un **survivant** emporte est un effet progressif selon la part de vie perdue. Sans lui, un combat n'a que deux issues — rien, ou définitif —, et le joueur qui a bien joué ne sent rien du tout. C'est le premier état dont on connaisse déjà et la source et la graduation.
 
-**Ordre suivant** — `F1`, le bouchon de combat, puis `I2`. `I1` a refermé la boucle sur tout ce qui existait ; ce qui manque désormais à un run jouable du début à la fin est un adversaire. `F1` est aussi le dernier système qui fera bouger un contrat — `CombatForce` et `DamageReport` —, et le faire avant `I2` évite de câbler deux fois. `W2` s'est intercalé, comme annoncé, sans rien coûter à cet ordre.
+**Ordre suivant** — `I2`. Tous les systèmes du MVP existent et tiennent debout seuls ; **aucun contrat ne bougera plus**, ce qui était la raison de passer `F1` avant. Il ne reste qu'à brancher : dater les vagues sur la journée, poser le Cœur au clic plutôt qu'au centre, et écrire la fin de run de 5. `I2b` suit, sur un `.tres`.
+
+*(Écrit à `F1`.)* Ce qui reste à câbler tient en trois fils, et chacun a déjà sa prise. La vague entre dans `close_the_day()`, où `I1` lui a gardé sa place et où `DayReport` l'accueillera par un champ. Le calendrier des vagues est un bloc de `data/balance/` qui n'existe pas encore, exprès — un champ que personne ne lit serait la frontière que ce document refuse depuis `E1`. Et la défaite lit ce que la ville et le roster disent déjà.
 
 *(Constaté à `E2`, confirmé à `W2`.)* Ce que les jalons d'écran apprennent : **un écran trouve des défauts qu'aucun test ne cherche**. Les tests avaient raison sur chaque chiffre pris isolément ; c'est la juxtaposition d'un entrepôt visiblement fini et d'une jauge inchangée qui a montré un mensonge d'une phase. Les pièges de mise en page, eux, ne se voient qu'en capture — un panneau à taille nulle ne dessine pas son fond, une taille minimale se lit en retard d'une passe, et deux panneaux qui grandissent l'un vers l'autre se recouvrent à la phase la plus chargée, donc le plus tard possible.
 

@@ -20,13 +20,35 @@ extends RefCounted
 ##
 ## Immuable.
 
+## Aucune cellule : un poste qui n'est nulle part sur la carte.
+##
+## Entrée à F1 avec le troisième producteur de lignes, et le premier pour lequel la
+## cellule n'a aucun sens — on ne défend pas le village *en* une case. Les deux premiers
+## la renseignent toujours, donc le champ n'est pas devenu facultatif : il a acquis une
+## valeur qui dit « sans objet », ce qui n'est pas la même chose qu'un zéro.
+##
+## Le contrat n'a pas eu à perdre son champ pour autant, et c'était l'autre option — il se
+## trouve que **personne ne lit cell() aujourd'hui**. Elle a été écartée parce que retirer
+## un champ dont on ne sait pas encore s'il servira est le contraire de la doctrine du
+## fichier : un champ arrive avec son lecteur, il ne part pas avant lui.
+##
+## Même valeur que RunState.NO_CELL, recopiée plutôt qu'importée : un contrat ne dépend pas
+## d'un système du domaine, et sûrement pas de celui qui les connaît tous.
+const NO_CELL := Vector2i(-1, -1)
+
 var _worker: StringName
 var _cell: Vector2i
 var _family: StringName
 
 ## Ligne de journal pour cet ouvrier, sur cette cellule, dans cette famille.
+##
+## La cellule n'a **pas** de défaut, et NO_CELL se nomme donc à l'appel. C'est délibéré :
+## un défaut ferait de « nulle part » la réponse qu'on obtient sans y penser, alors que
+## c'est une affirmation — celle d'un poste qui n'est pas sur la carte. Un appelant qui
+## oublierait sa cellule doit se le voir refuser, pas se la voir effacer.
 static func create(worker: StringName, cell: Vector2i, family: StringName) -> WorkLine:
 	assert(not worker.is_empty(), "ligne de travail sans ouvrier")
+	assert(not family.is_empty(), "ligne de travail sans famille pour %s" % worker)
 	var line := WorkLine.new()
 	line._worker = worker
 	line._cell = cell

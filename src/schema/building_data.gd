@@ -7,10 +7,11 @@ extends Resource
 ##
 ## C1 n'y mettait que ce que le placement consomme ; E1 y ajoute l'économie — coût,
 ## réserve, et la production à plat —, E1b sort cette dernière dans un bloc nullable, W1
-## les places de roster, et C4 le coût de chantier. Défense, PV et bonus d'adjacence
-## arriveront avec leur système — C3, F1 — de la même façon que BalanceData gagne un
-## bloc quand un système atterrit. Un champ ajouté plus tard oblige à rouvrir les .tres ;
-## un champ ajouté d'avance oblige à deviner sa forme, ce qui coûte plus cher.
+## les places de roster, C4 le coût de chantier, et F1 la défense, les PV et les places de
+## déploiement. Seuls les bonus d'adjacence de C3 restent dehors, de la même façon que
+## BalanceData gagne un bloc quand un système atterrit. Un champ ajouté plus tard oblige à
+## rouvrir les .tres ; un champ ajouté d'avance oblige à deviner sa forme, ce qui coûte
+## plus cher.
 ##
 ## Ajouter un **bâtiment** doit rester une édition de data/. Ajouter une **nature** de
 ## bâtiment est légitimement une modification de code — mais dans src/domain/, jamais
@@ -127,6 +128,49 @@ const QUARTER_TURNS := 4
 ## Entré à W1 avec le système qui le lit, comme DESIGN.md 4.1 l'avait annoncé à E1b.
 @export_range(0, 20, 1) var roster_places: int
 
+## Ce qu'il oppose à une vague du seul fait d'être debout. Colonne **Déf.** de
+## DESIGN.md 4.1.
+##
+## Le **plat** de cette colonne, et rien d'autre. La tour de guet y porte « +8 déf. si
+## occupée », et F1 ne le lit pas : aucun verbe de 4.2 ne tient un poste de défense, donc
+## le bloc qui décrirait ce poste serait la nature qu'aucun système n'emploie — le même
+## refus que E1b a opposé à cinq `slots = 1`.
+##
+## 0 est légitime — douze bâtiments sur treize ne défendent rien —, comme pour
+## storage_bonus et roster_places. Un cas de test exige en retour qu'au moins un bâtiment
+## de data/ en déclare un, ce qui rattrape la disparition du format entier là où un
+## contrôle champ par champ ne pourrait rien voir.
+##
+## Il ne compte que sur un bâtiment **achevé** : une palissade en chantier ne retient rien.
+## C'est CitySnapshot.completed() qui le garantit, pas ce fichier.
+@export_range(0, 100, 1) var defense: int
+
+## Ce qu'il encaisse avant de tomber. Colonne **PV** de DESIGN.md 4.1.
+##
+## **Réclamé**, à l'inverse des trois champs plats ci-dessus, et c'est le seul de la
+## famille à l'être : un bâtiment à 0 PV tombe au premier coup sans que rien ne le
+## signale, et la doctrine du zéro s'applique donc pleinement. Un entrepôt qui ne stocke
+## rien est un choix de contenu ; un entrepôt qui n'existe plus dès la première vague est
+## un .tres qu'on a oublié de remplir.
+##
+## Un **chantier** a les PV du bâtiment fini. Ce n'est pas un oubli : l'avancement n'est
+## pas une barre de vie, et les mélanger ferait qu'un chantier bien avancé encaisserait
+## mieux qu'un neuf, ce que rien dans DESIGN.md ne demande. Ce que 3.2 demande est qu'un
+## chantier soit une **perte** quand il tombe, et interrupted() le dit.
+@export_range(0, 100, 1) var hit_points: int
+
+## Ce qu'il ajoute aux places de déploiement du combat. Colonne **Dépl.** de
+## DESIGN.md 4.1.
+##
+## Troisième champ plat bâti sur le modèle de storage_bonus et roster_places, et le plus
+## creux des trois : douze bâtiments sur treize valent 0. Même raison de ne pas le
+## réclamer — un plafond global relevé par un bâtiment n'est pas une nature.
+##
+## C'est ce champ qui sort la caserne de la coquille où DESIGN.md 4.1 l'avait laissée, et
+## il y arrive **avant** l'action qu'elle débloquera à X3 : on la bâtira d'abord pour tenir
+## la ligne. Comme les deux autres, il ne compte que sur un bâtiment achevé.
+@export_range(0, 20, 1) var deployment_slots: int
+
 ## Ce décalage, pivoté de `turns` quarts de tour dans le sens horaire.
 ##
 ## La grille va +x vers la droite et +y vers le fond, ce que le monde reprend en +X et
@@ -222,6 +266,14 @@ func missing_fields() -> PackedStringArray:
 		missing.append("build_actions")
 	if roster_places < 0:
 		missing.append("roster_places")
+	# Le seul champ de combat réclamé : voir son docstring. defense et deployment_slots
+	# sont légitimement nuls sur presque tout le catalogue.
+	if hit_points <= 0:
+		missing.append("hit_points")
+	if defense < 0:
+		missing.append("defense")
+	if deployment_slots < 0:
+		missing.append("deployment_slots")
 	missing.append_array(_economy_fields())
 	if footprint.is_empty():
 		missing.append("footprint")

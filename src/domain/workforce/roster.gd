@@ -5,8 +5,8 @@ extends RefCounted
 ## État interne des Effectifs, comme CityState l'est de Construction et le Ledger de
 ## l'Économie. Il est le **seul propriétaire** des Worker, et c'est ce qui fait tenir le
 ## vivier unique de DESIGN.md 3.4 : rien hors de domain/workforce/ ne voit un ouvrier,
-## seulement des projections. La LaborForce en est une ; la CombatForce en sera une
-## seconde à F1, tirée de la même liste sans que le Combat puisse le deviner.
+## seulement des projections. La LaborForce en est une ; la CombatForce en est une seconde
+## depuis F1, tirée de la même liste sans que le Combat puisse le deviner.
 ##
 ## Il ne connaît pas la ville. Le plafond de places en dépend — les habitations le
 ## relèvent —, d'où capacity_for(), statique et pure, qui prend la ville en argument.
@@ -119,3 +119,24 @@ func to_labor(balance: WorkforceBalance) -> LaborForce:
 	for worker in present():
 		units.append(worker.to_labor_unit(balance))
 	return LaborForce.create(units)
+
+## Les combattants que le Combat consomme : **les présents seulement**, comme to_labor().
+##
+## La seconde projection que W1 avait repoussée à F1, et le docstring de cette classe
+## l'annonçait mot pour mot : « tirée de la même liste sans que le Combat puisse le
+## deviner ». Les deux lignes de code sont jumelles, et c'est le point — le vivier unique
+## de DESIGN.md 3.4 n'est pas une discipline d'écriture, c'est ce que ces deux fonctions
+## font en partant du même present().
+##
+## Elle rend **tout le monde**, pas les seuls engagés. Le déploiement est capé (3.6), mais
+## le plafond vient de la ville, que les Effectifs ne connaissent pas et n'ont aucune
+## raison de connaître — c'est le Combat qui n'en engage qu'une partie, exactement comme
+## l'Économie ne fait travailler que ceux que l'Assignment place.
+##
+## La famille traverse plutôt que d'être écrite ici : voir Worker.to_combat_unit().
+func to_combat(family: StringName, balance: WorkforceBalance) -> CombatForce:
+	assert(balance != null, "projection sans équilibrage")
+	var units: Array[CombatUnit] = []
+	for worker in present():
+		units.append(worker.to_combat_unit(family, balance))
+	return CombatForce.create(units)

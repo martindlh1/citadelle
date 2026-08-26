@@ -228,6 +228,40 @@ func test_negative_places_are_reported_under_their_own_name() -> void:
 	building.roster_places = -1
 	assert_array(building.missing_fields()).contains(["roster_places"])
 
+## La défense et les places de déploiement rejoignent la même doctrine à F1 : douze
+## bâtiments sur treize ne défendent rien et n'ouvrent aucune place. Le cas est écrit pour
+## que personne ne les réclame en croyant corriger un oubli.
+func test_a_building_that_defends_nothing_is_complete() -> void:
+	var building := _building(_l_shape())
+	assert_int(building.defense).is_equal(0)
+	assert_int(building.deployment_slots).is_equal(0)
+	assert_array(building.missing_fields()).is_empty()
+
+## Les PV, eux, sont **réclamés**, et c'est le seul champ de combat qui le soit. Un
+## bâtiment à zéro tombe au premier coup sans que rien ne le signale : « gratuit à
+## défendre » et « oublié dans le .tres » y seraient indiscernables, Godot n'écrivant
+## jamais un 0.
+func test_a_building_without_hit_points_is_reported() -> void:
+	var building := _building(_l_shape())
+	building.hit_points = 0
+	assert_array(building.missing_fields()).contains(["hit_points"])
+
+func test_a_wall_carries_its_defence_and_its_slots() -> void:
+	var building := _building(_l_shape())
+	building.defense = 3
+	building.deployment_slots = 2
+	assert_array(building.missing_fields()).is_empty()
+
+func test_a_negative_defence_is_reported() -> void:
+	var building := _building(_l_shape())
+	building.defense = -1
+	assert_array(building.missing_fields()).contains(["defense"])
+
+func test_negative_deployment_slots_are_reported() -> void:
+	var building := _building(_l_shape())
+	building.deployment_slots = -1
+	assert_array(building.missing_fields()).contains(["deployment_slots"])
+
 ## Le coût de chantier suit la même doctrine, et pour une raison qui lui est propre : le
 ## Cœur porte « — » dans la colonne Chantier de DESIGN.md 4.1 comme il porte « posé au
 ## départ » dans celle du coût. Un zéro y veut dire « achevé à la pose », et le réclamer
@@ -284,10 +318,15 @@ func _l_shape() -> Array[Vector2i]:
 	var offsets: Array[Vector2i] = [Vector2i.ZERO, Vector2i(1, 0), Vector2i(0, 1)]
 	return offsets
 
+## Les PV sont renseignés ici et pas la défense ni les places de déploiement, et l'écart
+## est la doctrine elle-même : F1 réclame les premiers et laisse les deux autres
+## légitimement nuls. Un bâtiment de test qui les porterait tous les trois ne dirait plus
+## rien de ce que missing_fields() exige vraiment.
 func _building(offsets: Array[Vector2i]) -> BuildingData:
 	var building := BuildingData.new()
 	building.id = &"test_hut"
 	building.color = Color(0.5, 0.4, 0.3)
 	building.height = 0.6
+	building.hit_points = 4
 	building.footprint = offsets
 	return building

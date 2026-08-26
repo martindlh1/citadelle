@@ -95,3 +95,16 @@ func test_a_zoom_factor_of_one_is_reported() -> void:
 	var camera := CameraBalance.new()
 	camera.zoom_factor = 1.0
 	assert_array(camera.missing_fields()).contains(["zoom_factor"])
+
+func test_balance_carries_a_combat_block() -> void:
+	var balance := load(BALANCE_PATH) as BalanceData
+	assert_object(balance.combat).is_not_null()
+	assert_object(balance.combat).is_instanceof(CombatBalance)
+
+## La famille que le combat crédite doit être nommée : DESIGN.md 3.4 interdit qu'un code
+## l'énumère, donc un champ vide ne se rattraperait nulle part. Le contrôle croisé complet
+## est celui de GameDatabase au boot ; ici on tient au moins qu'il ne soit pas vide, comme
+## pour la ressource d'upkeep.
+func test_the_combat_names_the_family_it_credits() -> void:
+	var combat := (load(BALANCE_PATH) as BalanceData).combat
+	assert_str(String(combat.combat_skill_family)).is_not_empty()

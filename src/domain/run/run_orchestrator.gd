@@ -9,9 +9,10 @@ extends RefCounted
 ##
 ## Il ne **calcule** rien. Chaque question part chez celui qui sait y répondre : « puis-je
 ## poser ici ? » à `PlacementValidator`, « puis-je jouer là ? » à `ActionTargeting`, « que
-## rapporte le soir ? » à `ProductionResolver`, « que bâtit-il ? » à `SiteResolver`, « qui
-## progresse ? » à `SkillResolver`. Ce que ce fichier ajoute est ce qu'aucun d'eux ne peut
-## faire seul : **enchaîner deux questions** et **appliquer un ordre**.
+## rapporte le soir ? » à `ProductionResolver`, « que bâtit-il ? » à `SiteResolver`, « que
+## casse la vague ? » à `InstantCombatResolver`, « qui progresse ? » à `SkillResolver`. Ce
+## que ce fichier ajoute est ce qu'aucun d'eux ne peut faire seul : **enchaîner deux
+## questions** et **appliquer un ordre**.
 ##
 ## Les deux choses qu'il apporte à `I1`, et elles sont exactement celles que `D2` avait
 ## laissées :
@@ -236,6 +237,60 @@ static func resolve(state: RunState) -> PhaseReport:
 
 	return PhaseReport.create(cycle.day(), cycle.phase().id, production, sites, progress,
 		_idle(labor, lines), completed, day_report)
+
+## Fait tomber cette vague sur le village, applique ce qu'elle ordonne, et rend ce que ça a
+## coûté.
+##
+## Le même partage qu'à `I1` pour les verbes de chantier et qu'à `W2` pour l'affectation :
+## **le résolveur ordonne, ce fichier applique.** Il est ici parce qu'il est le seul à tenir
+## la ville, le roster et la réserve à la fois — un résolveur de Combat qui les muterait
+## violerait la règle de dépendance trois fois.
+##
+## **Rien ne l'appelle automatiquement**, et c'est délibéré. La fréquence des vagues est
+## l'`OUVERT` de `DESIGN.md` 2, et la fin de journée n'en sait donc rien : ce sont le
+## harnais de combat et, à `I2`, `close_the_day()` qui décideront quand frapper. La place
+## est gardée depuis `I1`, elle n'est pas encore occupée.
+##
+## **L'ordre des quatre applications est imposé, et chaque cran se justifie.**
+##
+##   - Les **bâtiments** d'abord, parce que la capacité de la réserve en dépend : un
+##     entrepôt détruit doit avoir écrêté avant qu'on ne pille ce qu'il ne tient plus.
+##   - La **capacité** ensuite, par la même ligne que la fin d'une phase — `_restore_capacity()`
+##     annonçait ce cas mot pour mot depuis `E2` : « le jour où le `DamageReport` de `F1`
+##     détruira un entrepôt, c'est cette même ligne qui écrêtera ».
+##   - Le **pillage** après, sur ce qui reste vraiment.
+##   - Les **morts**, puis l'**XP**, et dans cet ordre : `SkillResolver` saute un ouvrier que
+##     le roster ne connaît plus, ce qui rend vraie sans une ligne de code la phrase que son
+##     docstring porte depuis `W1` — « un mort ne progresse pas ».
+##
+## Une ancre que la vague nomme et que la ville ne porte plus est sautée sans un mot, comme
+## `_apply()` saute un chantier disparu. Le cas ne se présente pas aujourd'hui, la ville
+## étant figée entre le verdict et son application ; il se présentera le jour où deux choses
+## frapperont le même soir.
+static func fight(state: RunState, wave: WaveDef) -> BattleReport:
+	assert(state != null, "vague sans run")
+	assert(wave != null, "vague sans vague")
+	var balance := state.balance()
+	var force := state.roster().to_combat(balance.combat.combat_skill_family,
+		balance.workforce)
+	var damage := InstantCombatResolver.resolve(state.city().to_snapshot(), force, wave,
+		balance.combat)
+
+	var wounds := damage.damaged()
+	for anchor in wounds:
+		if not state.city().has_anchor(anchor):
+			continue
+		state.city().damage(anchor, wounds[anchor])
+	_restore_capacity(state, balance.economy)
+
+	var plundered := state.ledger().take_share(damage.plunder())
+
+	for fallen in damage.lost():
+		state.roster().remove(fallen)
+	var progress := SkillResolver.award_lines(state.roster(), damage.work(),
+		balance.workforce)
+
+	return BattleReport.create(damage, plundered, progress)
 
 ## Ferme la journée : prélève l'upkeep et rend ce qu'elle a coûté.
 ##

@@ -9,6 +9,7 @@
 [ext_resource type="Resource" path="res://data/balance/deck_balance.tres" id="7_deck_balance"]
 [ext_resource type="Resource" path="res://data/balance/action_balance.tres" id="8_action_balance"]
 [ext_resource type="Resource" path="res://data/balance/run_balance.tres" id="9_run_balance"]
+[ext_resource type="Resource" path="res://data/balance/combat_balance.tres" id="10_combat_balance"]
 
 [resource]
 script = ExtResource("1_balance_data")
@@ -20,3 +21,4 @@ workforce = ExtResource("6_workforce_balance")
 deck = ExtResource("7_deck_balance")
 actions = ExtResource("8_action_balance")
 run = ExtResource("9_run_balance")
+combat = ExtResource("10_combat_balance")

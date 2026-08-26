@@ -146,3 +146,24 @@ func to_labor_unit(balance: WorkforceBalance) -> LaborUnit:
 	for family in _tracks:
 		multipliers[family] = _tracks[family].efficiency(balance)
 	return LaborUnit.create(_id, multipliers)
+
+## Ce que le Combat voit de lui : un nom et **un** multiplicateur.
+##
+## La seconde projection annoncée depuis W1, et elle prouve que le vivier est unique sans
+## que le Combat puisse le deviner : elle sort du même objet, lit la même piste par le même
+## efficiency(), et ne rend pourtant rien qui ressemble à une LaborUnit.
+##
+## La famille est un **argument** et non une constante de ce fichier, pour la raison qui
+## vaut depuis I1 : DESIGN.md 3.4 pose que la liste des familles n'est pas close et
+## qu'aucun code ne l'énumère. Écrire &"combat" ici rouvrirait l'énumération que la
+## Construction a pu rejoindre sans une ligne de GDScript. Elle vient de
+## CombatBalance.combat_skill_family, que l'appelant lit.
+##
+## Une piste vierge replie sur BASE_EFFICIENCY, comme côté Économie et pour une raison qui
+## lui est propre : un paysan qui n'a jamais tenu une lance vaut quand même un corps sur la
+## ligne. DESIGN.md 3.4 assume la limite et y répond par *S'entraîner*, pas en le comptant
+## pour rien.
+func to_combat_unit(family: StringName, balance: WorkforceBalance) -> CombatUnit:
+	assert(balance != null, "projection sans équilibrage")
+	assert(not family.is_empty(), "projection de combat sans famille")
+	return CombatUnit.create(_id, efficiency(family, balance))

@@ -32,6 +32,9 @@ extends Resource
 ## Run : les phases d'une journée, dans l'ordre, et le nombre de journées.
 @export var run: RunBalance
 
+## Combat : places de déploiement, valeur d'un homme sur la ligne, coût d'une brèche.
+@export var combat: CombatBalance
+
 ## Champs non renseignés de tous les blocs, préfixés du nom de leur bloc.
 ## Vide = équilibrage exploitable. Vérifié au boot par GameDatabase.
 ##
@@ -81,4 +84,9 @@ func missing_fields() -> PackedStringArray:
 	else:
 		for field in run.missing_fields():
 			missing.append("run.%s" % field)
+	if combat == null:
+		missing.append("combat")
+	else:
+		for field in combat.missing_fields():
+			missing.append("combat.%s" % field)
 	return missing
