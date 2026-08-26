@@ -63,6 +63,19 @@ func unit(worker: StringName) -> LaborUnit:
 	assert(has(worker), "ouvrier inconnu de la main-d'œuvre : %s" % worker)
 	return _by_id[worker]
 
+## XP de cet ouvrier dans cette piste. Zéro pour un inconnu, comme pour une piste vierge.
+##
+## Un repli plutôt qu'une précondition, à l'inverse de `efficiency()` juste en dessous, et
+## l'écart est délibéré. Un rendement demandé pour quelqu'un qui n'est pas là est une
+## erreur d'appel — la production ne multiplie que ce qu'une `Assignment` a placé. Un
+## progrès, lui, se demande couramment d'une liste de **candidats** que l'appelant vient de
+## filtrer autrement, et « il n'est pas là, donc il n'a rien fait » est la bonne réponse
+## plutôt qu'un plantage.
+func track_xp(worker: StringName, family: StringName) -> int:
+	if not has(worker):
+		return 0
+	return _by_id[worker].track_xp(family)
+
 ## Multiplicateur de cet ouvrier dans cette famille. Précondition : has(worker).
 func efficiency(worker: StringName, family: StringName) -> float:
 	return unit(worker).efficiency(family)
