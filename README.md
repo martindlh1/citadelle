@@ -79,14 +79,16 @@ obligatoire ; les autres sont optionnels :
 | `--shot-evenings n` | soirs résolus avant de capturer *(harnais Cartes)*, journées jouées *(harnais Run)*, scène à montrer *(harnais HUD)* |
 | `--shot-phases n` | phases franchies **en plus** des journées *(harnais Run)* |
 | `--shot-fold` | replie le panneau d'affectation sur sa barre de tête *(harnais Run)* |
+| `--shot-piles` | ouvre la vue des piles *(harnais Run et Cartes)* |
 | `--shot-view v` | cran d'affichage du HUD : `complet`, `essentiel`, `masque`, ou `aucun` *(harnais Run)* |
 
-`--shot-fold` est un drapeau **nu**, sans valeur : on le pose ou on ne le pose pas. Il est
-le cas le plus net de la phrase ci-dessous, parce que le repli ne s'obtient que par un
-geste du joueur — aucune suite de journées ne le produit. Sans lui, la seule façon de
-regarder un HUD replié serait de modifier du code pour le regarder, ce qui revient à ne
-jamais le regarder. Il se cumule avec `--shot-view`, sauf avec `aucun`, qui emporte le HUD
-entier.
+`--shot-fold` et `--shot-piles` sont des drapeaux **nus**, sans valeur : on les pose ou on
+ne les pose pas. Ce sont les deux cas les plus nets de la phrase ci-dessous, parce que ni
+le repli ni la vue des piles ne s'obtiennent autrement que par un geste du joueur — aucune
+suite de journées ne les produit. Sans eux, la seule façon de regarder un HUD replié ou
+une pioche ouverte serait de modifier du code pour la regarder, ce qui revient à ne jamais
+la regarder. `--shot-fold` se cumule avec `--shot-view`, sauf avec `aucun`, qui emporte le
+HUD entier ; `--shot-piles` passe par-dessus tous les crans, étant une modale.
 
 `--shot-view` existe pour la raison qui a valu son drapeau à `--shot-evenings`, et que
 `I2` a reformulée en une phrase : **un écran qu'aucune capture ne peut atteindre est celui
@@ -158,13 +160,24 @@ d'armées, pour la raison qui vaut déjà pour la réserve : un panneau de batai
 un panneau qui annonce zéro brèche se ressemblent beaucoup en capture, et ne disent pas du
 tout la même chose.
 
+Depuis `P1b`, elle imprime une ligne de **mise en page** : où finit la colonne de droite,
+où commence la main, et lequel des deux mord sur l'autre. Elle existe parce que le défaut
+qu'elle mesure a mis trois jalons à se faire voir — le panneau d'affectation descendait
+sur les cartes, et le dire demandait de sonder une image pixel par pixel, ce qui coûte une
+heure et rend un chiffre en pixels de **fenêtre** là où la mise en page raisonne en pixels
+**logiques** *(voir la sonde ci-dessous)*. Les deux bords sont demandés aux vues, en
+`global_position`, donc dans le même repère. Un recouvrement positif sur cette ligne est
+un défaut, quelle que soit la résolution demandée.
+
 Elle **n'imprime plus** le rapport du dernier soir : depuis `E2` c'est un panneau, et un
 panneau se regarde. Le réécrire en texte à côté aurait donné deux mises en forme du même
 rapport, dont une seule serait vérifiée par la capture — donc l'autre dériverait. `W2` lui
 retire la **table des actions posées** pour la même raison, et à contrecœur : c'est elle
 qui avait attrapé le seul vrai bug de `D2`. Elle est désormais dessinée par le panneau,
 avec les ouvriers qui la tiennent, et la garder en texte aurait laissé la version imprimée
-dire vrai pendant qu'une mise en page fautive cachait l'autre.
+dire vrai pendant qu'une mise en page fautive cachait l'autre. `P1b` lui retire les **trois
+lignes de piles** par le même raisonnement : elles sont une vue depuis ce jalon, et `P`
+l'ouvre.
 
 Le harnais **HUD** est le seul dont `--shot-evenings` ne désigne pas un temps mais un
 **cas** : il ne joue rien, il fabrique des états — réserve pleine qui gaspille, famine,

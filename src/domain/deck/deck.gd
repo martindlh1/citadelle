@@ -212,6 +212,33 @@ func discard_size(pool: StringName) -> int:
 func hand_size(pool: StringName) -> int:
 	return _pile_size(_hand, pool)
 
+## Ce que la pioche de ce pool contient : carte -> nombre d'exemplaires.
+##
+## Un **recensement** et non une liste, et c'est la seule décision de design de cette
+## paire. La pioche est ordonnée — l'index 0 est le sommet, c'est écrit sur _draw — donc
+## en rendre le contenu dans l'ordre dirait au joueur non seulement *ce qu'il reste* mais
+## *quand ça vient*. Ce serait répondre par accident à l'OUVERT de DESIGN.md 3.5 sur la
+## main non jouée : la question « que fait-on d'une main qu'on ne peut pas jouer » cesse
+## d'être un pari dès qu'on lit les trois prochaines cartes.
+##
+## Le refus vit donc **ici** et pas dans une vue. Rendre l'ordre puis demander à
+## l'adapter de ne pas le montrer laisserait la règle dans un commentaire, à un appel de
+## distance de la fuite ; un recensement n'a pas d'ordre à trahir. Même geste que le bloc
+## production nullable de E1b — la cohérence devient structurelle au lieu d'être vérifiée.
+##
+## Le dictionnaire est neuf à chaque appel : le muter ne touche pas au deck.
+func draw_census(pool: StringName) -> Dictionary[StringName, int]:
+	return _census(_draw, pool)
+
+## Ce que la défausse de ce pool contient : carte -> nombre d'exemplaires.
+##
+## Recensement lui aussi, par symétrie plutôt que par nécessité — l'ordre d'une défausse
+## ne prédit rien, puisque _recycle() le détruit au premier remélange. Deux formes pour
+## deux piles auraient été deux choses à écrire et deux à lire, pour une information qui
+## expire.
+func discard_census(pool: StringName) -> Dictionary[StringName, int]:
+	return _census(_discard, pool)
+
 ## Cartes possédées dans ce pool, les trois piles réunies. C'est ce que le draft fait
 ## bouger, et rien d'autre.
 func total(pool: StringName) -> int:
@@ -232,6 +259,17 @@ func _recycle(pool: StringName, rng: RandomNumberGenerator) -> void:
 	recycled.assign(_discard[pool])
 	_draw[pool] = CardShuffle.shuffled(recycled, rng)
 	_discard[pool] = _empty_pile()
+
+## Recensement d'une pile de ce pool. Vide si le pool est inconnu, comme _pile_size()
+## rend 0 : un pool qui n'existe pas ne contient rien, ce n'est pas une erreur.
+func _census(piles: Dictionary[StringName, Array],
+		pool: StringName) -> Dictionary[StringName, int]:
+	var census: Dictionary[StringName, int] = {}
+	if not piles.has(pool):
+		return census
+	for card: StringName in piles[pool]:
+		census[card] = census.get(card, 0) + 1
+	return census
 
 ## Taille d'une pile de ce pool, 0 si le pool est inconnu.
 func _pile_size(piles: Dictionary[StringName, Array], pool: StringName) -> int:

@@ -56,6 +56,15 @@ const SHOT_PHASES_FLAG := "--shot-phases"
 ## code pour le regarder — ce qui revient à ne jamais le regarder.
 const SHOT_FOLD_FLAG := "--shot-fold"
 
+## Ouvrir la vue des piles avant de capturer. Drapeau **nu**, sans valeur.
+##
+## Troisième drapeau ouvert par la même porte que `--shot-view`, `--shot-phases` et
+## `--shot-fold`, et le cas est aussi net que celui du repli : la vue des piles est une
+## modale qu'aucune suite de journées ne fait apparaître, puisqu'elle ne s'obtient que par
+## une touche. Sans ce drapeau, la seule façon de la regarder serait de modifier du code
+## pour la regarder — c'est-à-dire de ne jamais la regarder.
+const SHOT_PILES_FLAG := "--shot-piles"
+
 ## Cran d'affichage du HUD au moment de capturer. Lu par les harnais qui en ont un.
 ##
 ## Il existe pour la raison qui a valu son drapeau à `--shot-evenings`, et que `I2` a

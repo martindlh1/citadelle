@@ -116,7 +116,7 @@ Le travail clic sur une fiche, puis sur son action — sur la carte ou dans la l
 Entrée     fonder le village, tenir la ligne, ou finir la phase — selon ce que le run attend.
 La caméra  Q/E : pivoter. Molette : zoomer. WASD : déplacer. R : recadrer.
 La vue     H : replier ce rapport. F2 : replier l'affectation. F1 : masquer tout le HUD.
-           F11 : plein écran."""
+           P : voir les piles. F11 : plein écran."""
 
 
 ## Ce que `--shot-evenings` doit valoir pour capturer l'écran de **fondation**.
@@ -133,6 +133,7 @@ var _world: DevWorld
 var _renderer: BuildingRenderer
 var _ghost: PlacementGhost
 var _targets: TargetHighlight
+var _piles: PileView
 var _marker: ActionMarker
 var _hand_view: HandView
 var _palette: CommodityPalette
@@ -289,6 +290,11 @@ func _ready() -> void:
 	_right_slot = _hud_slot(_make_right_column(), Control.SIZE_SHRINK_END,
 		Control.SIZE_SHRINK_BEGIN, HandView.band_height())
 	add_child(_right_slot)
+	# En dernier, donc au-dessus de tout le reste : c'est une modale, et une modale qui
+	# passerait sous la main laisserait cliquer ce qu'elle est censée couvrir.
+	_piles = PileView.create(_state().catalogue())
+	_piles.dismissed.connect(_show_piles)
+	add_child(_piles)
 
 	EventBus.phase_resolved.connect(_on_phase_resolved)
 	EventBus.battle_pending.connect(_on_battle_pending)
@@ -312,10 +318,70 @@ func _ready() -> void:
 ## comme une réserve qui ne bouge pas.
 func _process(_delta: float) -> void:
 	_refresh_ghost()
+	_refresh_light()
 	_bar.show_ledger(_state().ledger(), _last_delta)
+	_crew.set_height_budget(_crew_budget())
 	_crew.show_state(_state(), _held_worker, RunManager.phase())
 	_label.text = _report()
 	_hover.text = _hover_line()
+
+## Où en est le soleil, selon où en est la journée.
+##
+## La fraction est `phase_index / (phase_count - 1)` : la **position** de la phase dans sa
+## journée, jamais son nom, ce que `DESIGN.md` 2 interdit depuis `I1`. Deux phases donnent
+## donc un matin et un soir ; une journée à trois phases gagnerait un midi sans qu'une
+## ligne bouge ici, et une journée à une seule phase se joue à midi — le seul moment qui
+## ait un sens quand il n'y a pas de « plus tard ».
+##
+## La nuit tombe sur les deux états où la journée ne se joue plus : une **bataille armée**,
+## qui est le soir d'une journée refermée depuis `I2`, et un **run fini**. Les deux se lisent
+## déjà sur le run ; aucun drapeau n'a été ajouté pour éclairer quoi que ce soit.
+##
+## Appelé à chaque image et non sur événement, par la règle que `CLAUDE.md` pose pour les
+## vues : énumérer les gestes qui changent le moment — franchir une phase, armer une vague,
+## la résoudre, finir le run, fonder — c'est se donner cinq occasions d'en oublier un, et
+## l'oubli se lirait comme un soleil bloqué. Le plateau ne glisse que si le moment a bien
+## changé, donc l'appel ne coûte rien.
+func _refresh_light() -> void:
+	var cycle := _state().cycle()
+	if cycle.is_over() or _state().awaits_a_battle():
+		_world.light_night()
+		return
+	_world.light_day(_day_progress(cycle))
+
+## La position de la phase courante dans sa journée, de 0 à 1.
+##
+## Une journée d'une seule phase rend 0.5 et non 0 : la division serait par zéro, et
+## « la seule phase de la journée » n'est pas plus un lever qu'un coucher.
+static func _day_progress(cycle: DayCycle) -> float:
+	if cycle.phase_count() <= 1:
+		return 0.5
+	return float(cycle.phase_index()) / float(cycle.phase_count() - 1)
+
+## Ce qui reste au panneau d'affectation une fois la colonne servie.
+##
+## C'est le harnais qui répond, et pas le panneau, parce que c'est lui qui a bâti la
+## colonne : la marge du HUD, la bande de la main et la hauteur du compte rendu de phase
+## sont trois choses qu'il a posées lui-même. Les faire mesurer par le panneau lui aurait
+## demandé de connaître ses voisins, ce qu'aucune vue de ce projet ne fait.
+##
+## Le plafond de la colonne est **demandé à la main**, qui sait où elle commence, et non
+## déduit de la taille du conteneur qui porte la colonne. La première version faisait
+## l'inverse et laissait passer 28 px : un `MarginContainer` prend le **plus grand** de son
+## ancrage et de la taille minimale de son contenu, donc le vôtre grandit avec le panneau
+## à mesure que le panneau grandit. Un budget tiré de là se desserre exactement quand il
+## devrait serrer — il borne une hauteur à partir d'elle-même.
+##
+## Les trois termes, dans l'ordre : le haut de la bande de la main, la marge haute du HUD,
+## puis le compte rendu et l'écart qui l'en sépare. Aucun n'est un chiffre recopié — la
+## main dit où elle est, `_panel.size.y` est ce que le rapport mesure cette image-ci, et
+## `REPORT_MARGIN` est la constante que la colonne emploie déjà pour les deux.
+##
+## Recalculé à chaque image exprès : la fenêtre se redimensionne, et le compte rendu de
+## phase change de longueur d'une résolution à l'autre.
+func _crew_budget() -> float:
+	var column := _hand_view.global_position.y - REPORT_MARGIN
+	return column - _panel.size.y - REPORT_MARGIN
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -338,6 +404,15 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 func _handle_key(event: InputEventKey) -> void:
 	if not event.pressed or event.echo:
 		return
+	# La vue des piles est **modale** : tant qu'elle couvre l'écran, les seules touches qui
+	# répondent sont celles qui la referment. C'est la contrepartie de son voile — laisser
+	# jouer une carte derrière un panneau qui cache la carte serait exactement le geste
+	# qu'aucune image ne permet de vérifier.
+	if _piles.visible:
+		if event.keycode == KEY_P or event.keycode == KEY_ESCAPE:
+			_show_piles()
+		get_viewport().set_input_as_handled()
+		return
 	match event.keycode:
 		KEY_TAB:
 			_turn_the_held_card()
@@ -353,6 +428,8 @@ func _handle_key(event: InputEventKey) -> void:
 			_toggle_hud()
 		KEY_F2:
 			_fold_crew()
+		KEY_P:
+			_show_piles()
 		_:
 			var slot := event.keycode - KEY_1
 			if slot < 0 or slot >= SLOT_KEYS:
@@ -387,6 +464,21 @@ func _toggle_hud() -> void:
 	_hand_view.visible = shown
 	if shown:
 		_last_action = "HUD rendu. F1 pour le remasquer."
+
+## Ouvre la liste des piles, ou la referme.
+##
+## Elle remplace les trois lignes de compteurs que le pavé de texte portait depuis `I1`, et
+## elle les remplace au lieu de les doubler : `DESIGN.md` 8 demande « une pioche et une
+## défausse consultables, plutôt que trois compteurs », et garder les deux aurait laissé le
+## même chiffre lisible à deux endroits — le doublon qu'`E2` puis `W2` ont chacun retiré
+## en prenant un morceau de ce pavé.
+##
+## Le contenu se relit à l'ouverture et pas à chaque image : une pile ne bouge qu'à la
+## pioche ou à la défausse, et rien de tout ça ne peut arriver pendant qu'une modale
+## bloque les gestes.
+func _show_piles() -> void:
+	var shown := _piles.toggle(_state().deck())
+	_last_action = "Les piles. P, Échap, ou un clic pour refermer." if shown 		else "Piles refermées. P pour les revoir."
 
 ## Replie le panneau d'affectation sur sa barre de tête, ou le rouvre.
 ##
@@ -877,8 +969,6 @@ func _report() -> String:
 	if _report_level == Report.ESSENTIAL:
 		lines.append(_last_action)
 		return "\n".join(lines)
-	lines.append(_piles_line())
-	lines.append("")
 	lines.append(_last_action)
 	lines.append("")
 	lines.append(CONTROLS)
@@ -997,20 +1087,6 @@ func _permissions() -> String:
 	if _state().cycle().resolves():
 		allowed.append("résout en partant")
 	return "—" if allowed.is_empty() else ", ".join(allowed)
-
-## Les trois pioches, une par ligne.
-##
-## Elles tenaient sur une seule jusqu'à `E2`, qui a posé le panneau de production dans le
-## coin où cette ligne finissait : le troisième pool passait dessous et se lisait à
-## moitié. Trois lignes courtes valent mieux qu'une longue tronquée, et la colonne ainsi
-## formée se lit de toute façon mieux qu'une file de séparateurs.
-func _piles_line() -> String:
-	var lines := PackedStringArray()
-	for pool in CardData.POOLS:
-		lines.append("Piles %-9s %d en main, %d pioche, %d défausse" % [pool,
-			_state().deck().hand_size(pool), _state().deck().draw_size(pool),
-			_state().deck().discard_size(pool)])
-	return "\n".join(lines)
 
 ## Ce que le curseur désigne, et ce que la carte tenue y ferait — sur **deux** lignes.
 ##
@@ -1357,6 +1433,15 @@ func _capture_if_asked() -> void:
 		if not _state().awaits_a_battle() and not _state().cycle().is_over():
 			_scripted_open_phase()
 	_apply_shot_view()
+	# Le soleil se pose **d'un coup** pour une capture. Trois images de chauffe ne couvrent
+	# pas un glissement de neuf dixièmes de seconde : sans ça, toute capture montrerait un
+	# soleil à mi-course entre le moment précédent et le bon, ce qui est exactement le genre
+	# d'image à laquelle `F1` dit de ne pas faire confiance — vraisemblable, et fausse.
+	var cycle := _state().cycle()
+	_world.settle_light(DevWorld.NIGHT if cycle.is_over() or _state().awaits_a_battle() \
+		else _day_progress(cycle))
+	if DevShot.has_flag(DevShot.SHOT_PILES_FLAG):
+		_show_piles()
 	for _frame in DevShot.WARMUP_FRAMES:
 		await get_tree().process_frame
 	print("[run_harness] %s" % _banner())
@@ -1365,9 +1450,43 @@ func _capture_if_asked() -> void:
 		_palette.bundle_text(_state().ledger().amounts()),
 		_state().ledger().total(), _state().ledger().capacity()])
 	print("[run_harness] %s" % _hover_line())
+	print("[run_harness] %s" % _fit_line())
 	var error := get_viewport().get_texture().get_image().save_png(path)
 	print("[run_harness] capture vers %s : %s" % [path, error_string(error)])
 	get_tree().quit(OK if error == OK else FAILED)
+
+## Ce que la colonne de droite fait de la place qu'elle a, en pixels de mise en page.
+##
+## Elle existe parce que le défaut que `P1b` répare a mis **trois jalons** à se faire
+## voir : le panneau d'affectation descendait sur la main, et personne ne pouvait le dire
+## autrement qu'à l'œil ou en sondant une capture pixel par pixel — ce qui est long, et
+## ce qui donne un chiffre en pixels de **fenêtre** alors que la mise en page raisonne en
+## pixels **logiques**, le projet étant en `stretch/mode = canvas_items`. Les deux ne se
+## comparent pas, et les confondre est la façon la plus sûre de mesurer le mauvais
+## chiffre.
+##
+## C'est la discipline que `F1` a écrite pour les tables du harnais, appliquée à une
+## image : **elle annonce ce qu'elle doit montrer**. Un recouvrement positif est un
+## défaut, et il se lit sur la sortie standard de n'importe quelle capture au lieu de se
+## redécouvrir.
+##
+## Les deux bords sont **demandés aux vues** et jamais recalculés : `_crew` dit où il finit,
+## `_hand_view` dit où elle commence, et les deux répondent en `global_position`, donc dans
+## le même repère. Déduire le haut de la bande d'une soustraction sur le viewport aurait
+## marché ici et cassé le jour où la main change d'ancrage.
+##
+## Elle mesure contre la **bande** que la main réserve, et non contre le haut visible d'une
+## carte, qui est plus bas. C'est volontaire et c'est plus sévère : la bande comprend
+## `HOVER_LIFT`, la course qu'une carte survolée a au-dessus d'elle, donc un panneau qui
+## s'arrête pile au bord ne recouvrira pas non plus la carte qu'on désigne. « 0 px de
+## dégagement » est l'état visé et non un frôlement.
+func _fit_line() -> String:
+	var band := _hand_view.global_position.y
+	var bottom := _crew.global_position.y + _crew.size.y
+	var verdict := "recouvrement %d px" % (bottom - band) if bottom > band \
+		else "%d px de dégagement" % (band - bottom)
+	return "colonne droite : bas du panneau y=%d, haut de la main y=%d, %s" % [
+		bottom, band, verdict]
 
 ## Applique le cran de HUD demandé par `--shot-view`, s'il l'est.
 ##

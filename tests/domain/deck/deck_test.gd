@@ -200,6 +200,82 @@ func test_the_same_seed_deals_the_same_cards() -> void:
 func test_another_seed_deals_other_cards() -> void:
 	assert_bool(_three_phases(SEED) == _three_phases(OTHER_SEED)).is_false()
 
+# --- Le recensement des piles ---------------------------------------------------------
+#
+# P1b : « une pioche et une défausse consultables, plutôt que trois compteurs »,
+# DESIGN.md 8. Les tailles existaient depuis D1 ; ce qui manquait est le contenu.
+
+func test_a_fresh_draw_pile_censuses_the_composition() -> void:
+	var census := _deck().draw_census(CardData.POOL_ACTION)
+	assert_int(census.size()).is_equal(3)
+	assert_int(census[&"harvest"]).is_equal(3)
+	assert_int(census[&"hunt"]).is_equal(2)
+	assert_int(census[&"build"]).is_equal(2)
+
+## Piocher retire de la pioche, et de la pioche seule : la carte n'est plus au
+## recensement, et le pool voisin n'a pas bougé.
+func test_drawing_leaves_the_census_of_the_draw_pile() -> void:
+	var deck := _deck()
+	deck.draw(CardData.POOL_ACTION, 3, _rng(SEED))
+	var census := deck.draw_census(CardData.POOL_ACTION)
+	assert_bool(census.has(&"harvest")).is_false()
+	assert_int(census[&"hunt"]).is_equal(2)
+	assert_int(deck.discard_census(CardData.POOL_ACTION).size()).is_equal(0)
+	assert_int(deck.draw_census(CardData.POOL_BUILDING)[&"farm"]).is_equal(2)
+
+func test_discarding_shows_up_in_the_census_of_the_discard() -> void:
+	var deck := _deck()
+	deck.draw(CardData.POOL_ACTION, 4, _rng(SEED))
+	deck.discard_hand()
+	var census := deck.discard_census(CardData.POOL_ACTION)
+	assert_int(census[&"harvest"]).is_equal(3)
+	assert_int(census[&"hunt"]).is_equal(1)
+
+## Le remélange déplace le recensement d'une pile à l'autre sans rien perdre — le même
+## fait que test_an_exhausted_pile_recycles_the_discard(), vu par le contenu.
+func test_recycling_moves_the_census_back_to_the_draw_pile() -> void:
+	var deck := _deck()
+	deck.draw(CardData.POOL_ACTION, 7, _rng(SEED))
+	deck.discard_hand()
+	deck.draw(CardData.POOL_ACTION, 1, _rng(SEED))
+	assert_int(deck.discard_census(CardData.POOL_ACTION).size()).is_equal(0)
+	var census := deck.draw_census(CardData.POOL_ACTION)
+	var counted := 0
+	for card: StringName in census:
+		counted += census[card]
+	assert_int(counted).is_equal(6)
+
+## Un pool vide et un pool qui n'existe pas rendent la même chose : rien. Les powers sont
+## le premier cas jusqu'à X4, et une vue qui les affiche ne doit pas avoir à distinguer.
+func test_an_empty_or_unknown_pool_censuses_nothing() -> void:
+	var deck := _deck()
+	assert_int(deck.draw_census(CardData.POOL_POWER).size()).is_equal(0)
+	assert_int(deck.draw_census(&"nowhere").size()).is_equal(0)
+	assert_int(deck.discard_census(&"nowhere").size()).is_equal(0)
+
+## Le recensement est une copie. Sans ce cas, une vue qui trierait ou viderait ce qu'on
+## lui rend muterait le deck sans qu'aucune ligne ne le dise.
+func test_the_census_is_a_copy() -> void:
+	var deck := _deck()
+	var census := deck.draw_census(CardData.POOL_ACTION)
+	census[&"harvest"] = 99
+	census.erase(&"hunt")
+	assert_int(deck.draw_census(CardData.POOL_ACTION)[&"harvest"]).is_equal(3)
+	assert_int(deck.draw_census(CardData.POOL_ACTION)[&"hunt"]).is_equal(2)
+
+## Le cas qui porte la décision de design, et le seul qui la **prouve**. Deux decks
+## mélangés sur deux seeds différents piochent dans un ordre différent — c'est ce que
+## test_another_seed_deals_other_cards() épingle — et recensent pourtant à l'identique.
+## Autrement dit : l'ordre de pioche n'est pas dans la réponse, donc aucune vue ne peut
+## le montrer par accident. Le refus est structurel et pas seulement respecté.
+func test_the_census_says_nothing_of_the_order() -> void:
+	var one := _deck()
+	one.shuffle(CardData.POOL_ACTION, _rng(SEED))
+	var other := _deck()
+	other.shuffle(CardData.POOL_ACTION, _rng(OTHER_SEED))
+	assert_dict(one.draw_census(CardData.POOL_ACTION)) \
+		.is_equal(other.draw_census(CardData.POOL_ACTION))
+
 ## Trois phases sur un deck neuf : ce qui a été pioché, à la suite.
 func _three_phases(rng_seed: int) -> Array[StringName]:
 	var rng := _rng(rng_seed)

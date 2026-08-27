@@ -343,6 +343,38 @@ cachait ne comptait. Mesurer d'abord *ce qui recouvre quoi*, en pixels, sur une 
 puis décider si l'on répare la cause ou si l'on range l'information neuve là où rien ne
 passe. Ranger est légitime ; croire qu'on vient de casser quelque chose ne l'est pas.
 
+**Un plafond de lignes calibré à la main se trompe ; un budget de hauteur non.** *(Écrit
+à `P1b`.)* Le paragraphe ci-dessus dit qu'une liste qui suit la partie se borne, et c'est
+vrai ; ce qu'il ne dit pas est **avec quoi**. `W2` a borné à trois lignes, `I2` à cinq — sur
+l'argument raisonnable que cinq est ce qu'une main peut poser en une phase. La mesure :
+à quatre lignes le panneau s'arrêtait 16 px au-dessus des cartes, à cinq il descendait 28 px
+dessous. Le plafond avait été calibré, et il était faux d'exactement une ligne, parce qu'il
+était calibré sur une hauteur qu'il ne **mesurait** pas. Une vue reçoit donc un budget en
+pixels de qui connaît la mise en page — le harnais, qui a bâti la colonne — et décide
+elle-même quoi couper dedans. Quand deux blocs se disputent ce budget, l'un des deux est
+prioritaire et l'autre défile, et c'est une décision de design : ici les fiches d'ouvrier
+passent avant la liste des actions, qui se relit sur la carte.
+
+**Un conteneur qui borne grandit avec ce qu'il borne.** *(Écrit à `P1b`.)* Corollaire
+immédiat, et il a coûté vingt-huit pixels : le budget ci-dessus était tiré de
+`_right_slot.size.y`, le `MarginContainer` qui porte la colonne. Or un conteneur prend le
+**plus grand** de son ancrage et de la taille minimale de son contenu — donc il grandit
+avec le panneau qu'il est censé borner, et le budget se desserre exactement quand il
+devrait serrer. Un plafond ne se lit jamais sur ce qu'il plafonne. On le **demande à la
+vue voisine qui, elle, ne bouge pas** : `_hand_view.global_position.y` dit où la main
+commence, comme `HandView.band_height()` dit depuis `P1a` ce qu'elle occupe.
+
+**Les pixels d'une capture ne sont pas ceux de la mise en page.** *(Écrit à `P1b`.)*
+`project.godot` est en `stretch/mode = "canvas_items"` : la mise en page raisonne dans un
+viewport logique fixe — 1152×648 — pendant que l'image sort à la taille de la fenêtre. En
+1920×1080 le facteur est 1,667, donc « 28 px » sondés sur un PNG valent 17 px de mise en
+page, et un chiffre de journal pris d'un côté ne se compare à rien de l'autre. Sonder une
+image pour mesurer un recouvrement coûte une heure et rend un nombre dans le mauvais
+repère. **Faire dire le chiffre au harnais**, en `global_position` de `Control`, coûte cinq
+lignes et le rend dans le bon — et il devient lisible sur la sortie standard de toutes les
+captures suivantes plutôt que redécouvert. C'est la discipline de `F1` sur les tables,
+appliquée à une image.
+
 **Un `Label` en `AUTOWRAP_WORD_SMART` coupe aussi ce qui n'a pas d'espace.** *(Constaté à
 `P1a`.)* Un « 20 » dans un `HBoxContainer` qui distribue s'affiche « 2 » au-dessus de
 « 0 » — c'est-à-dire **lisible et faux**, ce qui est pire qu'illisible. Tout libellé qui

@@ -330,6 +330,10 @@ C'est une flèche neuve dans l'architecture — jusqu'ici rien ne remontait de l
 
 **`OUVERT` — garder, redessiner, et ce qu'un départ offre.** *(Posé après `I2`.)* Trois questions voisines qui touchent toutes au même endroit du tour. Un moyen de **conserver** une carte d'une phase à l'autre — un pouvoir, une règle de héros de départ, une méta-progression de 6. Un principe de **redraw**, qui est la réponse classique à une main impayable. Et ce qu'un gouverneur de départ change au deck, que 6. annonce sans le décrire. Elles ne se posent qu'après l'`OUVERT` ci-dessous, dont elles sont des variantes : toutes répondent à « que fait-on d'une main qu'on ne peut pas jouer ».
 
+**Les piles se consultent, et sans leur ordre.** *(Écrit à `P1b`.)* Une pioche et une défausse s'ouvrent à la touche `P`, par pool. Ce qu'elles montrent est un **recensement** — combien de *Récolter* restent — et jamais l'ordre du paquet, et le refus est une décision de design et non une commodité d'affichage : lire les trois prochaines cartes répondrait par accident à l'`OUVERT` ci-dessous, en faisant de « que fait-on d'une main qu'on ne peut pas jouer » un calcul au lieu d'un pari. Le domaine ne rend donc pas l'ordre, ce qui met la règle hors de portée d'une vue distraite plutôt que dans un commentaire — même geste que le bloc `production` nullable de 3.3.
+
+C'est ce qui rend l'`OUVERT` ci-dessous **jouable** plutôt que répondu : `I2b` doit arbitrer ce que devient une main non jouée, et personne ne peut arbitrer ça sans savoir ce qu'il reste à piocher.
+
 **`OUVERT`** — taille de la main et du deck, et sort des cartes non jouées en fin de phase. Défausser toute la main crée de la tension et empêche la thésaurisation, mais frustre quand on pioche trois bâtiments impayables. Alternatives à tester : conserver une carte, défausser contre une petite ressource, ou main persistante avec limite de jeu par tour. La question se pose désormais **par pool**, ce qui la complique — trois pioches, trois défausses, trois tailles de main. Décision reportée après le premier playtest de la boucle complète.
 
 ### 3.6 Combat
@@ -668,7 +672,10 @@ arbitrer un `.tres`.
     C'est la troisième fois qu'une colonne de droite ne tient pas, après `W2` et `I2`, et la
     première où elle cache une information plutôt que d'en tronquer une. Le repli lui donne
     une **échappatoire** — un clic rend les cartes entières — mais pas une réparation : un
-    panneau ouvert déborde toujours, et c'est `P1b` qui devra le loger.
+    panneau ouvert déborde toujours, et c'est `P1b` qui devra le loger. *(Fait, et la
+    mesure de dix-huit pixels était juste sur le jour six et optimiste sur la suite : au
+    douzième jour, où une cinquième ligne d'action s'ajoute, le recouvrement montait à
+    vingt-huit.)*
 
     `--shot-phases` est né du même jalon, et de la phrase que ce projet s'applique depuis
     `I2` : un écran qu'aucune capture ne peut atteindre est celui que personne ne regardera.
@@ -678,14 +685,47 @@ arbitrer un `.tres`.
     repli en est le cas le plus net : c'est un état qu'aucune suite de journées ne produit,
     puisqu'il ne s'obtient que par un geste.
 
-  - **P1b** — **Les listes qui cessent de mentir sur ce qu'elles cachent.** C'est le jalon
-    qui doit d'abord régler le débordement ci-dessus, parce que les deux points qui suivent
-    s'y heurtent avant d'exister.
-    - **La liste des actions posées, pour de bon** — une liste qui défile ou une place à elle,
-      plutôt qu'un plafond de lignes calibré à la main sur la hauteur du HUD.
-    - **Voir les piles.** Une pioche et une défausse consultables, plutôt que trois compteurs.
-      C'est aussi ce qui rendra jouable l'`OUVERT` de 3.5 sur les cartes non jouées : on ne
-      peut pas arbitrer ce qu'on ne voit pas.
+  - **P1b** ✅ — **Les listes qui cessent de mentir sur ce qu'elles cachent.** Quatre points,
+    le quatrième venu de l'humain en cours de jalon comme le repli à `P1a`.
+    - **Loger le panneau d'affectation**, ce que `P1a` lui avait laissé. Le harnais tient le
+      budget de hauteur de la colonne et le passe au panneau ; le panneau sert les fiches
+      d'abord et donne le reste à la liste, qui défile. Le partage vient de l'humain :
+      **les fiches sont prioritaires**, une action se relit de toute façon sur la carte.
+    - **La liste des actions posées, pour de bon.** `MAX_ROWS` disparaît, et le remplaçant
+      n'est pas un chiffre mieux choisi mais un **changement d'instrument**. La mesure qui le
+      dit : à quatre lignes le panneau s'arrêtait 16 px au-dessus des cartes, à cinq il
+      descendait 28 px dessous. Le plafond avait été calibré à `I2`, sur « ce qu'une main
+      peut poser en une phase », et il était faux d'exactement une ligne — un plafond
+      calibré sur une hauteur qu'il ne mesure pas se trompe dès qu'autre chose bouge.
+    - **Voir les piles.** `PileView`, modale, une section par pool et deux colonnes.
+      `Deck.draw_census()` et `discard_census()` répondent par un **recensement** — carte vers
+      nombre d'exemplaires — et non par une liste : voir 3.5, où ce refus a une conséquence
+      de design. `P` l'ouvre dans les harnais Run et Cartes ; le pavé de texte perd ses trois
+      lignes de compteurs plutôt que de les doubler.
+    - **La fiche d'ouvrier passe à quatre lignes**, et ce point n'était pas dans la liste
+      d'origine. Les pistes qui ont franchi un palier tiennent sur une ligne ; les
+      multiplicateurs, les pistes sans palier et l'XP totale passent à l'infobulle. Ce qui
+      **décide** reste à l'écran, ce qui s'en déduit s'obtient au survol. Une passe unique
+      remplit les deux formes, faute de quoi c'est l'infobulle — qu'aucune capture ne montre
+      — qui aurait dérivé en silence.
+
+    Le jalon **ne touche aucun DTO de `contracts/`**, le quatrième d'affilée après `E2`,
+    `W2` et `P1a`. Il ajoute deux accesseurs au `Deck`, et rien d'autre au domaine.
+
+    Ce qu'il a trouvé en mesurant, et que trois jalons d'écran n'avaient pas vu : **un
+    conteneur qui borne grandit avec ce qu'il borne.** Le budget était tiré de la taille du
+    `MarginContainer` qui porte la colonne, et un `MarginContainer` prend le plus grand de
+    son ancrage et du minimum de son contenu — donc il se desserrait exactement quand il
+    aurait dû serrer. Vingt-huit pixels sont passés par là. Il **demande** désormais à la
+    main où elle commence, ce que `P1a` avait déjà fait pour la hauteur de la bande.
+
+    Et la capture du harnais Run annonce désormais la mise en page en toutes lettres : où
+    finit la colonne, où commence la main, lequel mord sur l'autre. C'est la discipline de
+    `F1` — une table dit ce qu'elle doit montrer — appliquée à une image. Elle a servi tout
+    de suite, et pas pour la raison attendue : c'est elle qui a montré que le budget était
+    trop généreux de vingt-huit pixels, après une heure passée à sonder des PNG pour un
+    chiffre qui, lui, était dans le mauvais repère — une capture est en pixels de fenêtre,
+    la mise en page en pixels logiques, et le facteur vaut 1,667 en 1920×1080.
   - **P1c** — **Désigner l'une des deux actions d'une même case**, ce qui lèverait la
     contrainte provisoire de 3.5. Seul point de la famille qui touche le domaine, et le seul
     qui renverse une décision : il ne se traite qu'une fois choisi *comment* on désigne —
@@ -718,7 +758,7 @@ arbitrer un `.tres`.
   Ce qu'il contraint en attendant, et c'est sa seule raison d'être écrit maintenant : **aucun rapport ne doit inventer sa propre conséquence.** Un système qui rencontre un état le **compte** et le rapporte ; il ne décide pas de ce qu'il fait. C'est ce que `UpkeepReport` fait déjà des non-nourris, et ce que `DamageReport` fait des pertes.
   *(Relevé après `F1`.)* Le format de combat de 3.6 le fait passer de confortable à **structurant**, et lui donne sa première forme concrète : les points de vie sont la ressource d'une manche, un ouvrier à zéro meurt, et ce qu'un **survivant** emporte est un effet progressif selon la part de vie perdue. Sans lui, un combat n'a que deux issues — rien, ou définitif —, et le joueur qui a bien joué ne sent rien du tout. C'est le premier état dont on connaisse déjà et la source et la graduation.
 
-**Ordre suivant** — `P1b` ou `I2b`. `P1a` est passé, ce qui change ce que cette ligne disait : les trois gestes qui rendaient une phase pénible à mener sont faits, donc `I2b` peut se jouer sans les attendre. Mais `P1b` porte désormais un **défaut trouvé en capture** — la colonne de droite qui déborde sur la main —, et un défaut qui cache une information pèse plus lourd qu'un confort qui manque.
+**Ordre suivant** — **`I2b`**, et cette fois sans réserve. `P1a` a rendu une phase agréable à mener, `P1b` a rendu à l'écran ce que la colonne de droite cachait et donné à lire ce qu'il reste dans les piles — c'est-à-dire les deux choses qu'il fallait pour demander à quelqu'un de jouer quinze journées et d'arbitrer un `.tres`. Il ne reste de la famille `P` que `P1c`, qui attend une **question de design** et non du temps : comment désigner l'une des deux actions d'une case. Elle peut se poser avant ou après `I2b`, mais elle se pose à l'humain d'abord.
 
 *(Écrit avant `P1a`, et toujours vrai du reste de la famille.)* **`P1` peut s'intercaler à tout moment** : c'est le seul jalon dont le contenu vient d'une partie jouée plutôt que d'une déduction, donc le seul qui se périme si on attend. La boucle est jouable du début à la fin, donc la question n'est plus « qu'est-ce qui manque » mais « est-ce que ça se joue ». Les deux arbitrages de ce jalon — la structure de la journée en 2, le sort de la main non jouée en 3.5 — se testent en échangeant un `.tres`, et c'est la première fois du projet qu'un jalon ne demande pas d'écrire une ligne de GDScript.
 

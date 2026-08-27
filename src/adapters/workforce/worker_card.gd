@@ -11,10 +11,13 @@ extends PanelContainer
 ##
 ## Elle montre les **deux axes** de 3.4 côte à côte, et c'est ce qui les rend lisibles
 ## comme deux choses distinctes : le **niveau d'ouvrier** en tête, qui dit ce qu'il a
-## vécu et ne donne aucun multiplicateur, et une ligne par **piste** entamée, qui dit ce
-## qu'il sait faire et porte le chiffre que la production consomme. Un ouvrier n'a pas
-## trois pistes vierges : il en a autant qu'il a exercé de métiers, et la fiche se lit
-## donc comme son parcours.
+## vécu et ne donne aucun multiplicateur, et les **pistes** où il a franchi un palier,
+## qui disent ce qu'il sait faire. Un ouvrier n'a pas trois pistes vierges : il en a
+## autant qu'il a exercé de métiers, et la fiche se lit donc comme son parcours.
+##
+## Elle est **compacte depuis `P1b`** : quatre lignes et non six ou sept. Ce qui décide
+## reste à l'écran, ce qui s'en déduit ou ne sert qu'à comparer de près passe dans
+## l'infobulle. Voir `_fill_tracks()`, qui remplit les deux formes en une passe.
 ##
 ## Vue pure. On lui donne un `Worker`, elle dessine. Elle ne juge aucune affectation —
 ## « cet ouvrier peut-il aller là ? » se demande à `RunOrchestrator.staffing_refusal()`,
@@ -51,7 +54,6 @@ signal released()
 const CARD_WIDTH := 176
 
 ## Écarts internes.
-const ROW_GAP := 2
 const COLUMN_GAP := 10
 const BLOCK_GAP := 3
 
@@ -98,27 +100,38 @@ const ABSENT_TEXT := "absent"
 ## intéressante, et elle mérite de se voir avant.
 const CAPPED_MARK := " · max"
 
-## XP totale, montrée quand aucun palier n'est à annoncer.
+## XP totale, sur la dernière ligne de la fiche et rappelée par l'infobulle. Les deux la
+## lisent sur le même `worker.xp()`, donc elles ne peuvent pas diverger.
 const XP_TEXT := "%d XP"
+
+## Séparateur entre deux pistes sur la ligne compacte.
+const TRACK_JOIN := " · "
+
+## Ce que la ligne des pistes affiche quand aucune n'a encore franchi de palier.
+##
+## Elle est **toujours là**, même vide de contenu, et c'est le même argument que
+## `_show_note()` porte depuis `W2` : une ligne qui n'apparaîtrait qu'au premier palier
+## ferait grandir la fiche au moment où la colonne de droite a le moins de place, et la
+## grille entière sauterait sous l'œil.
+const NO_TRACK_TEXT := "sans palier"
+
+## En-têtes de l'infobulle. Elle porte ce que la fiche compacte a laissé tomber : le
+## multiplicateur de chaque piste, et les pistes entamées qui n'ont pas encore de palier.
+const TOOLTIP_TRACKS := "Pistes"
+const TOOLTIP_NO_TRACKS := "Aucune piste entamée."
 
 ## Préfixe du niveau d'ouvrier. Court exprès : c'est un repère, pas une phrase.
 const LEVEL_PREFIX := "N"
 
 var _name: Label
 var _level: Label
-var _tracks: GridContainer
+var _tracks: Label
 var _job: Label
 var _note: Label
 
 ## Équilibrage des Effectifs, gardé à la construction. Il ne change pas en cours de run,
 ## et le tenir ici évite de le repasser à chaque image.
 var _balance: WorkforceBalance
-
-## Les libellés de piste, par paires clé/valeur, dans l'ordre où les familles sont
-## entrées. Le tableau grandit quand l'ouvrier entame un métier de plus, et il ne se
-## reconstruit jamais.
-var _track_keys: Array[Label] = []
-var _track_values: Array[Label] = []
 
 ## Fiche prête à être ajoutée à l'arbre, vide.
 static func create(balance: WorkforceBalance) -> WorkerCard:
@@ -147,11 +160,7 @@ static func create(balance: WorkforceBalance) -> WorkerCard:
 	header.add_child(card._level)
 	column.add_child(header)
 
-	card._tracks = GridContainer.new()
-	card._tracks.columns = 2
-	card._tracks.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	card._tracks.add_theme_constant_override("v_separation", ROW_GAP)
-	card._tracks.add_theme_constant_override("h_separation", COLUMN_GAP)
+	card._tracks = _make_text("", ROW_FONT_SIZE, VALUE_COLOR)
 	column.add_child(card._tracks)
 
 	card._job = _make_text("", ROW_FONT_SIZE, FREE_COLOR)
@@ -195,9 +204,29 @@ func _gui_input(event: InputEvent) -> void:
 			released.emit()
 			accept_event()
 
-# --- Les pistes ---------------------------------------------------------------------------
+# --- Les pistes -------------------------------------------------------------------------
 
-## Une ligne par famille entamée, dans l'ordre où l'ouvrier les a entamées.
+## Les pistes de l'ouvrier sur **une** ligne, et le détail entier dans l'infobulle.
+##
+## `P1b` a raccourci la fiche, et il faut dire pourquoi : elle portait une ligne par
+## famille avec son multiplicateur, donc six lignes à trois familles et sept à quatre
+## quand `X2` ouvrira l'Artisanat. Six ouvriers en font deux rangées de grille, et c'est
+## cette hauteur-là qui poussait le panneau d'affectation sur la main.
+##
+## Ce qui reste sur la fiche est ce qui **décide** : les familles où l'ouvrier a franchi
+## un palier, avec le palier. Ce qui part est ce qui s'en déduit — un multiplicateur vient
+## d'un palier, donc l'afficher à côté répète le même fait en chiffres à virgule — et ce
+## qui ne sert qu'à comparer de près : les pistes entamées sans palier, et l'XP totale.
+##
+## Le détail n'est pas perdu, il est à un survol. C'est le précédent que `P1a` a posé sur
+## le coût d'une carte — l'infobulle porte le texte entier —, et une infobulle Godot
+## flotte au-dessus : **rien ne se remet en page sous le curseur**, ce qu'un dépliage sur
+## place aurait fait en décalant les cinq autres fiches.
+##
+## Les deux formes sont remplies par **cette fonction et elle seule**. Deux passes
+## séparées auraient été le doublon que `E2` puis `W2` ont payé pour ne plus écrire :
+## l'une des deux se serait mise à mentir, et c'est l'infobulle — que nulle capture ne
+## montre — qui aurait dérivé en silence.
 ##
 ## Le libellé d'une famille est son identifiant capitalisé, et c'est assumé : aucune
 ## famille ne porte de libellé dans `data/`, parce qu'aucune famille n'y est déclarée —
@@ -205,29 +234,42 @@ func _gui_input(event: InputEvent) -> void:
 ## `data/balance/` et qu'aucun code ne l'énumère. Écrire ici une table
 ## identifiant -> libellé français rouvrirait exactement l'énumération que la Construction
 ## a pu rejoindre sans une ligne de GDScript à `I1`. Le jour où un nom d'affichage
-## comptera, ce sera un champ de `.tres`, pas un dictionnaire dans une vue.
+## comptera, ce sera un champ de `.tres`, pas un dictionnaire dans une vue. C'est aussi ce
+## qui interdit d'abréger un nom de famille pour tenir sur la ligne courte : « Con » pour
+## Construction et « Com » pour Combat seraient cette table, à trois lettres près.
 func _fill_tracks(worker: Worker) -> void:
-	var families := worker.families()
-	while _track_keys.size() < families.size():
-		var key := _make_text("", ROW_FONT_SIZE, KEY_COLOR)
-		var value := _make_text("", ROW_FONT_SIZE, VALUE_COLOR)
-		value.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		value.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		_track_keys.append(key)
-		_track_values.append(value)
-		_tracks.add_child(key)
-		_tracks.add_child(value)
-	for index in _track_keys.size():
-		var shown := index < families.size()
-		_track_keys[index].visible = shown
-		_track_values[index].visible = shown
-		if not shown:
-			continue
-		var family := families[index]
-		_track_keys[index].text = "%s %d%s" % [String(family).capitalize(),
-			worker.skill_level(family, _balance),
-			CAPPED_MARK if worker.is_skill_capped(family, _balance) else ""]
-		_track_values[index].text = "×%.2f" % worker.efficiency(family, _balance)
+	var reached := PackedStringArray()
+	var detail := PackedStringArray()
+	for family in worker.families():
+		var level := worker.skill_level(family, _balance)
+		var capped := CAPPED_MARK if worker.is_skill_capped(family, _balance) else ""
+		var named := "%s %d%s" % [String(family).capitalize(), level, capped]
+		detail.append("%s   ×%.2f" % [named, worker.efficiency(family, _balance)])
+		if level > 0:
+			reached.append(named)
+	_tracks.text = TRACK_JOIN.join(reached) if not reached.is_empty() else NO_TRACK_TEXT
+	_tracks.add_theme_color_override("font_color",
+		VALUE_COLOR if not reached.is_empty() else KEY_COLOR)
+	tooltip_text = _tooltip(worker, detail)
+
+## Ce que la fiche compacte a laissé tomber, remis en forme pour le survol.
+##
+## Elle rappelle le nom et le niveau en tête : une infobulle flotte près du curseur et non
+## dans la grille, donc rien ne garantit qu'on voie encore la fiche dont elle parle.
+func _tooltip(worker: Worker, detail: PackedStringArray) -> String:
+	var lines := PackedStringArray()
+	lines.append("%s   %s%d%s" % [worker.given_name(), LEVEL_PREFIX,
+		worker.level(_balance), CAPPED_MARK if worker.is_capped(_balance) else ""])
+	lines.append(XP_TEXT % worker.xp())
+	lines.append("")
+	if detail.is_empty():
+		lines.append(TOOLTIP_NO_TRACKS)
+		return "
+".join(lines)
+	lines.append(TOOLTIP_TRACKS)
+	lines.append_array(detail)
+	return "
+".join(lines)
 
 ## La dernière ligne : un palier qu'on vient de franchir, ou l'XP totale à défaut.
 ##
