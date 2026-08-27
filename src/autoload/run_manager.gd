@@ -64,6 +64,17 @@ func outcome() -> RunOutcome:
 		return null
 	return _state.outcome()
 
+## Ce que la journée en cours a rendu, et ce que la fermer va coûter. null hors run.
+##
+## Un relais sur l'orchestrateur, comme `outcome()` en est un sur l'état : c'est la porte
+## que les adapters connaissent, et un écran n'a aucune raison d'aller composer un bilan
+## qu'un seul appel rend. Le null hors run est la même politesse que les cinq accesseurs
+## ci-dessus — une vue qui existe avant le premier run doit pouvoir demander sans garde.
+func day_summary() -> DaySummary:
+	if _state == null:
+		return null
+	return RunOrchestrator.day_summary(_state)
+
 ## Ouvre ce run et l'annonce.
 ##
 ## Il n'annonce **pas** de phase quand le run attend son Cœur : la première journée n'a pas

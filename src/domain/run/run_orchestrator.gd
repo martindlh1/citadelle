@@ -302,8 +302,16 @@ static func resolve(state: RunState) -> PhaseReport:
 	if cycle.closes_the_day():
 		day_report = close_the_day(state)
 
-	return PhaseReport.create(cycle.day(), cycle.phase().id, production, sites, progress,
-		resting, completed, day_report)
+	var report := PhaseReport.create(cycle.day(), cycle.phase().id, production, sites,
+		progress, resting, completed, day_report)
+	# Retenu pour le bilan de la journée, et **seulement si la phase a produit**. Une phase
+	# qui ne résout pas n'a rien à additionner ; l'y mettre ferait compter une résolution de
+	# plus, c'est-à-dire mentir sur la seule colonne qui dise combien de fois la journée a
+	# travaillé. C'est ici plutôt que dans `end_phase()` parce que c'est le seul endroit qui
+	# **produise** un rapport : un second producteur, un jour, n'aurait pas à y penser.
+	if cycle.resolves():
+		state.record_phase(report)
+	return report
 
 ## Fait tomber cette vague sur le village, applique ce qu'elle ordonne, et rend ce que ça a
 ## coûté.
@@ -371,6 +379,28 @@ static func fight(state: RunState) -> BattleReport:
 		_finish(state, lost)
 
 	return BattleReport.create(damage, plundered, progress)
+
+## Ce que la journée en cours a rendu jusqu'ici, et ce que la fermer va coûter.
+##
+## `DESIGN.md` 2 en fait la seconde moitié du soir depuis `P2b` : « on y lit le bilan de la
+## journée avant de la fermer ». Il se lit donc **à tout moment** de la journée, et il rend
+## un bilan vide le matin d'un jour qui commence — ce qui est la bonne réponse et non un cas
+## particulier.
+##
+## Il est ici et pas sur `RunState` parce qu'il enchaîne **deux questions** posées à deux
+## systèmes : ce que les phases ont rendu, que le run tient, et ce que le village doit à
+## manger, que l'Économie sait seule. C'est la définition de ce fichier — « il ne calcule
+## rien, il enchaîne deux questions là où chaque système n'en répond qu'à une ».
+##
+## L'upkeep est **dû** et non consommé, puisqu'il se prélève à la fermeture. Les deux ne
+## diffèrent qu'en famine, et 2. a tranché ce que ça coûte contre ce que ça évite : un
+## bilan qui n'ajoute aucun geste, le bouton qui le referme étant celui qui ferme la
+## journée.
+static func day_summary(state: RunState) -> DaySummary:
+	assert(state != null, "bilan de journée sans run")
+	var day := mini(state.cycle().day(), state.cycle().days())
+	return DaySummary.of(day, state.day_reports(),
+		ProductionResolver.upkeep_due(state.labor(), state.balance().economy))
 
 ## Ferme la journée : prélève l'upkeep, arme la vague du jour, et rend ce qu'elle a coûté.
 ##
@@ -589,7 +619,12 @@ static func _drop_what_is_not_carried(state: RunState) -> void:
 ## la défausse a lieu, donc jamais sur une phase qui ne résout pas.
 static func _open_next_phase(state: RunState) -> void:
 	var draws := state.cycle().resolves()
-	state.cycle().advance()
+	# Une journée neuve efface le bilan de la précédente, et c'est le **seul** endroit qui
+	# l'efface. `advance()` dit lui-même qu'un jour vient de s'ouvrir, ce qui évite d'avoir
+	# à comparer un numéro de jour d'avant à un numéro d'après — le genre de souvenir que
+	# `RunState` n'a justement pas à porter.
+	if state.cycle().advance():
+		state.clear_day_reports()
 	if state.cycle().is_over():
 		_finish(state, RunOutcome.CAUSE_SURVIVED)
 		return
