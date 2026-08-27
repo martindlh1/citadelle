@@ -116,7 +116,7 @@ Le travail clic sur une fiche, puis sur son action — sur la carte ou dans la l
 Entrée     fonder le village, tenir la ligne, ou finir la phase — selon ce que le run attend.
 La caméra  Q/E : pivoter. Molette : zoomer. WASD : déplacer. R : recadrer.
 La vue     H : replier ce rapport. F2 : replier l'affectation. F1 : masquer tout le HUD.
-           F11 : plein écran."""
+           P : voir les piles. F11 : plein écran."""
 
 
 ## Ce que `--shot-evenings` doit valoir pour capturer l'écran de **fondation**.
@@ -133,6 +133,7 @@ var _world: DevWorld
 var _renderer: BuildingRenderer
 var _ghost: PlacementGhost
 var _targets: TargetHighlight
+var _piles: PileView
 var _marker: ActionMarker
 var _hand_view: HandView
 var _palette: CommodityPalette
@@ -289,6 +290,11 @@ func _ready() -> void:
 	_right_slot = _hud_slot(_make_right_column(), Control.SIZE_SHRINK_END,
 		Control.SIZE_SHRINK_BEGIN, HandView.band_height())
 	add_child(_right_slot)
+	# En dernier, donc au-dessus de tout le reste : c'est une modale, et une modale qui
+	# passerait sous la main laisserait cliquer ce qu'elle est censée couvrir.
+	_piles = PileView.create(_state().catalogue())
+	_piles.dismissed.connect(_show_piles)
+	add_child(_piles)
 
 	EventBus.phase_resolved.connect(_on_phase_resolved)
 	EventBus.battle_pending.connect(_on_battle_pending)
@@ -364,6 +370,15 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 func _handle_key(event: InputEventKey) -> void:
 	if not event.pressed or event.echo:
 		return
+	# La vue des piles est **modale** : tant qu'elle couvre l'écran, les seules touches qui
+	# répondent sont celles qui la referment. C'est la contrepartie de son voile — laisser
+	# jouer une carte derrière un panneau qui cache la carte serait exactement le geste
+	# qu'aucune image ne permet de vérifier.
+	if _piles.visible:
+		if event.keycode == KEY_P or event.keycode == KEY_ESCAPE:
+			_show_piles()
+		get_viewport().set_input_as_handled()
+		return
 	match event.keycode:
 		KEY_TAB:
 			_turn_the_held_card()
@@ -379,6 +394,8 @@ func _handle_key(event: InputEventKey) -> void:
 			_toggle_hud()
 		KEY_F2:
 			_fold_crew()
+		KEY_P:
+			_show_piles()
 		_:
 			var slot := event.keycode - KEY_1
 			if slot < 0 or slot >= SLOT_KEYS:
@@ -413,6 +430,21 @@ func _toggle_hud() -> void:
 	_hand_view.visible = shown
 	if shown:
 		_last_action = "HUD rendu. F1 pour le remasquer."
+
+## Ouvre la liste des piles, ou la referme.
+##
+## Elle remplace les trois lignes de compteurs que le pavé de texte portait depuis `I1`, et
+## elle les remplace au lieu de les doubler : `DESIGN.md` 8 demande « une pioche et une
+## défausse consultables, plutôt que trois compteurs », et garder les deux aurait laissé le
+## même chiffre lisible à deux endroits — le doublon qu'`E2` puis `W2` ont chacun retiré
+## en prenant un morceau de ce pavé.
+##
+## Le contenu se relit à l'ouverture et pas à chaque image : une pile ne bouge qu'à la
+## pioche ou à la défausse, et rien de tout ça ne peut arriver pendant qu'une modale
+## bloque les gestes.
+func _show_piles() -> void:
+	var shown := _piles.toggle(_state().deck())
+	_last_action = "Les piles. P, Échap, ou un clic pour refermer." if shown 		else "Piles refermées. P pour les revoir."
 
 ## Replie le panneau d'affectation sur sa barre de tête, ou le rouvre.
 ##
@@ -903,8 +935,6 @@ func _report() -> String:
 	if _report_level == Report.ESSENTIAL:
 		lines.append(_last_action)
 		return "\n".join(lines)
-	lines.append(_piles_line())
-	lines.append("")
 	lines.append(_last_action)
 	lines.append("")
 	lines.append(CONTROLS)
@@ -1023,20 +1053,6 @@ func _permissions() -> String:
 	if _state().cycle().resolves():
 		allowed.append("résout en partant")
 	return "—" if allowed.is_empty() else ", ".join(allowed)
-
-## Les trois pioches, une par ligne.
-##
-## Elles tenaient sur une seule jusqu'à `E2`, qui a posé le panneau de production dans le
-## coin où cette ligne finissait : le troisième pool passait dessous et se lisait à
-## moitié. Trois lignes courtes valent mieux qu'une longue tronquée, et la colonne ainsi
-## formée se lit de toute façon mieux qu'une file de séparateurs.
-func _piles_line() -> String:
-	var lines := PackedStringArray()
-	for pool in CardData.POOLS:
-		lines.append("Piles %-9s %d en main, %d pioche, %d défausse" % [pool,
-			_state().deck().hand_size(pool), _state().deck().draw_size(pool),
-			_state().deck().discard_size(pool)])
-	return "\n".join(lines)
 
 ## Ce que le curseur désigne, et ce que la carte tenue y ferait — sur **deux** lignes.
 ##
@@ -1383,6 +1399,8 @@ func _capture_if_asked() -> void:
 		if not _state().awaits_a_battle() and not _state().cycle().is_over():
 			_scripted_open_phase()
 	_apply_shot_view()
+	if DevShot.has_flag(DevShot.SHOT_PILES_FLAG):
+		_show_piles()
 	for _frame in DevShot.WARMUP_FRAMES:
 		await get_tree().process_frame
 	print("[run_harness] %s" % _banner())

@@ -61,7 +61,8 @@ const REPORT_OUTLINE_SIZE := 4
 ## rappelle rien.
 const CONTROLS := """La main    1-9 ou clic sur une carte : la prendre.
 Sur la carte    Clic gauche : jouer la carte tenue.   Clic droit : retirer l'action.   Espace : y envoyer un ouvrier.   Retour arr. : les rappeler.
-La phase    Tab : pivoter un bâtiment.   Entrée : résoudre le soir.        Caméra    Q/E : tourner.   Molette : zoom.   WASD : déplacer.   R : recadrer."""
+La phase    Tab : pivoter un bâtiment.   Entrée : résoudre le soir.   P : voir les piles.
+La caméra    Q/E : tourner.   Molette : zoom.   WASD : déplacer.   R : recadrer."""
 
 var _metrics: TerrainMetrics
 var _world: DevWorld
@@ -73,6 +74,7 @@ var _ghost: PlacementGhost
 var _targets: TargetHighlight
 var _marker: ActionMarker
 var _hand_view: HandView
+var _piles: PileView
 var _label: Label
 
 var _catalogue: CardCatalogue
@@ -146,6 +148,13 @@ func _ready() -> void:
 	add_child(_hand_view)
 	_label = _make_label()
 	add_child(_label)
+	# La vue des piles est du système Cartes, donc elle s'exerce ici autant que dans le
+	# harnais Run : c'est la scène où le `Deck` vit seul, et la seule où l'on peut piocher
+	# et défausser à la main pour regarder les piles bouger. Ajoutée en dernier, elle passe
+	# au-dessus de la main, ce qu'une modale doit faire.
+	_piles = PileView.create(_catalogue)
+	_piles.dismissed.connect(_show_piles)
+	add_child(_piles)
 
 	_draw_phase()
 	_capture_if_asked()
@@ -181,6 +190,13 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 func _handle_key(event: InputEventKey) -> void:
 	if not event.pressed or event.echo:
 		return
+	# Modale : tant que les piles couvrent l'écran, seules les touches qui les referment
+	# répondent. Même partage que dans le harnais Run.
+	if _piles.visible:
+		if event.keycode == KEY_P or event.keycode == KEY_ESCAPE:
+			_show_piles()
+		get_viewport().set_input_as_handled()
+		return
 	match event.keycode:
 		KEY_TAB:
 			_turns = posmod(_turns + 1, BuildingData.QUARTER_TURNS)
@@ -190,12 +206,23 @@ func _handle_key(event: InputEventKey) -> void:
 			_unstaff_here()
 		KEY_ENTER, KEY_KP_ENTER:
 			_resolve_evening()
+		KEY_P:
+			_show_piles()
 		_:
 			var slot := event.keycode - KEY_1
 			if slot < 0 or slot >= SLOT_KEYS:
 				return
 			_hold(slot)
 	get_viewport().set_input_as_handled()
+
+## Ouvre la liste des piles, ou la referme.
+##
+## Le rapport de ce harnais garde ses compteurs, à l'inverse de celui du harnais Run qui
+## les perd : ici ils sont le sujet. Une pioche qui s'épuise et se remélange est ce que
+## cette scène existe pour montrer, et la vue dit ce que les compteurs ne disent pas —
+## **quoi**, et non plus seulement combien.
+func _show_piles() -> void:
+	_piles.toggle(_deck)
 
 ## Prend en main la carte de ce rang, ou la repose si elle y était déjà.
 ##
@@ -726,6 +753,8 @@ func _capture_if_asked() -> void:
 		_scripted_opening()
 		_resolve_evening()
 	_scripted_opening()
+	if DevShot.has_flag(DevShot.SHOT_PILES_FLAG):
+		_show_piles()
 	for _frame in DevShot.WARMUP_FRAMES:
 		await get_tree().process_frame
 	print("[deck_harness] %s" % _hover_line())
