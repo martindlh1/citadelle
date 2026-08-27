@@ -109,6 +109,10 @@ static func create() -> BattlePanel:
 
 	panel._button = Button.new()
 	panel._button.text = LABEL_FIGHT
+	# Pas de focus clavier : Entrée déclenche déjà la bataille par le harnais, et un bouton
+	# focalisé la rejouerait à la touche suivante. Voir `AssignmentPanel._on_auto_pressed()`,
+	# où le défaut a été constaté et la règle écrite.
+	panel._button.focus_mode = Control.FOCUS_NONE
 	panel._button.pressed.connect(panel._on_fight_pressed)
 	column.add_child(panel._button)
 

@@ -474,16 +474,33 @@ func _make_header() -> HBoxContainer:
 	header.add_child(_counts)
 	_auto = Button.new()
 	_auto.text = AUTO_TEXT
+	_auto.focus_mode = Control.FOCUS_NONE
 	_auto.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
 	_auto.pressed.connect(_on_auto_pressed)
 	header.add_child(_auto)
 	_fold = Button.new()
 	_fold.text = FOLD_TEXT
+	_fold.focus_mode = Control.FOCUS_NONE
 	_fold.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
 	_fold.pressed.connect(toggle_folded)
 	header.add_child(_fold)
 	return header
 
+## **Aucun bouton de ce panneau ne prend le focus clavier**, et c'est un correctif plutôt
+## qu'un détail de style.
+##
+## Un `Button` focalisé réagit à `ui_accept`, c'est-à-dire à Entrée et à Espace. Or ces
+## deux touches appartiennent au harnais depuis `I1` — Entrée finit la phase, Espace envoie
+## un ouvrier — et un clic sur le chevron laissait donc le **dernier bouton cliqué**
+## intercepter la touche suivante. Le symptôme signalé : le panneau se repliait et se
+## rouvrait à chaque Entrée, au lieu que la phase avance.
+##
+## C'est le pendant clavier du partage que `CLAUDE.md` écrit pour la souris — une vue sur
+## laquelle on clique porte `MOUSE_FILTER_STOP` pour que le geste ne tombe pas dans le
+## `_unhandled_input` du harnais. Le focus va dans l'autre sens et demande l'inverse : ces
+## boutons se pressent à la souris, le clavier reste au harnais, donc ils le refusent.
+## Un bouton qui aurait vraiment besoin du clavier devrait alors annoncer sa touche, ce
+## qu'aucun ne fait.
 func _on_auto_pressed() -> void:
 	auto_requested.emit()
 
@@ -493,6 +510,7 @@ func _on_auto_pressed() -> void:
 func _make_row(index: int) -> Button:
 	var button := Button.new()
 	button.flat = true
+	button.focus_mode = Control.FOCUS_NONE
 	button.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	button.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
 	button.pressed.connect(_on_row_pressed.bind(index))
