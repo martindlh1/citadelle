@@ -741,6 +741,77 @@ func test_the_same_seed_replays_a_run_whose_hand_carries() -> void:
 	assert_dict(first.ledger().amounts()).is_equal(second.ledger().amounts())
 	assert_int(first.cycle().day()).is_equal(3)
 
+# --- Le bilan de la journée ------------------------------------------------------------------
+
+## Le bilan additionne les deux phases, et il est lisible **pendant** le soir — c'est-à-dire
+## avant que la journée ne se ferme, ce que `DESIGN.md` 2 exige depuis `P2b` : « on y lit le
+## bilan de la journée avant de la fermer ».
+func test_the_day_summary_sums_the_phases_that_resolved() -> void:
+	var state := _open(SEED, _two_working_phases_and_a_close())
+	_harvest_a_phase(state, &"ana")
+	_harvest_a_phase(state, &"bo")
+	var summary := RunOrchestrator.day_summary(state)
+	assert_int(summary.day()).is_equal(1)
+	assert_int(summary.resolutions()).is_equal(2)
+	assert_int(summary.produced()[&"wood"]).is_equal(2)
+	assert_int(summary.manned()).is_equal(2)
+
+## **Le cas qui porte la paire.** Ce que le bilan annonce comme dû est **exactement** ce que
+## la fermeture prélève. Les deux viennent de `ProductionResolver.upkeep_due()`, et c'est
+## toute la raison de l'avoir rendue publique plutôt que de recopier la multiplication : un
+## chiffre annoncé qui ne serait pas celui qu'on prélève est le mensonge d'écran que ce
+## projet a déjà payé deux fois.
+func test_what_the_summary_owes_is_what_the_close_takes() -> void:
+	var state := _open(SEED, _two_working_phases_and_a_close())
+	RunOrchestrator.end_phase(state)
+	RunOrchestrator.end_phase(state)
+	var owed := RunOrchestrator.day_summary(state).upkeep_due()
+	var report := RunOrchestrator.end_phase(state)
+	assert_int(owed).is_equal(3)
+	assert_int(report.day_report().upkeep().due()).is_equal(owed)
+
+## Une phase qui ne résout pas n'entre pas dans le compte. La compter ferait dire à la
+## seule colonne qui mesure le travail d'une journée qu'elle a résolu trois fois là où le
+## `.tres` en déclare deux.
+func test_a_phase_that_resolves_nothing_is_not_a_resolution() -> void:
+	var state := _open(SEED, _two_working_phases_and_a_close())
+	for _step in 3:
+		RunOrchestrator.end_phase(state)
+	# La journée est fermée mais le cycle a déjà ouvert la suivante : c'est le bilan du
+	# jour 2 qu'on lit, vide. Celui du jour 1 comptait deux résolutions, ci-dessus.
+	assert_int(RunOrchestrator.day_summary(state).resolutions()).is_equal(0)
+
+## Une journée neuve oublie la précédente. Sans ça, le bilan grossirait tout le run et
+## annoncerait au quinzième jour ce que quinze journées ont rendu.
+func test_a_new_day_forgets_the_one_before() -> void:
+	var state := _open(SEED, _two_working_phases())
+	_harvest_a_phase(state, &"ana")
+	assert_int(RunOrchestrator.day_summary(state).produced()[&"wood"]).is_equal(1)
+	RunOrchestrator.end_phase(state)
+	assert_int(RunOrchestrator.day_summary(state).day()).is_equal(2)
+	assert_bool(RunOrchestrator.day_summary(state).is_empty()).is_true()
+
+## Une bataille ferme la journée en deux temps — l'upkeep d'un côté, la ligne de l'autre —
+## et c'est elle qui ouvre le lendemain. Le bilan doit donc s'effacer avec elle et pas
+## avant : le joueur lit sa journée, se bat, et se réveille sur une journée vide.
+func test_a_battle_carries_the_day_over_and_then_clears_it() -> void:
+	var state := _open_besieged(1, 1, _two_working_phases_and_a_close())
+	_harvest_a_phase(state, &"ana")
+	_harvest_a_phase(state, &"bo")
+	RunOrchestrator.end_phase(state)
+	# La journée est fermée et le cycle ne bouge plus : la vague le retient, et le bilan
+	# est encore là. C'est la coupure de `DESIGN.md` 3.8, vue depuis le bilan.
+	assert_bool(state.awaits_a_battle()).is_true()
+	assert_int(RunOrchestrator.day_summary(state).resolutions()).is_equal(2)
+	RunOrchestrator.fight(state)
+	assert_bool(RunOrchestrator.day_summary(state).is_empty()).is_true()
+
+## Une phase posée et affectée sur la forêt, puis résolue.
+func _harvest_a_phase(state: RunState, worker: StringName) -> void:
+	var action := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST).action()
+	RunOrchestrator.staff(state, worker, action.id())
+	RunOrchestrator.end_phase(state)
+
 # --- La journée qui se ferme sur une phase à part -------------------------------------------
 
 ## Le modèle de journée retenu à `I2b` : deux phases qui posent, affectent et produisent,
