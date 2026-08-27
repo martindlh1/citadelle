@@ -116,7 +116,7 @@ Le travail clic sur une fiche, puis sur son action — sur la carte ou dans la l
 Entrée     le pas que le bouton en bas à droite annonce : fonder, finir, tenir la ligne, relancer.
 La caméra  Q/E : pivoter. Molette : zoomer. WASD : déplacer. R : recadrer.
 La vue     H : replier ce rapport. F2 : replier l'affectation. F1 : masquer tout le HUD.
-           P : voir les piles. F11 : plein écran."""
+           P : voir les piles. B : le bilan de la journée. F11 : plein écran."""
 
 
 ## Ce que `--shot-evenings` doit valoir pour capturer l'écran de **fondation**.
@@ -219,6 +219,9 @@ var _right_slot: MarginContainer
 var _step_slot: MarginContainer
 var _step: StepButton
 var _end_screen: RunEndScreen
+
+## Le bilan de la journée, ouvert au soir. Voir `_show_summary()`.
+var _summary: DaySummaryView
 
 ## Le seed du run **courant**, qui n'est plus `SEED` dès qu'on relance.
 ##
@@ -338,6 +341,13 @@ func _ready() -> void:
 	# En dernier, donc au-dessus de la vue des piles elle-même : un run fini l'est pendant
 	# qu'une modale est ouverte comme pendant qu'elle ne l'est pas, et le verdict passe
 	# devant tout le reste.
+	# Le bilan de la journée, sous l'écran de fin et au-dessus du reste : les deux sont des
+	# modales, et une partie finie passe devant une journée à lire.
+	_summary = DaySummaryView.create(_palette)
+	_summary.close_requested.connect(_press_on)
+	_summary.dismissed.connect(_summary.dismiss)
+	add_child(_summary)
+
 	_end_screen = RunEndScreen.create()
 	_end_screen.restart_requested.connect(_restart)
 	_end_screen.dismissed.connect(_end_screen.dismiss)
@@ -351,6 +361,9 @@ func _ready() -> void:
 	# les deux ». Écouter la seconde ferait apparaître le verdict au moment où le run
 	# disparaît, donc trop tard pour en lire quoi que ce soit.
 	EventBus.run_finished.connect(_on_run_finished)
+	# Le bilan s'ouvre à l'entrée d'une phase qui ne fait que fermer la journée, et c'est
+	# `phase_changed` qui le dit — jamais un nom de phase, que `DESIGN.md` 2 interdit.
+	EventBus.phase_changed.connect(_on_phase_changed)
 	# La première ligne du jeu doit parler du premier geste. « Prendre une carte » était
 	# vrai tant qu'un run s'ouvrait Cœur posé et main tirée ; depuis `I2` il n'y a ni
 	# l'un ni l'autre, et l'écran conseillerait un geste que le domaine refuse.
@@ -484,6 +497,8 @@ func _handle_key(event: InputEventKey) -> void:
 			_unstaff_here()
 		KEY_ENTER, KEY_KP_ENTER:
 			_press_on()
+		KEY_B:
+			_show_summary()
 		KEY_H:
 			_cycle_report()
 		KEY_F1:
@@ -880,6 +895,7 @@ func _restart() -> void:
 	_last_delta = {}
 	_panel.clear()
 	_battle.clear()
+	_summary.dismiss()
 	_end_screen.dismiss()
 	_last_action = "Poser le Cœur : un clic sur la carte, ou Entrée pour la case suggérée."
 	_refresh_targets()
@@ -891,7 +907,46 @@ func _restart() -> void:
 ## range, et lui faire redemander un état qui peut déjà avoir disparu serait une
 ## dépendance de plus pour rien.
 func _on_run_finished(outcome: RunOutcome) -> void:
+	# Le bilan de la dernière journée s'efface : deux modales empilées feraient lire un
+	# récapitulatif de journée derrière un verdict de run, et la partie est finie.
+	_summary.dismiss()
 	_end_screen.show_outcome(outcome, _run_seed)
+
+## Une phase vient de commencer. Le bilan de la journée s'ouvre si c'est le moment de lire.
+##
+## **Le moment se demande au domaine et jamais à un nom de phase** : c'est une phase qui
+## ferme la journée et n'autorise aucun geste, donc une phase où il n'y a rien d'autre à
+## faire que lire. `DESIGN.md` 2 en fait la seconde moitié du soir, et cette condition-là
+## est ce qui garde la promesse d'échanger la journée par un `.tres` — un modèle dont la
+## dernière phase se joue encore n'ouvre pas de modale par-dessus les cartes.
+func _on_phase_changed(_day: int, _phase: StringName) -> void:
+	if _is_a_reading_phase():
+		_show_summary()
+
+## La phase courante est-elle une phase où l'on ne fait que lire ?
+func _is_a_reading_phase() -> bool:
+	var cycle := _state().cycle()
+	if cycle.is_over() or not cycle.closes_the_day():
+		return false
+	return not cycle.permits(PhaseDef.ACTION_PLAY) \
+		and not cycle.permits(PhaseDef.ACTION_ASSIGN)
+
+## Ouvre le bilan de la journée, ou le referme s'il est déjà là.
+##
+## La vague est **nommée** à la vue plutôt que devinée par elle : ce qui tombe cette nuit
+## se lit sur le calendrier de `data/balance/`, et un panneau qui irait le chercher
+## connaîtrait l'équilibrage. Même partage que les prénoms des morts sur `BattlePanel`.
+func _show_summary() -> void:
+	if _summary.visible:
+		_summary.dismiss()
+		return
+	var summary := RunManager.day_summary()
+	if summary == null:
+		return
+	var slot := _state().balance().run.wave_on(_state().cycle().day())
+	_summary.show_summary(summary, _state().ledger(),
+		_state().balance().economy.upkeep_resource,
+		"" if slot == null else slot.label)
 
 ## Termine la phase. C'est `RunManager` qui décide si ça résout — le harnais ne connaît
 ## pas la journée, il la traverse.
@@ -911,6 +966,11 @@ func _end_phase() -> PhaseReport:
 		return null
 	var finished := _phase_label()
 	_ending_label = finished
+	# La phase qu'on quitte était peut-être celle qu'on lisait, donc le bilan se referme —
+	# **avant** l'appel et non après. `RunManager.end_phase()` publie `phase_changed`, donc
+	# la phase suivante peut rouvrir le bilan dans cette ligne même : refermer ensuite le
+	# rouvrait puis le fermait aussitôt, et le soir s'affichait sans son bilan.
+	_summary.dismiss()
 	var report := RunManager.end_phase()
 	_held_slot = NO_SLOT
 	_refresh_targets()

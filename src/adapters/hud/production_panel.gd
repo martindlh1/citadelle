@@ -74,6 +74,18 @@ const KEY_XP := "Progression"
 const KEY_SITES := "Chantiers"
 const KEY_UPKEEP := "Upkeep"
 
+## Ce que le bandeau du panneau dit d'une phase **passée**.
+##
+## Il n'y en avait qu'un — « fin de journée » — et le reste du temps le bandeau était vide,
+## si bien que le titre « Jour 3 · Soir » se lisait comme l'état courant alors qu'il nomme
+## la phase qui vient de finir. Plusieurs runs joués à la main ont buté dessus : ce panneau
+## et le bandeau de tête sont **deux horloges qui se contredisent sur le même écran**, et
+## c'est la plus petite qui avait raison.
+##
+## `P2b` répare la lecture par les deux bouts : le bilan de journée prend en charge « où en
+## est-on », et ce panneau annonce désormais son propre temps — passé — à toutes les
+## résolutions et pas seulement à la dernière de la journée.
+const BADGE_RESOLVED := "résolu"
 const BADGE_CLOSES := "fin de journée"
 const BADGE_FAMINE := "famine"
 const BADGE_DONE := "achevé"
@@ -125,7 +137,7 @@ func show_report(report: PhaseReport, phase_label: String) -> void:
 	assert(report != null, "panneau de production sans rapport")
 	visible = true
 	_title.text = "Jour %d · %s" % [report.day(), phase_label]
-	_badge.text = BADGE_CLOSES if report.closes_the_day() else ""
+	_badge.text = BADGE_CLOSES if report.closes_the_day() else BADGE_RESOLVED
 	for child in _rows.get_children():
 		_rows.remove_child(child)
 		child.queue_free()
