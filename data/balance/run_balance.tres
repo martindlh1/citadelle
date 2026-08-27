@@ -11,6 +11,7 @@
 script = ExtResource("2_phase_def")
 id = &"morning"
 label = "Matin"
+color = Color(0.45, 0.66, 0.88, 1)
 allows = Array[StringName]([&"play", &"assign"])
 resolves = true
 
@@ -18,6 +19,7 @@ resolves = true
 script = ExtResource("2_phase_def")
 id = &"afternoon"
 label = "Après-midi"
+color = Color(0.93, 0.66, 0.31, 1)
 allows = Array[StringName]([&"play", &"assign"])
 resolves = true
 

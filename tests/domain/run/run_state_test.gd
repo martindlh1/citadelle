@@ -320,6 +320,7 @@ func _phase(id: StringName, allows: Array, resolves: bool) -> PhaseDef:
 	var phase := PhaseDef.new()
 	phase.id = id
 	phase.label = String(id)
+	phase.color = Color(0.5, 0.5, 0.5)
 	var kinds: Array[StringName] = []
 	kinds.assign(allows)
 	phase.allows = kinds

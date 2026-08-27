@@ -71,6 +71,7 @@ func _working() -> PhaseDef:
 	var phase := PhaseDef.new()
 	phase.id = &"a_phase"
 	phase.label = "Une phase"
+	phase.color = Color(0.5, 0.5, 0.5)
 	var kinds: Array[StringName] = [PhaseDef.ACTION_PLAY, PhaseDef.ACTION_ASSIGN]
 	phase.allows = kinds
 	phase.resolves = false

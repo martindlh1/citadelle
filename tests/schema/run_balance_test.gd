@@ -254,6 +254,7 @@ func _phase(id: StringName, resolves: bool) -> PhaseDef:
 	var phase := PhaseDef.new()
 	phase.id = id
 	phase.label = String(id).capitalize()
+	phase.color = Color(0.5, 0.5, 0.5)
 	var kinds: Array[StringName] = [PhaseDef.ACTION_PLAY, PhaseDef.ACTION_ASSIGN]
 	phase.allows = kinds
 	phase.resolves = resolves
