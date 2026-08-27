@@ -115,7 +115,7 @@ Le travail clic sur une fiche, puis sur son action — sur la carte ou dans la l
            Espace reste le raccourci : envoyer sur la case survolée sans rien tenir.
 Entrée     fonder le village, tenir la ligne, ou finir la phase — selon ce que le run attend.
 La caméra  Q/E : pivoter. Molette : zoomer. WASD : déplacer. R : recadrer.
-La vue     H : replier ce rapport. F1 : masquer tout le HUD."""
+La vue     H : replier ce rapport. F2 : replier l'affectation. F1 : masquer tout le HUD."""
 
 
 ## Ce que `--shot-evenings` doit valoir pour capturer l'écran de **fondation**.
@@ -279,8 +279,14 @@ func _ready() -> void:
 	# La bande **entière** et rien de plus : `CARD_GAP` y est déjà compris deux fois, donc
 	# l'écart au-dessus des cartes est dedans. Lui ajouter la marge du HUD volerait seize
 	# pixels de plus à une colonne de droite qui n'en a aucun à donner.
+	# La colonne s'accroche **en haut** et non en bas depuis que le panneau d'affectation se
+	# replie. Accrochée en bas, elle gardait le panneau contre la main et faisait dériver le
+	# compte rendu de phase avec sa hauteur — replier faisait chuter le rapport de trois
+	# cent cinquante pixels, alors que `W2` ne lui demande qu'une chose : rester au même
+	# endroit d'une résolution à l'autre. En haut, le rapport ne bouge jamais et c'est le
+	# panneau, qui vient de changer de taille exprès, qui se déplace.
 	_right_slot = _hud_slot(_make_right_column(), Control.SIZE_SHRINK_END,
-		Control.SIZE_SHRINK_END, HandView.band_height())
+		Control.SIZE_SHRINK_BEGIN, HandView.band_height())
 	add_child(_right_slot)
 
 	EventBus.phase_resolved.connect(_on_phase_resolved)
@@ -344,6 +350,8 @@ func _handle_key(event: InputEventKey) -> void:
 			_cycle_report()
 		KEY_F1:
 			_toggle_hud()
+		KEY_F2:
+			_fold_crew()
 		_:
 			var slot := event.keycode - KEY_1
 			if slot < 0 or slot >= SLOT_KEYS:
@@ -378,6 +386,24 @@ func _toggle_hud() -> void:
 	_hand_view.visible = shown
 	if shown:
 		_last_action = "HUD rendu. F1 pour le remasquer."
+
+## Replie le panneau d'affectation sur sa barre de tête, ou le rouvre.
+##
+## Le troisième cran de dégagement du HUD, et il complète les deux autres au lieu de les
+## doubler. `H` ne touche qu'au pavé de texte à gauche ; `F1` emporte tout, main comprise,
+## donc empêche de jouer. Celui-ci rend la moitié droite de la carte **sans rien perdre de
+## jouable** : la barre de tête garde le compte des ouvriers, le bouton **Auto** et le
+## liseré de phase, et les cartes redeviennent entièrement visibles.
+##
+## Le geste existe aussi au clic, sur le chevron du panneau, et c'est le chemin principal —
+## cette touche n'est que le raccourci. C'est l'inverse du partage d'avant `P1a`, où le
+## clavier commandait et où la souris ne suivait pas.
+##
+## Le panneau garde son propre état plié : c'est de l'affichage, pas du jeu. Le harnais ne
+## fait que dire ce qui vient d'arriver, comme pour les deux autres crans.
+func _fold_crew() -> void:
+	_last_action = "Affectation repliée. F2 pour la rouvrir." if _crew.toggle_folded() \
+		else "Affectation rouverte."
 
 ## Prend en main la carte de ce rang, ou la repose si elle y était déjà.
 func _hold(slot: int) -> void:
@@ -1347,6 +1373,12 @@ func _capture_if_asked() -> void:
 ## Sans drapeau, la capture montre le rapport complet — ce que toutes les captures du projet
 ## montrent depuis `T2`, et ce qu'un lecteur de journal attend par défaut.
 func _apply_shot_view() -> void:
+	# Le repli est un **axe à part** du cran de rapport, et il s'applique avant lui : les
+	# deux se cumulent, et l'ordre ne change rien puisqu'ils portent sur deux vues qui ne
+	# se connaissent pas. `--shot-view aucun` emporte le HUD entier, donc le repli devient
+	# invisible — ce n'est pas une contradiction, c'est ce que « aucun » veut dire.
+	if DevShot.has_flag(DevShot.SHOT_FOLD_FLAG):
+		_fold_crew()
 	var asked := DevShot.argument(DevShot.SHOT_VIEW_FLAG)
 	if asked.is_empty():
 		return

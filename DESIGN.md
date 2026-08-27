@@ -508,7 +508,7 @@ Les places de roster de l'habitation y sont entrées à `W1`, ce qui a sorti ce 
 
 *Chasser* est la façon d'obtenir de la nourriture avant d'avoir une ferme : la version à cru d'un besoin qui devient ensuite un bâtiment. Un bâtiment de chasse pourra s'ajouter plus tard sans rien changer à la règle.
 
-***Terraformer* est sorti du deck de départ après `I2`**, et le verbe reste écrit. Ce n'est pas un renoncement : son **sens** — monter ou descendre — ne s'affiche nulle part. La touche le retourne bien, mais seulement carte en main, et ni la ligne de survol ni les cibles allumées ne disent lequel des deux on s'apprête à faire. Une carte qu'on oriente à l'aveugle est pire qu'une carte qu'on subit, ce qui est précisément l'inverse de ce que 3.5 cherchait en faisant du sens un choix de pose. Elle revient dans le deck le jour où l'écran montre où va la terre — `P1b`, la passe de confort l'ayant explicitement écarté de son premier tiers.
+***Terraformer* est sorti du deck de départ après `I2`**, et le verbe reste écrit. Ce n'est pas un renoncement : son **sens** — monter ou descendre — ne s'affiche nulle part. La touche le retourne bien, mais seulement carte en main, et ni la ligne de survol ni les cibles allumées ne disent lequel des deux on s'apprête à faire. Une carte qu'on oriente à l'aveugle est pire qu'une carte qu'on subit, ce qui est précisément l'inverse de ce que 3.5 cherchait en faisant du sens un choix de pose. Elle revient dans le deck le jour où l'écran montre où va la terre. **Ce jour n'est rattaché à aucun jalon**, et c'est voulu : la passe de confort l'a écarté de `P1a` puis de `P1b`, et c'est l'humain qui dira quand. Le verbe, son ciblage et sa résolution restent écrits et exercés en attendant.
 
 **`data/cards/` ne contient que les quatre premières.** *(Écrit à `D1`.)* La colonne MVP n'est pas indicative : les trois dernières n'ont ni résolution, ni bâtiment pour les débloquer, et les écrire aujourd'hui reviendrait à mettre dans le deck des cartes injouables pour plusieurs jalons. Elles entrent avec `X1`, `X2` et `X3`, en même temps que la colonne **Débloque** de 4.1.
 
@@ -642,6 +642,12 @@ arbitrer un `.tres`.
       non. La vue ne juge pas : elle pose la question au domaine et dessine la réponse. Une
       carte d'**action** n'en porte pas, et ce n'est pas un oubli — ce qu'elle dépense, ce
       sont des ouvriers, et combien dépend de la cible, donc ce prix-là n'existe qu'en visant.
+    - **Replier le panneau d'affectation**, d'un clic sur son chevron ou par `F2`. Ce point
+      n'était pas dans la liste d'origine : il est venu de l'humain en cours de jalon, et il
+      complète les deux crans de dégagement qui existaient déjà sans les doubler — `H` ne
+      touche qu'au pavé de texte, `F1` emporte la main avec le reste et empêche donc de
+      jouer. Replié, le panneau garde le compte des ouvriers, le bouton **Auto** et son
+      liseré de phase : de quoi savoir s'il faut rouvrir, et de quoi ne pas avoir à le faire.
     - **Distinguer les phases autrement qu'en toutes lettres.** Un liseré sur le bord haut du
       panneau d'affectation, à la couleur de la phase courante. `PhaseDef` porte une `color`
       sur le patron exact de `TerrainData` — pas de défaut, une sentinelle, un contrôle au
@@ -658,15 +664,19 @@ arbitrer un `.tres`.
     Il a aussi buté sur un défaut qu'il ne répare pas et qui appartient à `P1b` : **le
     panneau d'affectation déborde de sa colonne** et couvre le haut des cartes posées sous
     lui — dix-huit pixels de bande au sixième jour d'un run de test, c'est-à-dire la ligne du
-    rang au clavier, déjà illisible là avant `P1a`. C'est la troisième fois qu'une colonne de
-    droite ne tient pas, après `W2` et `I2`, et la première où elle cache une information
-    plutôt que d'en tronquer une.
+    rang au clavier, déjà illisible là avant `P1a`, et toujours mesurable en 1920×1080.
+    C'est la troisième fois qu'une colonne de droite ne tient pas, après `W2` et `I2`, et la
+    première où elle cache une information plutôt que d'en tronquer une. Le repli lui donne
+    une **échappatoire** — un clic rend les cartes entières — mais pas une réparation : un
+    panneau ouvert déborde toujours, et c'est `P1b` qui devra le loger.
 
     `--shot-phases` est né du même jalon, et de la phrase que ce projet s'applique depuis
     `I2` : un écran qu'aucune capture ne peut atteindre est celui que personne ne regardera.
     `--shot-evenings` résout des journées entières, donc toute capture s'arrêtait sur le
     premier créneau ; les autres phases étaient inatteignables, ce qui n'a gêné personne tant
-    qu'une phase ressemblait à sa voisine.
+    qu'une phase ressemblait à sa voisine. `--shot-fold` est venu par la même porte, et le
+    repli en est le cas le plus net : c'est un état qu'aucune suite de journées ne produit,
+    puisqu'il ne s'obtient que par un geste.
 
   - **P1b** — **Les listes qui cessent de mentir sur ce qu'elles cachent.** C'est le jalon
     qui doit d'abord régler le débordement ci-dessus, parce que les deux points qui suivent
@@ -676,14 +686,16 @@ arbitrer un `.tres`.
     - **Voir les piles.** Une pioche et une défausse consultables, plutôt que trois compteurs.
       C'est aussi ce qui rendra jouable l'`OUVERT` de 3.5 sur les cartes non jouées : on ne
       peut pas arbitrer ce qu'on ne voit pas.
-    - **Le sens d'un terrassement**, qui décide du retour de la carte dans le deck de départ
-      *(cf. 4.2)*. Il était au périmètre de `P1a` et en a été **retiré par l'humain** ; il
-      reste écrit ici, donc la promesse de 4.2 tient.
-
   - **P1c** — **Désigner l'une des deux actions d'une même case**, ce qui lèverait la
     contrainte provisoire de 3.5. Seul point de la famille qui touche le domaine, et le seul
     qui renverse une décision : il ne se traite qu'une fois choisi *comment* on désigne —
     un cycle au clic, un menu, ou une pile visible sur la case. La question précède le code.
+
+  **Le sens d'un terrassement n'est dans aucun des trois**, et c'est une décision et non un
+  oubli. Il était au périmètre de `P1a`, l'humain l'en a retiré, puis l'a retiré de `P1b`
+  aussi : il dira quand le remettre. Le verbe, sa résolution et son ciblage restent écrits
+  et exercés ; ce qui attend est l'écran qui montrerait où va la terre, donc le retour de la
+  carte au deck de départ *(cf. 4.2)*. La promesse tient, elle n'a simplement pas de date.
 
   Deux gestes de la liste d'origine étaient **déjà faits** avant l'ouverture de la
   famille : le clic droit sur une fiche rappelle son ouvrier, et la ligne de survol a

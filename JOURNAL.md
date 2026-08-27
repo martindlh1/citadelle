@@ -6,18 +6,23 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ## 2026-08-27 — `P1a` : la souris suffit, la main affiche ses prix, la phase a une couleur
 
-**État : terminé.** Quatre commits sur `feat/p1a-comfort`. Les trois commandes passent :
-boot sans erreur ni warning, tout `src/domain/` parse, **779 tests verts contre 777**.
-Sept captures, dont trois qui ont renvoyé le travail à l'établi.
+**État : terminé.** Six commits sur `feat/p1a-comfort`. Les trois commandes passent : boot
+sans erreur ni warning, tout `src/domain/` parse, **779 tests verts contre 777**. Onze
+captures, dont quatre qui ont renvoyé le travail à l'établi.
 
 `P1` s'est découpé en trois à l'ouverture, et la découpe suit ce que chaque point
 **touche** plutôt que sa taille : quatre ne sortent pas de `src/adapters/`, deux réclament
 une vue ou une place neuve, le septième rouvre une règle du domaine et une ligne de
 `DESIGN.md`. `P1a` prend les gestes ; `P1b` les listes ; `P1c` la désignation.
 
-Le sens du terrassement était au périmètre initial et **l'humain l'a retiré**. Il reste
-écrit en `P1b`, donc la promesse de 4.2 — la carte revient dans le deck le jour où l'écran
-montre où va la terre — tient.
+Le jalon a livré **quatre** points et non trois : le repli du panneau d'affectation s'y est
+ajouté en cours de route, demandé par l'humain après lecture des captures.
+
+**Le sens du terrassement n'est dans aucun des trois jalons.** Il était au périmètre de
+`P1a`, l'humain l'en a retiré, puis l'a retiré de `P1b` aussi : il dira quand le remettre.
+Le verbe, son ciblage et sa résolution restent écrits et exercés ; la promesse de 4.2 — la
+carte revient au deck le jour où l'écran montre où va la terre — tient, elle n'a simplement
+pas de date.
 
 ### Ce que le jalon livre
 
@@ -124,6 +129,59 @@ capture ne peut atteindre est celui que personne ne regardera.** Les deux teinte
 maintenant vérifiées à l'image et au pixel — `115,168,224` le matin, `237,168,79`
 l'après-midi, exactement ce que `run_balance.tres` porte.
 
+### Le repli du panneau, demandé en cours de jalon
+
+Il n'était pas dans la liste de `DESIGN.md` 8 : il vient de l'humain, après lecture des
+captures. Le panneau d'affectation se replie sur sa barre de tête, d'un clic sur son
+chevron ou par `F2`.
+
+C'est le **troisième cran de dégagement** du HUD, et il complète les deux autres au lieu de
+les doubler. `H` ne touche qu'au pavé de texte à gauche ; `F1` emporte tout, main comprise,
+donc empêche de jouer. Celui-ci rend la moitié droite de la carte **sans rien perdre de
+jouable**.
+
+Ce qui reste visible est le vrai sujet. La barre garde le compte — « 6 au travail · 0
+libre(s) · 6/14 place(s) » —, le bouton **Auto**, et le liseré de phase. Autrement dit : de
+quoi savoir s'il faut rouvrir, et de quoi ne pas avoir à le faire. Un repli qui n'aurait
+laissé qu'un titre aurait forcé un aller-retour à chaque phase.
+
+Le geste est **asymétrique** dans le code, et c'est délibéré : replier masque les quatre
+blocs, rouvrir n'en remontre qu'un. Les trois autres — les lignes, le « aucune action
+posée » et le « et N autre(s) » — s'excluent entre eux selon ce que le plateau porte, et
+c'est `_fill_rows()` qui tranche, à l'image suivante. Les rallumer à la main en aurait
+montré deux à la fois le temps d'une image, et recopié sa règle à un second endroit.
+
+Le panneau garde son propre état plié, et ça vaut d'être noté parce que la même vue fait
+les deux choses : elle **signale** qu'on a cliqué une fiche — qui l'on tient est un état de
+jeu, le harnais le garde — et elle **décide** seule d'être repliée, parce que sa propre
+taille ne regarde personne d'autre.
+
+### Une ancre déplacée, et ce qu'elle apprend
+
+Le repli a déplacé un défaut d'un cran, comme la carte plus haute l'avait fait avant lui.
+La colonne de droite était ancrée **en bas**, ce qui gardait le panneau contre la main ;
+sa hauteur devenant variable, le compte rendu de phase empilé au-dessus **chutait de trois
+cent cinquante pixels** à chaque repli. Or `W2` ne lui demande qu'une chose : rester au
+même endroit d'une résolution à l'autre.
+
+Ancrée **en haut**, la colonne fait l'inverse : le rapport ne bouge jamais, et c'est le
+panneau — qui vient de changer de taille exprès — qui se déplace. La règle est notée dans
+`CLAUDE.md` : dans une pile, **l'ancre va du côté de la vue la plus stable**, et le
+mouvement se paie par la plus variable.
+
+### Sur le débordement, une mesure et pas une impression
+
+Le panneau ouvert **déborde toujours** sur le haut des cartes, et je le mesure encore en
+1920×1080 : la carte de bâtiment y perd sa ligne de rang. Le repli est une échappatoire —
+un clic rend les cartes entières — et non une réparation. C'est `P1b` qui devra loger ce
+panneau, et le point « la liste des actions posées, pour de bon » est exactement l'endroit
+où ça se traitera.
+
+`--shot-fold` est né avec le repli, par la porte qui a déjà donné `--shot-view` et
+`--shot-phases` : le repli est un état qu'**aucune suite de journées ne produit**, puisqu'il
+ne s'obtient que par un geste. Sans drapeau, la seule façon de regarder un HUD replié
+aurait été de modifier du code pour le regarder.
+
 ### Un doublon retiré au passage
 
 La marge basse du HUD était un `88.0` écrit à la main dans le harnais, censé valoir la
@@ -161,9 +219,16 @@ débordement de la colonne **avant** ses deux points, qui s'y heurteraient tous 
 - **`data/balance/run_balance.tres` a deux lignes de plus** : une `color` par phase — bleu
   le matin, ambre l'après-midi. C'est de la data, donc réglable sans toucher au GDScript ;
   une phase sans couleur fait **refuser le boot**.
-- **Nouveau drapeau de capture** : `--shot-phases n` franchit n phases après les journées.
-  `--shot-evenings 3 --shot-phases 1` donne l'après-midi du quatrième jour.
-- **La branche n'est pas fusionnée** : `feat/p1a-comfort`, quatre commits.
+- **`F2` replie le panneau d'affectation**, et le chevron de sa barre de tête fait la même
+  chose à la souris. Replié, il garde le compte, **Auto** et son liseré de phase.
+- **Le compte rendu de phase ne bouge plus** : la colonne de droite s'accroche désormais en
+  haut. C'est le panneau qui se déplace quand il se replie, plus le rapport.
+- **Deux nouveaux drapeaux de capture** : `--shot-phases n` franchit n phases après les
+  journées — `--shot-evenings 3 --shot-phases 1` donne l'après-midi du quatrième jour — et
+  `--shot-fold`, drapeau nu, replie le panneau avant de capturer.
+- **Le panneau ouvert déborde toujours sur le haut des cartes**, y compris en 1920×1080.
+  C'est un défaut antérieur à ce jalon et il est renvoyé à `P1b` ; `F2` le contourne.
+- **La branche n'est pas fusionnée** : `feat/p1a-comfort`, six commits.
 
 ---
 

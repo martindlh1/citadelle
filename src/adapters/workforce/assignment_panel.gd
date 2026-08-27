@@ -129,6 +129,15 @@ const ROW_FONT_SIZE := 11
 const TITLE := "Affectation"
 const EMPTY_BOARD := "Aucune action posée — prendre une carte et cliquer une cible."
 const AUTO_TEXT := "Auto"
+
+## Le bouton qui replie le panneau, et celui qui le rouvre.
+##
+## Le chevron pointe vers **ce que le geste va faire** et non vers l'état courant : vers le
+## bas quand le contenu est là et va disparaître, vers le haut quand il est plié et va
+## remonter. C'est le sens que tous les replis d'interface emploient, et l'inverse se lit
+## comme une flèche qui ment.
+const FOLD_TEXT := "▾"
+const UNFOLD_TEXT := "▸"
 const NO_ONE := "—"
 
 ## Marque d'un palier franchi, sur la fiche de celui qui l'a franchi.
@@ -149,6 +158,15 @@ var _more: Label
 var _empty: Label
 var _grid: GridContainer
 var _auto: Button
+var _fold: Button
+
+## Le panneau est-il replié sur sa seule barre de tête ?
+##
+## État d'**affichage** et rien d'autre, donc il vit ici plutôt que dans le harnais — à
+## l'inverse de la sélection d'un ouvrier, qui est un état de jeu et que la vue se contente
+## de signaler. Le partage est celui que `HandView` a posé à `D2` : une vue ne décide pas
+## de ce que le joueur tient, mais elle décide de sa propre taille.
+var _folded := false
 
 ## Rang de ligne -> action qu'elle porte. C'est par lui que le clic retrouve son numéro,
 ## les boutons de ligne étant recyclés d'une image à l'autre.
@@ -234,10 +252,43 @@ func show_state(state: RunState, held: StringName, phase: PhaseDef) -> void:
 	_counts.text = "%d au travail · %d libre(s) · %d/%d place(s)" % [
 		assign.size(), free, roster.size(), places]
 
-	_fill_rows(state, assign)
-	_fill_cards(state, assign, held)
+	# Replié, les lignes et les fiches sont invisibles : les remplir serait un balayage du
+	# plateau et du roster par image pour des nœuds que personne ne regarde. La barre de
+	# tête, elle, continue de dire l'essentiel — c'est ce qui rend le repli tenable.
+	if not _folded:
+		_fill_rows(state, assign)
+		_fill_cards(state, assign, held)
 	_auto.disabled = not state.cycle().permits(PhaseDef.ACTION_ASSIGN)
 	_auto.text = AUTO_TEXT if _auto.disabled else "%s (%d)" % [AUTO_TEXT, free]
+
+## Replie le panneau sur sa barre de tête, ou le rouvre. Rend le nouvel état, ce qui évite
+## au harnais un accesseur de lecture qu'il serait le seul à appeler, et juste après.
+##
+## **Le panneau est la vue la plus haute du HUD**, et de loin : quatre lignes d'action plus
+## six fiches d'ouvrier à trois pistes chacune. C'est lui qui fait déborder la colonne de
+## droite depuis `W2`, et c'est lui qui recouvre le haut de la main aux journées chargées.
+## Le replier est donc le geste qui rend la carte au joueur — et il la rend *entière*, ce
+## que ni `H` ni `F1` ne font : `H` ne touche qu'au pavé de texte, et `F1` emporte la main
+## avec le reste, donc empêche de jouer.
+##
+## Ce qui reste visible est délibéré. La barre de tête garde le compte — « 6 au travail · 0
+## libre(s) » —, le bouton **Auto**, et le liseré de phase. Autrement dit : de quoi savoir
+## s'il faut rouvrir, et de quoi ne pas avoir à le faire. Un repli qui n'aurait laissé qu'un
+## titre aurait forcé un aller-retour à chaque phase.
+## Le geste est **asymétrique**, et c'est voulu : replier masque les quatre blocs, rouvrir
+## n'en remontre qu'un. Les trois autres — les lignes, le « aucune action posée » et le
+## « et N autre(s) » — s'excluent entre eux selon ce que le plateau porte, et c'est
+## `_fill_rows()` qui tranche, à l'image suivante. Les rallumer ici en montrerait deux à la
+## fois le temps d'une image, et surtout recopierait sa règle à un second endroit.
+func toggle_folded() -> bool:
+	_folded = not _folded
+	_fold.text = UNFOLD_TEXT if _folded else FOLD_TEXT
+	_grid.visible = not _folded
+	if _folded:
+		_rows.visible = false
+		_empty.visible = false
+		_more.visible = false
+	return _folded
 
 ## Retient qui vient de franchir un palier, pour l'annoncer sur sa fiche.
 ##
@@ -388,6 +439,11 @@ func _make_header() -> HBoxContainer:
 	_auto.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
 	_auto.pressed.connect(_on_auto_pressed)
 	header.add_child(_auto)
+	_fold = Button.new()
+	_fold.text = FOLD_TEXT
+	_fold.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
+	_fold.pressed.connect(toggle_folded)
+	header.add_child(_fold)
 	return header
 
 func _on_auto_pressed() -> void:

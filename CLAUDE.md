@@ -348,6 +348,21 @@ passe. Ranger est légitime ; croire qu'on vient de casser quelque chose ne l'es
 « 0 » — c'est-à-dire **lisible et faux**, ce qui est pire qu'illisible. Tout libellé qui
 porte un nombre passe en `AUTOWRAP_OFF`.
 
+**Une colonne de HUD s'accroche du côté de la vue qui ne bouge pas.** *(Écrit à `P1a`.)*
+La colonne de droite était ancrée en bas, ce qui gardait le panneau d'affectation contre la
+main. Le jour où ce panneau a su se replier, sa hauteur est devenue variable — et le compte
+rendu de phase, empilé au-dessus, a chuté de trois cent cinquante pixels à chaque repli,
+alors que `W2` ne lui demande qu'une chose : rester au même endroit d'une résolution à
+l'autre. Ancrée en haut, c'est la vue qui vient de changer de taille exprès qui se déplace,
+et celle qu'on relit qui ne bouge pas. La règle générale : **dans une pile, l'ancre va du
+côté de la vue la plus stable**, et le mouvement se paie par la plus variable.
+
+**Un état d'affichage appartient à la vue ; un état de jeu appartient au harnais.** La
+distinction se lit sur deux gestes voisins de la même vue : `AssignmentPanel` **signale**
+qu'on a cliqué une fiche — qui l'on tient est un état de jeu, le harnais le garde — mais
+il **décide** seul d'être replié ou non, parce que sa propre taille ne regarde personne
+d'autre. Un repli remonté au harnais aurait été un état de plus à faire circuler pour rien.
+
 **Une vue sur laquelle on clique porte `MOUSE_FILTER_STOP`**, à l'inverse des vues de lecture, qui laissent passer en `IGNORE` pour que le curseur de cellule continue de piocher dessous. Le geste tombe alors dans le `gui_input` de la vue et n'atteint jamais `_unhandled_input` du harnais, ce qui est exactement le partage voulu — sans quoi un clic sur une fiche jouerait aussi la carte tenue sur la case cachée derrière.
 
 ### Sélection de cellule

@@ -68,7 +68,15 @@ obligatoire ; les autres sont optionnels :
 | `--shot-rotate n` | quarts de tour appliqués au **bâtiment** à poser *(harnais Construction)* |
 | `--shot-evenings n` | soirs résolus avant de capturer *(harnais Cartes)*, journées jouées *(harnais Run)*, scène à montrer *(harnais HUD)* |
 | `--shot-phases n` | phases franchies **en plus** des journées *(harnais Run)* |
+| `--shot-fold` | replie le panneau d'affectation sur sa barre de tête *(harnais Run)* |
 | `--shot-view v` | cran d'affichage du HUD : `complet`, `essentiel`, `masque`, ou `aucun` *(harnais Run)* |
+
+`--shot-fold` est un drapeau **nu**, sans valeur : on le pose ou on ne le pose pas. Il est
+le cas le plus net de la phrase ci-dessous, parce que le repli ne s'obtient que par un
+geste du joueur — aucune suite de journées ne le produit. Sans lui, la seule façon de
+regarder un HUD replié serait de modifier du code pour le regarder, ce qui revient à ne
+jamais le regarder. Il se cumule avec `--shot-view`, sauf avec `aucun`, qui emporte le HUD
+entier.
 
 `--shot-view` existe pour la raison qui a valu son drapeau à `--shot-evenings`, et que
 `I2` a reformulée en une phrase : **un écran qu'aucune capture ne peut atteindre est celui
