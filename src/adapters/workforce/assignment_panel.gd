@@ -58,27 +58,21 @@ signal auto_requested()
 ## garde le panneau assez court pour ne pas monter dans le compte rendu de phase.
 const CARD_COLUMNS := 3
 
-## Lignes d'action affichées au plus, le reste étant compté sur une ligne.
+## Hauteur minimale laissée à la liste des actions quand la place manque.
 ##
-## Une borne et non une place « qui devrait suffire ». La première capture de `W2` a
-## montré ce qu'un panneau sans borne fait dans un HUD de taille fixe : il grandit avec le
-## plateau jusqu'à recouvrir son voisin, et le défaut n'apparaît qu'à la phase la plus
-## chargée — donc le plus tard possible.
+## Elle remplace le plafond de lignes que `W2` avait posé à trois et `I2` desserré à cinq,
+## et le remplaçant n'est pas un chiffre mieux choisi : c'est un **changement
+## d'instrument**. Un plafond de lignes est calibré sur une hauteur de HUD qu'il ne
+## mesure pas, donc il se trompe dès qu'autre chose bouge — et il s'est trompé. Mesure
+## faite à `P1b`, en 1920×1080 : à quatre lignes le panneau s'arrêtait 16 px au-dessus des
+## cartes, à **cinq** il descendait 28 px dessous, plus 16 px d'ombre — 45 des 86 px d'une
+## carte de main. Le plafond avait été calibré, et il était faux d'exactement une ligne.
 ##
-## **Trois à `W2`, cinq après `I2`**, et le desserrage n'est pas arbitraire : le panneau de
-## bataille a quitté cette colonne, ce qui y a rendu de la place, et cinq est ce qu'une main
-## peut poser en une phase — `hand_size` vaut cinq cartes d'action. Le plafond couvre donc
-## le cas courant au lieu de tronquer dès la quatrième pose, ce qu'une partie jouée à la
-## main a signalé comme gênant.
-##
-## Ça reste une borne de **harnais**, et le chiffre se mesure en capture plutôt qu'il ne se
-## devine : c'est un HUD posé sur un viewport déjà occupé par une barre, un compte rendu et
-## une main. L'écran du jeu aura à traiter la question pour de bon — une liste qui défile,
-## ou une place à elle — et c'est `P1`.
-const MAX_ROWS := 5
-
-## Ce que la ligne de reste annonce.
-const MORE_TEXT := "… et %d autre(s), sur la carte."
+## La liste reçoit désormais **toutes** les actions posées et défile dans ce que la
+## fenêtre laisse. Ce plancher existe pour le cas où elle ne laisse presque rien : sans
+## lui, une grille de fiches assez haute réduirait la liste à zéro et le plateau
+## disparaîtrait sans qu'aucune ligne ne le dise.
+const MIN_ROWS_HEIGHT := 44.0
 
 const PANEL_COLOR := Color(0.10, 0.11, 0.14, 0.94)
 const PANEL_RADIUS := 5
@@ -153,12 +147,21 @@ var _catalogue: CardCatalogue
 var _style: StyleBoxFlat
 
 var _counts: Label
+var _scroll: ScrollContainer
 var _rows: VBoxContainer
-var _more: Label
 var _empty: Label
 var _grid: GridContainer
 var _auto: Button
 var _fold: Button
+
+## Hauteur que le panneau ne doit pas dépasser, 0 tant que personne ne l'a dit.
+##
+## Elle vient du **harnais** et non d'une mesure prise ici, parce que c'est lui qui a bâti
+## la colonne : il sait ce que le compte rendu de phase occupe au-dessus et ce que la main
+## réclame en bas, deux choses dont ce panneau n'a aucune raison d'entendre parler. C'est
+## le partage que `HandView.band_height()` a posé à `P1a` — on **demande** une hauteur à
+## qui la connaît plutôt que de recopier un chiffre qui dérive.
+var _budget := 0.0
 
 ## Le panneau est-il replié sur sa seule barre de tête ?
 ##
@@ -203,14 +206,23 @@ static func create(catalogue: CardCatalogue) -> AssignmentPanel:
 
 	column.add_child(panel._make_header())
 
+	# La liste des actions est le seul bloc qui défile, et c'est une consigne : les fiches
+	# passent d'abord. Un panneau qui défilerait en entier cacherait des ouvriers, alors
+	# que ce sont eux qu'on vient chercher — la liste, elle, se relit sur la carte, où
+	# chaque action porte son marqueur.
+	panel._scroll = ScrollContainer.new()
+	panel._scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	panel._scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	# PASS et non STOP : la molette scrolle la liste quand elle déborde, et retombe sur le
+	# zoom de la caméra quand elle tient entière — `ScrollContainer` n'accepte l'événement
+	# que s'il a vraiment fait bouger quelque chose.
+	panel._scroll.mouse_filter = Control.MOUSE_FILTER_PASS
 	panel._rows = VBoxContainer.new()
 	panel._rows.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel._rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel._rows.add_theme_constant_override("separation", ROW_GAP)
-	column.add_child(panel._rows)
-
-	panel._more = _make_text("", ROW_FONT_SIZE, COUNT_COLOR)
-	panel._more.visible = false
-	column.add_child(panel._more)
+	panel._scroll.add_child(panel._rows)
+	column.add_child(panel._scroll)
 
 	panel._empty = _make_text(EMPTY_BOARD, ROW_FONT_SIZE, COUNT_COLOR)
 	column.add_child(panel._empty)
@@ -261,33 +273,39 @@ func show_state(state: RunState, held: StringName, phase: PhaseDef) -> void:
 	_auto.disabled = not state.cycle().permits(PhaseDef.ACTION_ASSIGN)
 	_auto.text = AUTO_TEXT if _auto.disabled else "%s (%d)" % [AUTO_TEXT, free]
 
+## Dit au panneau la hauteur dont il dispose. 0 lui rend sa taille naturelle.
+##
+## À rappeler à chaque image, comme `show_state()` : la fenêtre se redimensionne, le
+## compte rendu de phase change de longueur, et un budget calculé une fois à l'ouverture
+## serait le chiffre recopié que ce jalon existe pour retirer.
+func set_height_budget(pixels: float) -> void:
+	_budget = maxf(pixels, 0.0)
+
 ## Replie le panneau sur sa barre de tête, ou le rouvre. Rend le nouvel état, ce qui évite
 ## au harnais un accesseur de lecture qu'il serait le seul à appeler, et juste après.
 ##
-## **Le panneau est la vue la plus haute du HUD**, et de loin : quatre lignes d'action plus
-## six fiches d'ouvrier à trois pistes chacune. C'est lui qui fait déborder la colonne de
-## droite depuis `W2`, et c'est lui qui recouvre le haut de la main aux journées chargées.
-## Le replier est donc le geste qui rend la carte au joueur — et il la rend *entière*, ce
-## que ni `H` ni `F1` ne font : `H` ne touche qu'au pavé de texte, et `F1` emporte la main
-## avec le reste, donc empêche de jouer.
+## **Le panneau est la vue la plus haute du HUD**, et de loin : la liste des actions plus
+## six fiches d'ouvrier. Il débordait sur la main jusqu'à `P1b`, qui lui a donné un budget
+## de hauteur ; le repli reste ce qui rend la carte au joueur *entière*, ce que ni `H` ni
+## `F1` ne font : `H` ne touche qu'au pavé de texte, et `F1` emporte la main avec le reste,
+## donc empêche de jouer.
 ##
 ## Ce qui reste visible est délibéré. La barre de tête garde le compte — « 6 au travail · 0
 ## libre(s) » —, le bouton **Auto**, et le liseré de phase. Autrement dit : de quoi savoir
 ## s'il faut rouvrir, et de quoi ne pas avoir à le faire. Un repli qui n'aurait laissé qu'un
 ## titre aurait forcé un aller-retour à chaque phase.
-## Le geste est **asymétrique**, et c'est voulu : replier masque les quatre blocs, rouvrir
-## n'en remontre qu'un. Les trois autres — les lignes, le « aucune action posée » et le
-## « et N autre(s) » — s'excluent entre eux selon ce que le plateau porte, et c'est
-## `_fill_rows()` qui tranche, à l'image suivante. Les rallumer ici en montrerait deux à la
-## fois le temps d'une image, et surtout recopierait sa règle à un second endroit.
+## Le geste est **asymétrique**, et c'est voulu : replier masque les trois blocs, rouvrir
+## n'en remontre qu'un. Les deux autres — la liste et le « aucune action posée » —
+## s'excluent l'un l'autre selon ce que le plateau porte, et c'est `_fill_rows()` qui
+## tranche, à l'image suivante. Les rallumer ici en montrerait deux à la fois le temps
+## d'une image, et surtout recopierait sa règle à un second endroit.
 func toggle_folded() -> bool:
 	_folded = not _folded
 	_fold.text = UNFOLD_TEXT if _folded else FOLD_TEXT
 	_grid.visible = not _folded
 	if _folded:
-		_rows.visible = false
+		_scroll.visible = false
 		_empty.visible = false
-		_more.visible = false
 	return _folded
 
 ## Retient qui vient de franchir un palier, pour l'annoncer sur sa fiche.
@@ -323,16 +341,15 @@ func show_progress(report: ProgressReport) -> void:
 ## Elle est demandée au domaine, jamais devinée du nom de la carte.
 func _fill_rows(state: RunState, assign: Assignment) -> void:
 	var posted := state.board().to_plan().actions()
-	var shown_count := mini(posted.size(), MAX_ROWS)
 	_empty.visible = posted.is_empty()
-	_rows.visible = not posted.is_empty()
-	_row_actions.resize(shown_count)
-	while _row_buttons.size() < shown_count:
+	_scroll.visible = not posted.is_empty()
+	_row_actions.resize(posted.size())
+	while _row_buttons.size() < posted.size():
 		var button := _make_row(_row_buttons.size())
 		_row_buttons.append(button)
 		_rows.add_child(button)
 	for index in _row_buttons.size():
-		var shown := index < shown_count
+		var shown := index < posted.size()
 		_row_buttons[index].visible = shown
 		if not shown:
 			continue
@@ -341,9 +358,30 @@ func _fill_rows(state: RunState, assign: Assignment) -> void:
 		_row_buttons[index].text = _row_text(state, action, assign)
 		_row_buttons[index].add_theme_color_override("font_color",
 			_row_color(action, assign))
-	_more.visible = posted.size() > shown_count
-	if _more.visible:
-		_more.text = MORE_TEXT % (posted.size() - shown_count)
+	_fit_rows()
+
+## Donne à la liste ce que le budget laisse, une fois les fiches servies.
+##
+## Trois lignes, et chacune mérite d'être lue. La première demande à la liste sa hauteur
+## naturelle — celle qu'elle aurait si rien ne la bornait. La deuxième calcule ce qui
+## reste : la hauteur minimale du panneau **moins ce que la zone de défilement y compte
+## déjà**, donc tout le reste — barre de tête, fiches, marges — sans avoir à en
+## énumérer un seul. Une somme des parties se serait trompée le jour où un bloc s'ajoute
+## sans qu'on pense à l'y mettre, ce qui est exactement l'histoire de `MAX_ROWS`.
+##
+## La troisième borne : la liste prend sa hauteur naturelle si elle tient, le reste
+## sinon, et jamais moins que `MIN_ROWS_HEIGHT`.
+##
+## `get_combined_minimum_size()` lu ici rend la mise en page de l'image **précédente** —
+## c'est le piège que `E2` a payé — et c'est sans conséquence pour une seule raison,
+## qu'il faut nommer : ce panneau se redessine à chaque image, donc le calcul se pose au
+## pire une image après le geste qui l'a changé. Les captures s'en accommodent aussi,
+## `DevShot.WARMUP_FRAMES` en laissant passer trois.
+func _fit_rows() -> void:
+	var wanted := _rows.get_combined_minimum_size().y
+	var elsewhere := get_combined_minimum_size().y - _scroll.custom_minimum_size.y
+	var room := maxf(_budget - elsewhere, MIN_ROWS_HEIGHT) if _budget > 0.0 else wanted
+	_scroll.custom_minimum_size.y = minf(wanted, room)
 
 func _row_text(state: RunState, action: PlayedAction, assign: Assignment) -> String:
 	var held := assign.workers_on(action.id())

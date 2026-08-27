@@ -313,9 +313,35 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	_refresh_ghost()
 	_bar.show_ledger(_state().ledger(), _last_delta)
+	_crew.set_height_budget(_crew_budget())
 	_crew.show_state(_state(), _held_worker, RunManager.phase())
 	_label.text = _report()
 	_hover.text = _hover_line()
+
+## Ce qui reste au panneau d'affectation une fois la colonne servie.
+##
+## C'est le harnais qui répond, et pas le panneau, parce que c'est lui qui a bâti la
+## colonne : la marge du HUD, la bande de la main et la hauteur du compte rendu de phase
+## sont trois choses qu'il a posées lui-même. Les faire mesurer par le panneau lui aurait
+## demandé de connaître ses voisins, ce qu'aucune vue de ce projet ne fait.
+##
+## Le plafond de la colonne est **demandé à la main**, qui sait où elle commence, et non
+## déduit de la taille du conteneur qui porte la colonne. La première version faisait
+## l'inverse et laissait passer 28 px : un `MarginContainer` prend le **plus grand** de son
+## ancrage et de la taille minimale de son contenu, donc le vôtre grandit avec le panneau
+## à mesure que le panneau grandit. Un budget tiré de là se desserre exactement quand il
+## devrait serrer — il borne une hauteur à partir d'elle-même.
+##
+## Les trois termes, dans l'ordre : le haut de la bande de la main, la marge haute du HUD,
+## puis le compte rendu et l'écart qui l'en sépare. Aucun n'est un chiffre recopié — la
+## main dit où elle est, `_panel.size.y` est ce que le rapport mesure cette image-ci, et
+## `REPORT_MARGIN` est la constante que la colonne emploie déjà pour les deux.
+##
+## Recalculé à chaque image exprès : la fenêtre se redimensionne, et le compte rendu de
+## phase change de longueur d'une résolution à l'autre.
+func _crew_budget() -> float:
+	var column := _hand_view.global_position.y - REPORT_MARGIN
+	return column - _panel.size.y - REPORT_MARGIN
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -1365,9 +1391,41 @@ func _capture_if_asked() -> void:
 		_palette.bundle_text(_state().ledger().amounts()),
 		_state().ledger().total(), _state().ledger().capacity()])
 	print("[run_harness] %s" % _hover_line())
+	print("[run_harness] %s" % _fit_line())
 	var error := get_viewport().get_texture().get_image().save_png(path)
 	print("[run_harness] capture vers %s : %s" % [path, error_string(error)])
 	get_tree().quit(OK if error == OK else FAILED)
+
+## Ce que la colonne de droite fait de la place qu'elle a, en pixels de mise en page.
+##
+## Elle existe parce que le défaut que `P1b` répare a mis **trois jalons** à se faire
+## voir : le panneau d'affectation descendait sur la main, et personne ne pouvait le dire
+## autrement qu'à l'œil ou en sondant une capture pixel par pixel — ce qui est long, et
+## ce qui donne un chiffre en pixels de **fenêtre** alors que la mise en page raisonne en
+## pixels **logiques**, le projet étant en `stretch/mode = canvas_items`. Les deux ne se
+## comparent pas, et les confondre est la façon la plus sûre de mesurer le mauvais
+## chiffre.
+##
+## C'est la discipline que `F1` a écrite pour les tables du harnais, appliquée à une
+## image : **elle annonce ce qu'elle doit montrer**. Un recouvrement positif est un
+## défaut, et il se lit sur la sortie standard de n'importe quelle capture au lieu de se
+## redécouvrir.
+##
+## Les deux bords sont **demandés aux vues** et jamais recalculés. La première version de
+## cette ligne déduisait le haut de la bande du viewport moins `band_height()`, et elle
+## annonçait 28 px de recouvrement là où il n'y en avait aucun : un `Control` ancré sous un
+## `Node` se dimensionne sur la fenêtre, qui fait ici 676, tandis que `get_visible_rect()`
+## rend la taille logique après étirement, qui en fait 648. Deux nombres justes dans deux
+## repères différents, soustraits l'un à l'autre — exactement le genre de table à laquelle
+## `F1` dit de ne pas faire confiance. Comparés dans le repère où ils vivent tous les
+## deux, il n'y a rien à corriger.
+func _fit_line() -> String:
+	var band := _hand_view.global_position.y
+	var bottom := _crew.global_position.y + _crew.size.y
+	var verdict := "recouvrement %d px" % (bottom - band) if bottom > band \
+		else "%d px de dégagement" % (band - bottom)
+	return "colonne droite : bas du panneau y=%d, haut de la main y=%d, %s" % [
+		bottom, band, verdict]
 
 ## Applique le cran de HUD demandé par `--shot-view`, s'il l'est.
 ##
