@@ -788,8 +788,8 @@ arbitrer un `.tres`.
   après `I2b` et sur le même argument que la première : le contenu vient d'une partie jouée,
   pas d'une déduction. Découpée par ce que chaque point **touche**, comme `P1`.
 
-  - **P2a** — **Le geste qu'on répète, et l'écran qu'on ne voyait pas.** Aucun domaine, aucun
-    contrat.
+  - **P2a** ✅ — **Le geste qu'on répète, et l'écran qu'on ne voyait pas.** Aucun domaine,
+    aucun contrat — le sixième jalon d'affilée après `E2`, `W2`, `P1a`, `P1b` et `I2b`.
     - **Un bouton de fin de phase**, qui dit ce qu'il va faire : fonder, finir la phase,
       fermer la journée, ou tenir la ligne. `Entrée` fait déjà ces quatre choses selon l'état
       du run et le harnais calcule déjà laquelle — le bouton n'est que cette dispatch rendue
@@ -798,6 +798,19 @@ arbitrer un `.tres`.
       fois — `W2`, `I2`, `P1a` — et à qui l'on ne confie pas le geste le plus fréquent du jeu.
     - **Un écran de fin de run** *(cf. 5)*, victoire ou défaite, avec le score et ses quatre
       termes, et de quoi relancer sur le seed suivant.
+
+    Le pavé de texte perd la cause et le détail du score plutôt que de les doubler,
+    quatrième fois après `E2`, `W2` et `P1b`. `--shot-restart` naît de la porte habituelle :
+    relancer ne s'obtient que par un clic sur un écran de fin, donc `_restart()` aurait été
+    le seul chemin du harnais qui reconstruise un run entier sans qu'aucune passe
+    automatique ne l'emprunte.
+
+    Deux défauts trouvés en regardant, et tous deux **antérieurs au jalon**. « Main vide »
+    se dessinait une lettre par ligne sur l'écran de fondation depuis `I2` — un `Label` qui
+    s'enroule, seul dans un conteneur qui distribue, reçoit la largeur minuscule qu'il
+    déclare —, c'est-à-dire sur le seul texte de la seule image que `--shot-evenings 0`
+    existe pour montrer. Et le panneau d'affectation annonçait « cette phase ferme la
+    journée » à un run terminé, qui n'en a plus aucune.
   - **P2b** — **Le bilan de journée** *(cf. 2)*. Le seul point de la famille qui touche le
     domaine : quelqu'un doit se souvenir de la journée, et ce quelqu'un n'existe pas. Il
     répare du même coup les deux horloges qui se contredisaient — un compte rendu de phase
@@ -844,9 +857,9 @@ run, ce qui est exactement pourquoi elle est à part.)*
   Ce qu'il contraint en attendant, et c'est sa seule raison d'être écrit maintenant : **aucun rapport ne doit inventer sa propre conséquence.** Un système qui rencontre un état le **compte** et le rapporte ; il ne décide pas de ce qu'il fait. C'est ce que `UpkeepReport` fait déjà des non-nourris, et ce que `DamageReport` fait des pertes.
   *(Relevé après `F1`.)* Le format de combat de 3.6 le fait passer de confortable à **structurant**, et lui donne sa première forme concrète : les points de vie sont la ressource d'une manche, un ouvrier à zéro meurt, et ce qu'un **survivant** emporte est un effet progressif selon la part de vie perdue. Sans lui, un combat n'a que deux issues — rien, ou définitif —, et le joueur qui a bien joué ne sent rien du tout. C'est le premier état dont on connaisse déjà et la source et la graduation.
 
-**Ordre suivant** — **`P2a`**, puis **`P2b`**. Plusieurs runs entiers ont été joués après `I2b`, et ils ont rendu une liste : elle est ci-dessus, et elle se périme comme celle de `P1` si on attend. Puis **`I3`**, avec la nourriture en tête et son premier chiffre.
+**Ordre suivant** — **`P2b`**, le bilan de journée, seul point de `P2` qui reste. Plusieurs runs entiers ont été joués après `I2b`, et ils ont rendu une liste : elle est ci-dessus, et elle se périme comme celle de `P1` si on attend. Puis **`I3`**, avec la nourriture en tête et son premier chiffre.
 
-`M1` suit `P2a` de près, parce qu'un écran de fin qui propose de relancer désigne un endroit d'où l'on lance. `M2` attend une mesure et non du temps. Et il reste toujours **`P1c`**, qui attend une **question de design** : comment désigner l'une des deux actions d'une case.
+`M1` suit de près, parce que l'écran de fin de `P2a` propose désormais de relancer, ce qui désigne un endroit d'où l'on lance. `M2` attend une mesure et non du temps. Et il reste toujours **`P1c`**, qui attend une **question de design** : comment désigner l'une des deux actions d'une case.
 
 **L'arbitrage de `I2b` reste ouvert** et ne se referme qu'en jouant. `P2` ne le remplace pas — il rend les quinze journées moins pénibles à mener, ce qui est exactement le service que `P1` a rendu avant lui.
 

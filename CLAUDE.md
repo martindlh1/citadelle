@@ -429,6 +429,23 @@ suppose qu'on pouvait faire autrement, et dans une phase où l'on ne peut affect
 tout le monde est trivialement oisif. La réparation est du domaine et non de la vue : une
 phase qui ne résout pas n'en compte aucun.
 
+**Un `Label` qui s'enroule, seul dans un conteneur qui distribue, se coupe une lettre par
+ligne.** *(Écrit à `P2a`.)* `P1a` avait tiré la règle à moitié — « tout libellé qui porte un
+nombre passe en `AUTOWRAP_OFF` », parce qu'un « 20 » coupé en « 2 » au-dessus de « 0 » est
+lisible et faux. La cause est plus large que les nombres : un `Label` en autowrap déclare
+une largeur minimale minuscule, donc un conteneur qui distribue la lui donne. « Main vide »
+se dessinait ainsi à la verticale sur l'écran de fondation **depuis `I2`**, c'est-à-dire sur
+le seul texte de la seule image qu'un drapeau existe pour montrer. Un enroulement ne se
+justifie que là où la largeur est bornée par autre chose — une carte, un panneau à largeur
+minimale ; jamais pour une phrase posée seule.
+
+**Un texte qui nomme un geste se trompe dès qu'il y a deux situations.** *(Écrit à `P2a`.)*
+Le même libellé disait « Entrée termine la phase » sur l'écran de fondation, où Entrée pose
+le Cœur. Une main est vide dans deux cas — avant la fondation, et quand on a tout joué —
+et la phrase n'était juste que dans le second. Depuis qu'un bouton nomme le pas courant,
+plus rien d'autre n'a à le nommer : c'est le doublon habituel, avec en prime une chance sur
+deux de mentir.
+
 **Une vue sur laquelle on clique porte `MOUSE_FILTER_STOP`**, à l'inverse des vues de lecture, qui laissent passer en `IGNORE` pour que le curseur de cellule continue de piocher dessous. Le geste tombe alors dans le `gui_input` de la vue et n'atteint jamais `_unhandled_input` du harnais, ce qui est exactement le partage voulu — sans quoi un clic sur une fiche jouerait aussi la carte tenue sur la case cachée derrière.
 
 ### Sélection de cellule

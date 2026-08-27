@@ -4,6 +4,149 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-27 — `P2a` : le pas se nomme, la fin se regarde, et trois défauts plus vieux que le jalon
+
+**État : terminé.** Deux commits sur `feat/i2b-knobs`, à la suite de `I2b`. Les trois
+commandes passent : boot sans erreur ni warning, tout `src/domain/` parse, **810 tests
+verts** — inchangés, le jalon ne touche pas au domaine. Cinq captures.
+
+Il vient de plusieurs runs complets joués à la main, comme `P1` avant lui, et il en livre
+les deux points qui ne demandent rien au domaine. `DESIGN.md` a été écrit d'abord, dans son
+propre commit : deux de ces points ouvrent des jalons, et le quatrième **rouvre une ligne
+du hors-périmètre**.
+
+### Ce que le bouton corrige, et ce que ce n'est pas
+
+`Entrée` faisait déjà cinq choses selon l'état du run — fonder, finir la phase, fermer la
+journée, tenir la ligne, et depuis ce jalon relancer. Le manque n'était donc pas un geste :
+c'est qu'elle les faisait **sans le dire**. La seule chose de l'écran qui annonçait lequel
+des cinq allait tomber était une ligne du pavé de texte, au milieu de l'aide au clavier,
+c'est-à-dire dans la zone qu'on cesse de lire au bout de deux minutes.
+
+Le bouton n'ajoute rien : il rend visible une dispatch que le harnais calculait déjà pour
+router `Entrée`. Les deux chemins la refont **dans le même ordre**, et il fallait le noter
+en toutes lettres — `StepButton.show_state()` et `_press_on()` doivent départager les cinq
+cas identiquement, sans quoi le bouton proposerait un pas que la touche ne ferait pas.
+
+**Aucun nom de phase n'y entre**, ce qui est la contrainte de `DESIGN.md` 2 depuis `I1` :
+les cinq libellés viennent de quatre questions au domaine. Une journée à une seule phase
+dirait « Finir la journée » du premier coup, ce qui est exact.
+
+Il vit **dans la bande de la main** et non dans la colonne de droite. Ce n'est pas une
+préférence : cette colonne a débordé trois fois — `W2`, `I2`, `P1a` —, et on ne lui confie
+pas le geste le plus fréquent du jeu. La marge se demande à `HandView`, qui a gagné un
+troisième accesseur de mesure après `band_height()` et `band_bottom()` ; et la capture
+imprime désormais une seconde ligne de mise en page, couchée cette fois — où finissent les
+cartes, où commence le bouton, lequel mord sur l'autre.
+
+**Il double le bouton de `BattlePanel`, et c'est délibéré.** Le doublon que ce projet
+refuse porte sur un *chiffre* affiché deux fois, qui finit par différer de lui-même ; ici
+il n'y a qu'un geste, offert à deux endroits — comme le chevron de repli et `F2`, ou Espace
+et le clic sur une fiche. Le panneau garde le sien parce qu'il montre ce qu'on affronte.
+
+### L'écran de fin, dont la place était gardée sans qu'on l'ait dit
+
+`EventBus` porte deux signaux distincts depuis `I2`, et le commentaire qui les sépare
+écrivait déjà la phrase : « l'un annonce qu'une partie est **jouée**, l'autre qu'elle est
+**rangée**. Un écran de fin vit entre les deux. » Il n'y avait qu'une vue à écrire, et elle
+écoute `run_finished` — écouter `run_ended` aurait fait apparaître le verdict au moment où
+le run disparaît.
+
+Le pavé de texte **perd** la cause et le détail du score au lieu de les doubler, quatrième
+fois après `E2`, `W2` et `P1b`. Ce que le bandeau garde est un mot et un total, ce qu'un
+bandeau sait porter.
+
+**Relancer prend le seed suivant.** Un tirage libre rendrait le harnais différent à chaque
+lancement, donc les captures incomparables d'une session à l'autre — et la chronique de
+`I2b` a précisément besoin que quatre runs partent du même endroit. `+ 1` est frais pour le
+joueur et reproductible pour nous ; l'écran l'affiche.
+
+`--shot-restart` naît de la porte habituelle, cinquième drapeau nu : relancer ne s'obtient
+que par un clic sur un écran de fin, donc aucune suite de journées ne le produit.
+`_restart()` reconstruit un run entier — relief compris — et aurait été le seul chemin de
+cette taille qu'aucune passe automatique n'emprunte jamais.
+
+### Trois défauts trouvés en regardant, et deux sont plus vieux que le jalon
+
+**Le pavé d'aide était double-interligné, et c'est moi qui l'avais cassé.** Mes scripts
+d'édition écrivaient les fichiers sans forcer `LF`, donc les convertissaient en **CRLF** —
+et Godot lit un `\r` isolé comme un saut de ligne de plus. Toute chaîne multi-ligne d'un
+script se dessinait donc avec une ligne vide entre chaque ligne.
+
+Ce qui rend le cas instructif est **où il n'apparaissait pas** : ni au boot, ni au parsing,
+ni aux 810 tests, et pas non plus dans le dépôt, que git normalise en `LF` au commit. Le
+défaut n'existait que dans la copie de travail, c'est-à-dire exactement dans ce qu'une
+capture montre. Les warnings `CRLF will be replaced by LF` de `git add` étaient le signal,
+et je les ai pris pour du bruit préexistant pendant tout `I2b`.
+
+**« Main vide » se dessinait une lettre par ligne**, à la verticale, sur l'écran de
+fondation — **depuis `I2`**. Un `Label` en autowrap déclare une largeur minimale minuscule ;
+seul enfant d'un conteneur qui distribue, il reçoit cette largeur-là et se coupe par
+caractère. C'est la règle que `P1a` avait tirée à moitié : elle disait « tout libellé qui
+porte un nombre passe en `AUTOWRAP_OFF` », alors que la cause n'a rien à voir avec les
+nombres. Et l'ironie est nette — c'était le seul texte de la seule image que
+`--shot-evenings 0` existe pour montrer.
+
+Le même libellé **mentait une fois sur deux** : il annonçait « Entrée termine la phase » sur
+un écran où Entrée pose le Cœur. Une main est vide dans deux situations, et la phrase
+n'était juste que dans la seconde. Elle ne nomme plus rien du tout : le bouton s'en charge,
+et il ne se trompe dans aucune des deux.
+
+**Le panneau d'affectation annonçait « cette phase ferme la journée » à un run terminé**,
+qui n'en a plus aucune. Même famille que ce que `I2b` venait de corriger sur la même vue, un
+cran plus loin, et trouvée de la même façon — en regardant l'écran d'un état que le jalon
+venait de rendre atteignable.
+
+### Ce que `DESIGN.md` a gagné avant le code
+
+Quatre points écrits, dont deux ne sont pas de ce jalon.
+
+- **2** gagne la seconde moitié du soir : on y **lit sa journée** avant de la fermer. Il
+  tombe à l'entrée du soir et non après, ce qui échange une nuance — l'upkeep est annoncé
+  comme *dû* et non comme mangé — contre deux choses qui valent mieux : aucun geste de plus,
+  puisque le bouton qui referme le bilan est celui qui ferme la journée, et un soir qui a
+  quelque chose à montrer. C'est `P2b`, et **quelqu'un devra se souvenir de la journée**, ce
+  que rien ne fait aujourd'hui.
+- **5** gagne l'écran de fin, fait ici.
+- **6** devient « autour du run » et gagne le **menu** — une `.tscn` et la scène principale
+  de `project.godot`, donc l'humain — et un `OUVERT` sur la **persistance**.
+- **7** perd sa ligne « pas de sauvegarde en cours de run », qui devient une question.
+
+Sur la persistance, l'apport du jour est un rappel plutôt qu'une réponse : **l'architecture
+paie déjà une sauvegarde bien moins chère qu'un instantané.** Un seed plus une liste de
+gestes rejoue un run à l'identique — promis depuis `I0`, vérifié par un cas de test depuis
+`I1`. Un journal de gestes coûte un fichier et zéro format par système ; sérialiser
+`RunState` demande à sept états d'en avoir un, plus une migration. Le défaut du rejeu est
+net et il est écrit : **toute sauvegarde meurt au prochain changement d'équilibrage**. Ce
+qui tranche est une mesure que personne n'a prise — combien de temps prend un run joué à la
+main —, et c'est `M2`.
+
+### Prochain jalon
+
+**`P2b`**, le bilan de journée, seul point de `P2` qui reste et le seul qui touche le
+domaine. Puis **`M1`**, le menu, que l'écran de fin rend nécessaire en proposant de
+relancer.
+
+Et **l'arbitrage de `I2b` reste ouvert** : il ne se referme qu'en jouant.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché — `M1` sera le premier
+jalon à en demander.
+
+- **Un bouton en bas à droite** dit le pas qui vient et le fait au clic. `Entrée` reste le
+  raccourci et fait exactement la même chose.
+- **Un run fini ouvre un écran**, avec le score et ses quatre termes. **Relancer** ouvre un
+  run neuf sur le seed suivant, affiché. Un clic à côté referme l'écran pour regarder le
+  village ; le bouton en bas à droite dit toujours « Relancer ».
+- **Le pavé de texte a maigri** : la cause et le détail du score sont dans l'écran de fin.
+- **Un drapeau de plus** : `--shot-restart`, nu, relance avant de capturer.
+- **La branche n'est pas fusionnée** : `feat/i2b-knobs`, huit commits — six pour `I2b`, deux
+  pour `P2a`.
+
+---
+
+
 ## 2026-08-27 — `I2b` : les deux boutons posés, la journée gagne un soir, et ce qui reste est de jouer
 
 **État : partiel, et c'est sa forme normale.** Cinq commits sur `feat/i2b-knobs`. Les trois

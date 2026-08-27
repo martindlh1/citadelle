@@ -81,10 +81,11 @@ obligatoire ; les autres sont optionnels :
 | `--shot-fold` | replie le panneau d'affectation sur sa barre de tête *(harnais Run)* |
 | `--shot-piles` | ouvre la vue des piles *(harnais Run et Cartes)* |
 | `--shot-view v` | cran d'affichage du HUD : `complet`, `essentiel`, `masque`, ou `aucun` *(harnais Run)* |
+| `--shot-restart` | relance un run neuf, sur le seed suivant, avant de capturer *(harnais Run)* |
 | `--chronicle` | rejoue le run sous les quatre variantes d'équilibrage de `I2b` et imprime ce que ça donne, sans image *(harnais Run)* |
 
-`--shot-fold` et `--shot-piles` sont des drapeaux **nus**, sans valeur : on les pose ou on
-ne les pose pas. Ce sont les deux cas les plus nets de la phrase ci-dessous, parce que ni
+`--shot-fold`, `--shot-piles` et `--shot-restart` sont des drapeaux **nus**, sans valeur :
+on les pose ou on ne les pose pas. Ce sont les deux cas les plus nets de la phrase ci-dessous, parce que ni
 le repli ni la vue des piles ne s'obtiennent autrement que par un geste du joueur — aucune
 suite de journées ne les produit. Sans eux, la seule façon de regarder un HUD replié ou
 une pioche ouverte serait de modifier du code pour la regarder, ce qui revient à ne jamais
