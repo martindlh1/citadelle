@@ -196,6 +196,28 @@ Trois raisons : c'est diffable dans git, ça ne casse jamais au réenregistremen
 
 D'où la discipline : **chaque table du harnais annonce ce qu'elle doit montrer**, en toutes lettres, dans le rapport lui-même. C'est le rôle du verdict en fin de fichier, et il sert autant à celui qui écrit la table qu'à celui qui la relit six mois plus tard. Une table dont on ne sait pas dire ce qu'elle prouverait ne prouve rien.
 
+**Un chemin de capture qui court-circuite les gestes du joueur finit par mentir.**
+*(Écrit à `P1a`.)* La capture scriptée du harnais Run appelait `RunManager.play()` en
+direct, sans passer par le geste que la souris déclenche — donc sans rien redessiner.
+Toutes les captures du projet depuis `D2` montraient par conséquent **la main d'avant leurs
+propres poses**, cartes déjà jouées comprises, en contradiction avec le compte des piles
+affiché deux panneaux plus loin sur la même image. Le défaut a traversé trois jalons
+d'écran sans se voir, parce que rien sur une carte ne dépendait d'un état mutable : la
+liste était fausse, mais fausse d'une façon qu'aucun œil ne rattrapait.
+
+La règle qui en sort : **un scripteur de capture emprunte les fonctions de geste du harnais,
+ou il refait leur rafraîchissement à la main.** La première est toujours préférable — c'est
+d'ailleurs l'argument que `W2` a employé pour faire passer l'auto-affectation scriptée par
+`RunManager.auto_staff()`.
+
+**Et un état que la capture ne peut pas atteindre est un état que personne ne regardera.**
+La ligne existait pour `--shot-view` ; `P1a` l'a payée une seconde fois. `--shot-evenings`
+résout des **journées entières**, donc toute capture s'arrêtait sur la première phase, et
+les autres n'étaient joignables par aucun drapeau. Sans conséquence tant qu'une phase
+ressemblait à sa voisine — un trou le jour où une phase a eu une couleur à montrer, d'où
+`--shot-phases`. Quand une vue se met à commuter sur un état, vérifier **d'abord** qu'un
+drapeau atteint chacune de ses valeurs.
+
 ---
 
 ## Propriété des fichiers
@@ -309,6 +331,37 @@ Un `MarginContainer` plein écran dont l'enfant porte `SIZE_SHRINK_BEGIN` ou `SI
 **Une colonne qui tient à deux vues ne tient pas forcément à trois, et la réponse est un autre coin.** *(Écrit à `I2`.)* `W2` a appris que deux vues qui grandissent l'une vers l'autre doivent vivre dans le même conteneur ; le cran suivant est que ce conteneur a lui aussi une hauteur. Trois panneaux empilés plus la marge que la main réclame ne tiennent pas dans huit cents pixels, et ce qui déborde est le **dernier** — donc la vue la plus longue, donc celle qu'on regarde le plus. Rétrécir une marge ne rachète rien ; déplacer la vue la plus transitoire vers le côté où il reste de la place, si. C'est d'ailleurs ce que les jalons d'écran font depuis `E2` sans le dire : une vue est dans un coin « parce que rien d'autre ne l'occupait ».
 
 **Une vue qui nomme des disparus reçoit leurs noms, elle ne va pas les chercher.** *(Écrit à `I2`.)* Un adapter traduit couramment un identifiant en prénom en interrogeant le roster. Ça marche pour tout le monde sauf pour ceux dont il est justement question : l'orchestrateur retire les morts **avant** de rendre son rapport — c'est l'ordre qui fait qu'un mort ne gagne pas d'XP —, si bien que l'écran affiche des matricules là où il devrait raconter une perte. Rien ne plante, rien ne compile de travers, et la seule ligne du jeu qui raconte quelque chose ment. Le relevé se prend avant le geste qui détruit.
+
+**Agrandir une vue qui en touche une autre déplace un défaut, il n'en crée pas.**
+*(Écrit à `P1a`.)* Une carte de main a gagné douze pixels pour porter son coût ; le bord
+haut de la bande est monté d'autant, et le panneau d'affectation — qui déborde déjà de sa
+colonne aux journées chargées — est passé d'un chevauchement de trois pixels à un de
+trente. La tentation est alors de rogner la marge qui vient d'être ajoutée. C'est le
+mauvais réflexe **et** le mauvais diagnostic : le chevauchement préexistait, il mangeait
+déjà la ligne du rang au clavier, et personne ne l'avait vu parce que rien de ce qu'il
+cachait ne comptait. Mesurer d'abord *ce qui recouvre quoi*, en pixels, sur une capture —
+puis décider si l'on répare la cause ou si l'on range l'information neuve là où rien ne
+passe. Ranger est légitime ; croire qu'on vient de casser quelque chose ne l'est pas.
+
+**Un `Label` en `AUTOWRAP_WORD_SMART` coupe aussi ce qui n'a pas d'espace.** *(Constaté à
+`P1a`.)* Un « 20 » dans un `HBoxContainer` qui distribue s'affiche « 2 » au-dessus de
+« 0 » — c'est-à-dire **lisible et faux**, ce qui est pire qu'illisible. Tout libellé qui
+porte un nombre passe en `AUTOWRAP_OFF`.
+
+**Une colonne de HUD s'accroche du côté de la vue qui ne bouge pas.** *(Écrit à `P1a`.)*
+La colonne de droite était ancrée en bas, ce qui gardait le panneau d'affectation contre la
+main. Le jour où ce panneau a su se replier, sa hauteur est devenue variable — et le compte
+rendu de phase, empilé au-dessus, a chuté de trois cent cinquante pixels à chaque repli,
+alors que `W2` ne lui demande qu'une chose : rester au même endroit d'une résolution à
+l'autre. Ancrée en haut, c'est la vue qui vient de changer de taille exprès qui se déplace,
+et celle qu'on relit qui ne bouge pas. La règle générale : **dans une pile, l'ancre va du
+côté de la vue la plus stable**, et le mouvement se paie par la plus variable.
+
+**Un état d'affichage appartient à la vue ; un état de jeu appartient au harnais.** La
+distinction se lit sur deux gestes voisins de la même vue : `AssignmentPanel` **signale**
+qu'on a cliqué une fiche — qui l'on tient est un état de jeu, le harnais le garde — mais
+il **décide** seul d'être replié ou non, parce que sa propre taille ne regarde personne
+d'autre. Un repli remonté au harnais aurait été un état de plus à faire circuler pour rien.
 
 **Une vue sur laquelle on clique porte `MOUSE_FILTER_STOP`**, à l'inverse des vues de lecture, qui laissent passer en `IGNORE` pour que le curseur de cellule continue de piocher dessous. Le geste tombe alors dans le `gui_input` de la vue et n'atteint jamais `_unhandled_input` du harnais, ce qui est exactement le partage voulu — sans quoi un clic sur une fiche jouerait aussi la carte tenue sur la case cachée derrière.
 

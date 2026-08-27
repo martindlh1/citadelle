@@ -43,6 +43,16 @@ de la 4.7.2 qui expliquent pourquoi il en faut trois et pas une.
 dossier. Le harnais à lancer se choisit dans la constante `HARNESS` de
 `scenes/dev/dev_boot.gd`. Vide, on obtient le rapport de boot.
 
+**`F11` bascule en plein écran**, quel que soit le harnais : la touche vit sur le pivot
+et non dans un harnais, parce que c'est une propriété de la fenêtre et non de ce qu'on y
+montre. C'est le mode *fullscreen* sans bordure, donc à la résolution du bureau.
+
+Le décor sombre qu'on voit à gauche et à droite de la carte n'est **pas** du letterboxing :
+`project.godot` est en `stretch/aspect = "expand"`, qui n'ajoute jamais de bandes. C'est le
+cadrage — `CameraRig.frame()` cale la **diagonale de la carte sur la hauteur** de l'écran,
+et la `size` d'une caméra orthogonale Godot est verticale. Sur un écran large il reste donc
+du monde vide sur les côtés, à toute résolution : la molette zoome, `R` recadre.
+
 ## Capturer un rendu depuis un terminal
 
 Un harnais qui affiche quelque chose ne se vérifie ni au parsing ni aux tests : il
@@ -67,7 +77,16 @@ obligatoire ; les autres sont optionnels :
 | `--shot-turns n` | quarts de tour appliqués à la **caméra** |
 | `--shot-rotate n` | quarts de tour appliqués au **bâtiment** à poser *(harnais Construction)* |
 | `--shot-evenings n` | soirs résolus avant de capturer *(harnais Cartes)*, journées jouées *(harnais Run)*, scène à montrer *(harnais HUD)* |
+| `--shot-phases n` | phases franchies **en plus** des journées *(harnais Run)* |
+| `--shot-fold` | replie le panneau d'affectation sur sa barre de tête *(harnais Run)* |
 | `--shot-view v` | cran d'affichage du HUD : `complet`, `essentiel`, `masque`, ou `aucun` *(harnais Run)* |
+
+`--shot-fold` est un drapeau **nu**, sans valeur : on le pose ou on ne le pose pas. Il est
+le cas le plus net de la phrase ci-dessous, parce que le repli ne s'obtient que par un
+geste du joueur — aucune suite de journées ne le produit. Sans lui, la seule façon de
+regarder un HUD replié serait de modifier du code pour le regarder, ce qui revient à ne
+jamais le regarder. Il se cumule avec `--shot-view`, sauf avec `aucun`, qui emporte le HUD
+entier.
 
 `--shot-view` existe pour la raison qui a valu son drapeau à `--shot-evenings`, et que
 `I2` a reformulée en une phrase : **un écran qu'aucune capture ne peut atteindre est celui
@@ -75,6 +94,13 @@ que personne ne regardera.** Replier le rapport et masquer le HUD sont deux gest
 changent que l'image, donc les deux seuls dont ni le parsing ni les tests ne diront jamais
 rien. `aucun` rend la carte entière sans rien dessus, ce qui est aussi la façon de
 regarder un village de quinze journées.
+
+`--shot-phases` vient de la même phrase, appliquée à la journée elle-même. `--shot-evenings`
+résout des **journées entières**, donc une capture s'arrêtait toujours sur le premier
+créneau : toutes les autres phases étaient inatteignables. Ça n'a gêné personne tant
+qu'une phase ressemblait à sa voisine, et c'est devenu un trou à `P1a`, quand une phase a
+eu une couleur à montrer. `--shot-evenings 3 --shot-phases 1` capture donc l'après-midi du
+quatrième jour.
 
 Sur le harnais **Run**, `--shot-evenings 0` est un cas à part : il capture l'écran de
 **fondation**, avant que le run n'ait commencé. C'est le seul état que les autres valeurs

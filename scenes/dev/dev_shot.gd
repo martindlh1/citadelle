@@ -37,6 +37,25 @@ const SHOT_ROTATE_FLAG := "--shot-rotate"
 ## chemin de résolution d'un harnais ne serait jamais emprunté par un contrôle.
 const SHOT_EVENINGS_FLAG := "--shot-evenings"
 
+## Phases à franchir **en plus** des journées, avant de capturer. Lu par les harnais qui
+## connaissent une journée en phases.
+##
+## Il vient de `P1a`, et il vient de la phrase ci-dessous appliquée à elle-même : une
+## journée compte plusieurs phases, mais `--shot-evenings` en résout des journées entières,
+## donc une capture s'arrête toujours sur le **premier** créneau. Toutes les autres phases
+## étaient des écrans qu'aucune capture ne pouvait atteindre — ce qui n'a gêné personne
+## tant qu'une phase ressemblait à une autre, et qui est devenu un trou le jour où la phase
+## a eu une couleur à montrer.
+const SHOT_PHASES_FLAG := "--shot-phases"
+
+## Replier le panneau d'affectation avant de capturer. Drapeau **nu**, sans valeur.
+##
+## Même raison que les deux ci-dessus, et le repli est un cas encore plus net : c'est un
+## état qu'aucune suite de journées ne produit, puisqu'il ne s'obtient que par un geste du
+## joueur. Sans ce drapeau, la seule façon de regarder un HUD replié serait de modifier du
+## code pour le regarder — ce qui revient à ne jamais le regarder.
+const SHOT_FOLD_FLAG := "--shot-fold"
+
 ## Cran d'affichage du HUD au moment de capturer. Lu par les harnais qui en ont un.
 ##
 ## Il existe pour la raison qui a valu son drapeau à `--shot-evenings`, et que `I2` a
@@ -53,6 +72,15 @@ const WARMUP_FRAMES := 3
 ## Chemin de capture demandé, ou "" si aucune capture n'est demandée.
 static func path() -> String:
 	return argument(SHOT_FLAG)
+
+## Ce drapeau est-il présent, quelle que soit sa suite ?
+##
+## Pour les drapeaux qui n'ont pas de valeur — on les pose ou on ne les pose pas.
+## `argument()` ne sait pas les lire : il rend la chaîne **suivante**, donc un drapeau nu
+## en fin de ligne rendrait "" comme s'il était absent, et un drapeau nu suivi d'un autre
+## rendrait le nom de l'autre.
+static func has_flag(flag: String) -> bool:
+	return OS.get_cmdline_user_args().has(flag)
 
 ## Valeur qui suit ce drapeau sur la ligne de commande, ou "" s'il est absent.
 static func argument(flag: String) -> String:

@@ -27,6 +27,20 @@ const HARNESS_SCRIPTS: Dictionary[StringName, String] = {
 	&"combat": "res://scenes/dev/combat_harness.gd",
 }
 
+## Bascule plein écran / fenêtré, pour **tous** les harnais à la fois.
+##
+## Elle est ici et non dans un harnais parce qu'elle n'appartient à aucun : c'est une
+## propriété de la fenêtre, pas de ce qu'on y montre. Le pivot est le seul nœud que tous
+## les harnais ont au-dessus d'eux, donc le seul endroit où l'écrire une fois.
+##
+## `_unhandled_input` la place **après** les harnais dans la chaîne : un harnais qui
+## voudrait F11 pour autre chose garderait la priorité. Aucun ne le fait aujourd'hui, mais
+## c'est le bon sens de lecture — le pivot rattrape ce que personne n'a pris.
+##
+## `WINDOWED` et non `MAXIMIZED` au retour : on revient à la fenêtre qu'on avait, ce qui est
+## ce qu'une bascule promet.
+const FULLSCREEN_KEY := KEY_F11
+
 func _ready() -> void:
 	EventBus.database_ready.connect(_on_database_ready)
 	if HARNESS.is_empty():
@@ -38,6 +52,17 @@ func _ready() -> void:
 	var harness: Node = harness_script.new()
 	harness.name = String(HARNESS).to_pascal_case()
 	add_child(harness)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not (event is InputEventKey):
+		return
+	var key := event as InputEventKey
+	if not key.pressed or key.echo or key.keycode != FULLSCREEN_KEY:
+		return
+	var full := DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN
+	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if full
+		else DisplayServer.WINDOW_MODE_FULLSCREEN)
+	get_viewport().set_input_as_handled()
 
 func _on_database_ready() -> void:
 	print("[dev_boot] GameDatabase prêt, %d catégorie(s) indexée(s)."

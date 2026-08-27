@@ -84,6 +84,25 @@ const PANEL_COLOR := Color(0.10, 0.11, 0.14, 0.94)
 const PANEL_RADIUS := 5
 const PANEL_MARGIN := 10
 
+## Épaisseur du liseré qui dit la phase, sur le bord haut du panneau.
+##
+## **C'est le « signe qui bascule » que `DESIGN.md` 8 réclame**, et il est ici plutôt
+## qu'ailleurs pour une raison qui tient : la phase décide de ce qu'on a le droit de faire,
+## et ce panneau est l'endroit où on le fait — son bouton **Auto** s'éteint déjà quand la
+## phase n'autorise pas d'affecter. Le liseré et le bouton disent donc la même chose, l'un
+## en couleur et l'autre en gris.
+##
+## Sur le bord **haut** seulement : un cadre complet entourerait des fiches d'ouvrier qui
+## portent déjà leurs propres couleurs, et ferait un second cadre là où la fiche tenue en a
+## un. Une barre au-dessus du titre ne recouvre rien et se voit du coin de l'œil.
+const PHASE_RULE := 3
+
+## Couleur du liseré hors phase — avant le premier jour, et une fois le run fini.
+##
+## Un gris franc et non la teinte de la dernière phase jouée : « il n'y a plus de phase »
+## est un état, et le peindre aux couleurs de celle qui vient de finir dirait le contraire.
+const NO_PHASE_COLOR := Color(0.32, 0.34, 0.40)
+
 const ROW_GAP := 3
 const CARD_GAP := 5
 const BLOCK_GAP := 6
@@ -110,6 +129,15 @@ const ROW_FONT_SIZE := 11
 const TITLE := "Affectation"
 const EMPTY_BOARD := "Aucune action posée — prendre une carte et cliquer une cible."
 const AUTO_TEXT := "Auto"
+
+## Le bouton qui replie le panneau, et celui qui le rouvre.
+##
+## Le chevron pointe vers **ce que le geste va faire** et non vers l'état courant : vers le
+## bas quand le contenu est là et va disparaître, vers le haut quand il est plié et va
+## remonter. C'est le sens que tous les replis d'interface emploient, et l'inverse se lit
+## comme une flèche qui ment.
+const FOLD_TEXT := "▾"
+const UNFOLD_TEXT := "▸"
 const NO_ONE := "—"
 
 ## Marque d'un palier franchi, sur la fiche de celui qui l'a franchi.
@@ -117,12 +145,28 @@ const PROMOTED_MARK := "↑ "
 
 var _catalogue: CardCatalogue
 
+## Le fond du panneau, retenu pour que le liseré de phase se **repeigne sur place**.
+##
+## Une `StyleBoxFlat` neuve à chaque image serait une allocation par image pour une couleur
+## qui change deux fois par jour, et c'est exactement ce que `CLAUDE.md` refuse d'une vue
+## rafraîchie en continu.
+var _style: StyleBoxFlat
+
 var _counts: Label
 var _rows: VBoxContainer
 var _more: Label
 var _empty: Label
 var _grid: GridContainer
 var _auto: Button
+var _fold: Button
+
+## Le panneau est-il replié sur sa seule barre de tête ?
+##
+## État d'**affichage** et rien d'autre, donc il vit ici plutôt que dans le harnais — à
+## l'inverse de la sélection d'un ouvrier, qui est un état de jeu et que la vue se contente
+## de signaler. Le partage est celui que `HandView` a posé à `D2` : une vue ne décide pas
+## de ce que le joueur tient, mais elle décide de sa propre taille.
+var _folded := false
 
 ## Rang de ligne -> action qu'elle porte. C'est par lui que le clic retrouve son numéro,
 ## les boutons de ligne étant recyclés d'une image à l'autre.
@@ -149,7 +193,8 @@ static func create(catalogue: CardCatalogue) -> AssignmentPanel:
 	var panel := AssignmentPanel.new()
 	panel.name = "AssignmentPanel"
 	panel._catalogue = catalogue
-	panel.add_theme_stylebox_override("panel", _make_panel_style())
+	panel._style = _make_panel_style()
+	panel.add_theme_stylebox_override("panel", panel._style)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	var column := VBoxContainer.new()
@@ -180,13 +225,25 @@ static func create(catalogue: CardCatalogue) -> AssignmentPanel:
 	panel.add_child(column)
 	return panel
 
-## Redessine le panneau. `held` est l'ouvrier sélectionné, ou &"" si aucun.
+## Redessine le panneau. `held` est l'ouvrier sélectionné, ou &"" si aucun ; `phase` est la
+## phase courante, ou null hors run.
 ##
 ## Mise à jour sur place, appelable à chaque image : la règle que `E2` a écrite dans
 ## `CLAUDE.md`. Les lignes d'action sont recyclées et masquées plutôt que détruites, et
 ## les fiches ne naissent qu'une fois par ouvrier.
-func show_state(state: RunState, held: StringName) -> void:
+##
+## La phase arrive en **argument** plutôt que d'être tirée du `RunState`, alors que tout le
+## reste en vient. La raison est le hors-run : « quelle phase ? » n'a de réponse qu'avant la
+## dernière journée, et `RunManager.phase()` porte déjà ce garde-fou. Le lui redemander ici
+## en ferait un second exemplaire, donc un endroit de plus où la fin d'un run pourrait se
+## lire autrement.
+func show_state(state: RunState, held: StringName, phase: PhaseDef) -> void:
 	assert(state != null, "panneau d'affectation sans run")
+	# Aucun nom de phase n'entre ici, et c'est tout l'objet : la vue lit une couleur en
+	# data, comme le renderer de terrain lit celle d'un `TerrainData`. Une table
+	# `&"morning" -> bleu` écrite dans cet adapter serait le nom en dur que `DESIGN.md` 2
+	# interdit, et elle rendrait fausse la promesse d'échanger la journée par un `.tres`.
+	_style.border_color = NO_PHASE_COLOR if phase == null else phase.color
 	var roster := state.roster()
 	var assign := state.to_assignment()
 	var places := Roster.capacity_for(state.city().to_snapshot(),
@@ -195,10 +252,43 @@ func show_state(state: RunState, held: StringName) -> void:
 	_counts.text = "%d au travail · %d libre(s) · %d/%d place(s)" % [
 		assign.size(), free, roster.size(), places]
 
-	_fill_rows(state, assign)
-	_fill_cards(state, assign, held)
+	# Replié, les lignes et les fiches sont invisibles : les remplir serait un balayage du
+	# plateau et du roster par image pour des nœuds que personne ne regarde. La barre de
+	# tête, elle, continue de dire l'essentiel — c'est ce qui rend le repli tenable.
+	if not _folded:
+		_fill_rows(state, assign)
+		_fill_cards(state, assign, held)
 	_auto.disabled = not state.cycle().permits(PhaseDef.ACTION_ASSIGN)
 	_auto.text = AUTO_TEXT if _auto.disabled else "%s (%d)" % [AUTO_TEXT, free]
+
+## Replie le panneau sur sa barre de tête, ou le rouvre. Rend le nouvel état, ce qui évite
+## au harnais un accesseur de lecture qu'il serait le seul à appeler, et juste après.
+##
+## **Le panneau est la vue la plus haute du HUD**, et de loin : quatre lignes d'action plus
+## six fiches d'ouvrier à trois pistes chacune. C'est lui qui fait déborder la colonne de
+## droite depuis `W2`, et c'est lui qui recouvre le haut de la main aux journées chargées.
+## Le replier est donc le geste qui rend la carte au joueur — et il la rend *entière*, ce
+## que ni `H` ni `F1` ne font : `H` ne touche qu'au pavé de texte, et `F1` emporte la main
+## avec le reste, donc empêche de jouer.
+##
+## Ce qui reste visible est délibéré. La barre de tête garde le compte — « 6 au travail · 0
+## libre(s) » —, le bouton **Auto**, et le liseré de phase. Autrement dit : de quoi savoir
+## s'il faut rouvrir, et de quoi ne pas avoir à le faire. Un repli qui n'aurait laissé qu'un
+## titre aurait forcé un aller-retour à chaque phase.
+## Le geste est **asymétrique**, et c'est voulu : replier masque les quatre blocs, rouvrir
+## n'en remontre qu'un. Les trois autres — les lignes, le « aucune action posée » et le
+## « et N autre(s) » — s'excluent entre eux selon ce que le plateau porte, et c'est
+## `_fill_rows()` qui tranche, à l'image suivante. Les rallumer ici en montrerait deux à la
+## fois le temps d'une image, et surtout recopierait sa règle à un second endroit.
+func toggle_folded() -> bool:
+	_folded = not _folded
+	_fold.text = UNFOLD_TEXT if _folded else FOLD_TEXT
+	_grid.visible = not _folded
+	if _folded:
+		_rows.visible = false
+		_empty.visible = false
+		_more.visible = false
+	return _folded
 
 ## Retient qui vient de franchir un palier, pour l'annoncer sur sa fiche.
 ##
@@ -349,6 +439,11 @@ func _make_header() -> HBoxContainer:
 	_auto.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
 	_auto.pressed.connect(_on_auto_pressed)
 	header.add_child(_auto)
+	_fold = Button.new()
+	_fold.text = FOLD_TEXT
+	_fold.add_theme_font_size_override("font_size", ROW_FONT_SIZE)
+	_fold.pressed.connect(toggle_folded)
+	header.add_child(_fold)
 	return header
 
 func _on_auto_pressed() -> void:
@@ -378,4 +473,6 @@ static func _make_panel_style() -> StyleBoxFlat:
 	style.bg_color = PANEL_COLOR
 	style.set_corner_radius_all(PANEL_RADIUS)
 	style.set_content_margin_all(PANEL_MARGIN)
+	style.border_width_top = PHASE_RULE
+	style.border_color = NO_PHASE_COLOR
 	return style

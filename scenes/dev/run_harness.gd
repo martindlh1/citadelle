@@ -48,12 +48,19 @@ extends Node
 ## Ce qui reste en texte est ce dont aucune vue n'a la charge : les piles, le survol, et le
 ## bandeau de tête.
 ##
+## Ce que `P1a` y change tient en un mot : **la souris suffit**. `DESIGN.md` 8 le demande en
+## premier de sa liste de confort, et l'ancien geste le méritait — on cliquait une fiche,
+## puis on appuyait sur Espace en visant à la souris. Une intention, deux vocabulaires.
+## Une fiche tenue s'envoie désormais d'un clic sur son action, sur la carte comme dans la
+## liste ; le clavier reste en raccourci, il ne commande plus rien seul.
+##
 ## Les commandes : une carte se prend au clavier — 1 à 9 — ou au clic dessus ; un clic
-## gauche sur le sol la joue sur la case survolée, un clic droit retire l'action posée là,
-## Espace y envoie un ouvrier, Retour arrière les rappelle tous, Tab pivote un bâtiment ou
-## retourne un terrassement, **Entrée termine la phase**. La caméra garde Q/E, la molette,
-## WASD et R. Dans le panneau : un clic sur une fiche la sélectionne, un clic sur une
-## ligne d'action y envoie le sélectionné, et **Auto** remplit le reste.
+## gauche sur le sol y envoie l'ouvrier tenu s'il y en a un, sinon il y joue la carte
+## tenue ; un clic droit retire l'action posée là, Espace y envoie un ouvrier, Retour
+## arrière les rappelle tous, Tab pivote un bâtiment ou retourne un terrassement, **Entrée
+## termine la phase**. La caméra garde Q/E, la molette, WASD et R. Dans le panneau : un
+## clic sur une fiche la sélectionne, un clic sur une ligne d'action y envoie le
+## sélectionné, et **Auto** remplit le reste.
 
 ## Seed du run. Fixe : deux lancements doivent se comparer.
 const SEED := 20260825
@@ -103,15 +110,14 @@ const REPORT_OUTLINE_SIZE := 4
 
 const CONTROLS := """La main    1-9 ou clic sur une carte : la prendre. Tab : pivoter, ou retourner un terrassement.
 La carte   clic gauche : jouer sur la case survolée. Clic droit : retirer.
-Le travail clic sur une fiche, puis sur une ligne d'action — ou Auto. Espace : envoyer sur la case survolée.
+Le travail clic sur une fiche, puis sur son action — sur la carte ou dans la liste. Ou Auto.
            Clic droit sur une fiche : la rappeler. Retour arrière : rappeler toute une action.
+           Espace reste le raccourci : envoyer sur la case survolée sans rien tenir.
 Entrée     fonder le village, tenir la ligne, ou finir la phase — selon ce que le run attend.
 La caméra  Q/E : pivoter. Molette : zoomer. WASD : déplacer. R : recadrer.
-La vue     H : replier ce rapport. F1 : masquer tout le HUD."""
+La vue     H : replier ce rapport. F2 : replier l'affectation. F1 : masquer tout le HUD.
+           F11 : plein écran."""
 
-## Marge basse du panneau d'affectation : la hauteur que la main occupe, plus son écart.
-## Sans elle le panneau descendrait sur les cartes, la main étant ancrée en bas.
-const HAND_CLEARANCE := 88.0
 
 ## Ce que `--shot-evenings` doit valoir pour capturer l'écran de **fondation**.
 ##
@@ -245,10 +251,12 @@ func _ready() -> void:
 	add_child(_targets)
 	_marker = ActionMarker.create(_metrics)
 	add_child(_marker)
-	_hand_view = HandView.create(_state().catalogue())
+	# La palette précède la main depuis `P1a` : une carte de bâtiment y affiche son coût,
+	# donc elle a besoin des couleurs de ressource avant d'exister.
+	_palette = CommodityPalette.from_database()
+	_hand_view = HandView.create(_state().catalogue(), _palette, _make_buildings())
 	_hand_view.card_picked.connect(_hold)
 	add_child(_hand_view)
-	_palette = CommodityPalette.from_database()
 	_bar = ResourceBar.create(_palette)
 	_panel = ProductionPanel.create(_palette)
 	_battle = BattlePanel.create()
@@ -263,8 +271,23 @@ func _ready() -> void:
 	_left_slot = _hud_slot(_make_left_column(), Control.SIZE_SHRINK_BEGIN,
 		Control.SIZE_SHRINK_BEGIN)
 	add_child(_left_slot)
+	# La marge basse **se demande à la main** plutôt que d'être recopiée. Un `88.0` était
+	# écrit ici, et il valait la bande d'à peu près — à trois pixels près, ce qui suffisait
+	# à faire mordre le panneau sur le haut des cartes aux journées chargées. Un chiffre
+	# recopié est un chiffre qui dérive : même doublon que celui qu'`E2` a retiré de la
+	# réserve, et la bande sait seule ce qu'elle occupe.
+	#
+	# La bande **entière** et rien de plus : `CARD_GAP` y est déjà compris deux fois, donc
+	# l'écart au-dessus des cartes est dedans. Lui ajouter la marge du HUD volerait seize
+	# pixels de plus à une colonne de droite qui n'en a aucun à donner.
+	# La colonne s'accroche **en haut** et non en bas depuis que le panneau d'affectation se
+	# replie. Accrochée en bas, elle gardait le panneau contre la main et faisait dériver le
+	# compte rendu de phase avec sa hauteur — replier faisait chuter le rapport de trois
+	# cent cinquante pixels, alors que `W2` ne lui demande qu'une chose : rester au même
+	# endroit d'une résolution à l'autre. En haut, le rapport ne bouge jamais et c'est le
+	# panneau, qui vient de changer de taille exprès, qui se déplace.
 	_right_slot = _hud_slot(_make_right_column(), Control.SIZE_SHRINK_END,
-		Control.SIZE_SHRINK_END, HAND_CLEARANCE)
+		Control.SIZE_SHRINK_BEGIN, HandView.band_height())
 	add_child(_right_slot)
 
 	EventBus.phase_resolved.connect(_on_phase_resolved)
@@ -290,7 +313,7 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	_refresh_ghost()
 	_bar.show_ledger(_state().ledger(), _last_delta)
-	_crew.show_state(_state(), _held_worker)
+	_crew.show_state(_state(), _held_worker, RunManager.phase())
 	_label.text = _report()
 	_hover.text = _hover_line()
 
@@ -305,7 +328,7 @@ func _handle_mouse_button(event: InputEventMouseButton) -> void:
 		return
 	match event.button_index:
 		MOUSE_BUTTON_LEFT:
-			_play_here()
+			_left_click_here()
 		MOUSE_BUTTON_RIGHT:
 			_withdraw_here()
 		_:
@@ -328,6 +351,8 @@ func _handle_key(event: InputEventKey) -> void:
 			_cycle_report()
 		KEY_F1:
 			_toggle_hud()
+		KEY_F2:
+			_fold_crew()
 		_:
 			var slot := event.keycode - KEY_1
 			if slot < 0 or slot >= SLOT_KEYS:
@@ -363,6 +388,24 @@ func _toggle_hud() -> void:
 	if shown:
 		_last_action = "HUD rendu. F1 pour le remasquer."
 
+## Replie le panneau d'affectation sur sa barre de tête, ou le rouvre.
+##
+## Le troisième cran de dégagement du HUD, et il complète les deux autres au lieu de les
+## doubler. `H` ne touche qu'au pavé de texte à gauche ; `F1` emporte tout, main comprise,
+## donc empêche de jouer. Celui-ci rend la moitié droite de la carte **sans rien perdre de
+## jouable** : la barre de tête garde le compte des ouvriers, le bouton **Auto** et le
+## liseré de phase, et les cartes redeviennent entièrement visibles.
+##
+## Le geste existe aussi au clic, sur le chevron du panneau, et c'est le chemin principal —
+## cette touche n'est que le raccourci. C'est l'inverse du partage d'avant `P1a`, où le
+## clavier commandait et où la souris ne suivait pas.
+##
+## Le panneau garde son propre état plié : c'est de l'affichage, pas du jeu. Le harnais ne
+## fait que dire ce qui vient d'arriver, comme pour les deux autres crans.
+func _fold_crew() -> void:
+	_last_action = "Affectation repliée. F2 pour la rouvrir." if _crew.toggle_folded() \
+		else "Affectation rouverte."
+
 ## Prend en main la carte de ce rang, ou la repose si elle y était déjà.
 func _hold(slot: int) -> void:
 	if slot < 0 or slot >= _state().deck().hand().size():
@@ -385,6 +428,38 @@ func _turn_the_held_card() -> void:
 	_turns = posmod(_turns + 1, BuildingData.QUARTER_TURNS)
 	_last_action = "Orientation : %s." % _orientation()
 
+## Ce que le clic gauche fait du sol : il envoie l'ouvrier tenu, ou il joue la carte tenue.
+##
+## **Le premier confort que `DESIGN.md` 8 réclame**, et sa formulation dit tout : « un
+## glisser-déposer, ou un clic sur la fiche puis un clic sur la case, mais pas les deux
+## moitiés dans deux langues ». Jusqu'ici on cliquait une fiche — geste de souris — puis
+## on appuyait sur **Espace** — geste de clavier — en visant la case avec la souris. Une
+## intention, deux vocabulaires, et le second ne s'apprend qu'en lisant l'aide.
+##
+## L'ordre des trois questions n'est pas indifférent, et chacune a sa raison :
+##
+##   - **fonder passe avant tout**, parce qu'aucun des deux autres gestes n'a de sens sur
+##     une carte nue — il n'y a ni main tirée ni action posée avant le Cœur.
+##   - **l'ouvrier passe avant la carte**, et le cas où les deux sont tenus le montre : une
+##     case qui porte déjà une action refuse d'en recevoir une seconde depuis `I2`, donc
+##     jouer y serait de toute façon refusé. Envoyer est la seule lecture qui reste.
+##   - **la carte ferme la marche**, ce qui laisse `_play_here()` exactement tel qu'il
+##     était. Ce fichier n'a pas gagné une règle, il a gagné un aiguillage.
+##
+## C'est le clic **sur le sol** et non sur le panneau : les fiches et les lignes d'action
+## portent `MOUSE_FILTER_STOP` et se servent d'abord, ce qui est le partage que `CLAUDE.md`
+## décrit. Cliquer une ligne d'action reste donc le chemin du panneau, et il ne change pas.
+func _left_click_here() -> void:
+	if _state().awaits_its_heart():
+		_play_here()
+		return
+	if not _held_worker.is_empty():
+		var action := _action_here()
+		if action != null:
+			_staff_on(action)
+			return
+	_play_here()
+
 ## Joue la carte tenue sur la cellule survolée.
 ##
 ## Un seul chemin pour les deux natures de carte, à l'inverse du harnais Cartes qui en
@@ -400,7 +475,13 @@ func _play_here() -> void:
 		return
 	var held := _held_card()
 	if held.is_empty():
-		_last_action = "Aucune carte en main — 1 à 9, ou un clic sur une carte."
+		# Tenir un ouvrier et cliquer une case nue est un geste juste qui vise à côté, pas
+		# une erreur de main : lui répondre « aucune carte » enverrait chercher la
+		# mauvaise moitié de l'intention.
+		_last_action = "Aucune carte en main — 1 à 9, ou un clic sur une carte." \
+			if _held_worker.is_empty() \
+			else "%s en main — cliquer une action posée pour l'y envoyer." \
+				% _name_of(_held_worker)
 		return
 	if not hovered.is_hit():
 		_last_action = "Rien sous le curseur."
@@ -512,7 +593,7 @@ func _on_worker_picked(worker: StringName) -> void:
 	if _held_worker.is_empty():
 		_last_action = "Reposé."
 		return
-	_last_action = "%s en main — cliquer une ligne d'action pour l'y envoyer." \
+	_last_action = "%s en main — cliquer son action, sur la carte ou dans la liste." \
 		% _name_of(worker)
 
 ## Rappelle cet ouvrier de là où il est, sans toucher à l'action.
@@ -725,11 +806,23 @@ func _refresh_markers() -> void:
 		_state().terrain())
 
 ## Recalcule le jeu de cibles de la carte tenue. Un balayage complet de la carte, et il
-## n'a lieu qu'ici : à une prise de carte, un retournement, une pose, un retrait ou une
-## fin de phase.
+## n'a lieu qu'ici : à une prise de carte, un retournement, une pose, un retrait, une
+## fondation, une bataille ou une fin de phase.
+##
+## **Cette liste a cessé d'être une commodité à `P1a` et est devenue une obligation.** La
+## main y est redessinée, et depuis que ses cartes de bâtiment pâlissent quand la réserve
+## ne les paie pas, elle affiche une réponse qui dépend du `Ledger` — donc tout geste qui
+## déplace la réserve doit passer par ici, sinon une carte reste pâle après la récolte qui
+## vient de la rendre payable. Les cinq qui la déplacent y passent : bâtir la débite,
+## fonder ouvre le run, la fin de phase produit et prélève, la bataille pille.
+##
+## L'appeler depuis `_process` serait le remède évident et ce serait le mauvais :
+## `show_hand()` reconstruit tous ses nœuds, donc la main perdrait son survol soixante
+## fois par seconde. C'est le cas que `CLAUDE.md` distingue — une vue qu'on rafraîchit à
+## chaque image met ses nœuds à jour **sur place**, et celle-ci ne le fait pas.
 func _refresh_targets() -> void:
 	_refresh_markers()
-	_hand_view.show_hand(_state().deck().hand(), _held_slot)
+	_hand_view.show_hand(_state().deck().hand(), _held_slot, _state().ledger())
 	var held := _held_card()
 	if held.is_empty() or not ActionTargeting.handles(held):
 		_targets.clear()
@@ -1260,6 +1353,7 @@ func _capture_if_asked() -> void:
 			_scripted_day()
 			if _state().awaits_a_battle() and index < days - 1:
 				_fight()
+		_scripted_skip_phases(DevShot.argument(DevShot.SHOT_PHASES_FLAG).to_int())
 		if not _state().awaits_a_battle() and not _state().cycle().is_over():
 			_scripted_open_phase()
 	_apply_shot_view()
@@ -1280,6 +1374,12 @@ func _capture_if_asked() -> void:
 ## Sans drapeau, la capture montre le rapport complet — ce que toutes les captures du projet
 ## montrent depuis `T2`, et ce qu'un lecteur de journal attend par défaut.
 func _apply_shot_view() -> void:
+	# Le repli est un **axe à part** du cran de rapport, et il s'applique avant lui : les
+	# deux se cumulent, et l'ordre ne change rien puisqu'ils portent sur deux vues qui ne
+	# se connaissent pas. `--shot-view aucun` emporte le HUD entier, donc le repli devient
+	# invisible — ce n'est pas une contradiction, c'est ce que « aucun » veut dire.
+	if DevShot.has_flag(DevShot.SHOT_FOLD_FLAG):
+		_fold_crew()
 	var asked := DevShot.argument(DevShot.SHOT_VIEW_FLAG)
 	if asked.is_empty():
 		return
@@ -1338,11 +1438,47 @@ func _scripted_day() -> void:
 		if closed:
 			return
 
+## Franchit `count` phases de plus, pour que la capture s'arrête ailleurs qu'au premier
+## créneau d'une journée.
+##
+## `--shot-evenings` résout des **journées entières**, donc toute capture retombait sur la
+## même phase — la première. Les autres étaient des écrans inatteignables, ce qui est resté
+## sans conséquence tant qu'une phase ressemblait à sa voisine, et qui est devenu un trou à
+## `P1a` : le liseré de couleur du panneau d'affectation n'aurait jamais pu se regarder
+## qu'en une seule de ses teintes.
+##
+## Elle s'arrête d'elle-même sur un run fini ou une bataille en attente, plutôt que de
+## forcer : demander plus de phases qu'il n'en reste est une ligne de commande maladroite,
+## pas une erreur, et la capture doit rendre l'écran qu'elle a atteint.
+func _scripted_skip_phases(count: int) -> void:
+	for _index in count:
+		if _state().cycle().is_over() or _state().awaits_a_battle():
+			return
+		if _state().cycle().permits(PhaseDef.ACTION_PLAY):
+			_scripted_plays()
+		if _state().cycle().permits(PhaseDef.ACTION_ASSIGN):
+			_scripted_staffing()
+		_end_phase()
+
 ## Pose et affecte sans finir la phase : l'état sur lequel la capture s'arrête.
 ##
 ## C'est le seul moment où le panneau d'affectation a quelque chose à montrer — des postes
 ## ouverts et des ouvriers dessus. Une phase résolue les efface tous les deux, et l'image
 ## ne dirait plus rien de ce que `W2` ajoute.
+##
+## **Elle refermait sur `_refresh_markers()`, et l'image mentait.** `_play_scripted()`
+## appelle `RunManager.play()` en direct, sans passer par `_play_here()` : rien ne reposait
+## donc la carte ni ne redessinait la main, si bien que la capture montrait la main
+## **d'avant** ces poses — cartes déjà jouées comprises. Le défaut a traversé `D2`, `W2` et
+## `I2` sans se voir, parce que rien sur une carte ne dépendait d'un état mutable : la
+## liste était fausse, mais fausse d'une façon qu'aucun œil ne rattrapait. Le coût de
+## `P1a` l'a rendue visible d'un coup — une Habitation payée 20 s'affichait à pleine encre
+## sur une réserve qui ne la payait plus.
+##
+## C'est exactement ce que `F1` a nommé : un harnais qui montre peut être **faux sur ce
+## qu'il prétend montrer**, ce qui est pire qu'une panne parce qu'on lui fait confiance.
+## `_refresh_targets()` est un sur-ensemble de `_refresh_markers()`, donc le remplacer ne
+## retire rien.
 func _scripted_open_phase() -> void:
 	if _state().cycle().is_over():
 		return
@@ -1350,7 +1486,7 @@ func _scripted_open_phase() -> void:
 		_scripted_plays()
 	if _state().cycle().permits(PhaseDef.ACTION_ASSIGN):
 		_scripted_staffing()
-	_refresh_markers()
+	_refresh_targets()
 
 ## Pose une carte de chaque nature qui trouve une cible : un bâtiment payable, puis les
 ## verbes. L'ordre compte — le chantier doit exister avant que *Construire* le vise.
