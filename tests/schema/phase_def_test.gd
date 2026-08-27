@@ -11,7 +11,8 @@ extends GdUnitTestSuite
 const ACTIONS := PhaseDef.ACTIONS
 
 func test_a_blank_phase_reports_its_missing_fields() -> void:
-	assert_array(PhaseDef.new().missing_fields()).contains(["id", "label", "allows"])
+	assert_array(PhaseDef.new().missing_fields()).contains(
+		["id", "label", "color", "allows"])
 
 func test_a_complete_phase_reports_nothing() -> void:
 	assert_array(_working().missing_fields()).is_empty()
@@ -25,6 +26,24 @@ func test_a_phase_without_a_label_is_reported() -> void:
 	var phase := _working()
 	phase.label = ""
 	assert_array(phase.missing_fields()).contains(["label"])
+
+## La couleur est le second champ que l'écran lit, et le seul des deux que la doctrine du
+## zéro ne rattraperait pas toute seule : un `Color` non renseigné vaut le noir opaque,
+## qui est une couleur parfaitement dessinable. Sans ce cas, une phase à qui l'éditeur
+## aurait mangé sa teinte se peindrait en noir sur un fond sombre — donc ne se
+## distinguerait de rien, ce qui est exactement le défaut que `P1a` corrige.
+func test_a_phase_without_a_colour_is_reported() -> void:
+	var phase := _working()
+	phase.color = PhaseDef.UNSET_COLOR
+	assert_array(phase.missing_fields()).contains(["color"])
+
+## Et le noir voulu reste écrivable, à un cheveu près. Le cas existe pour que personne ne
+## « corrige » la sentinelle en interdisant le noir : c'est la valeur par défaut de Godot
+## qu'on refuse, pas la couleur.
+func test_a_near_black_colour_passes() -> void:
+	var phase := _working()
+	phase.color = Color(0.02, 0.02, 0.02)
+	assert_array(phase.missing_fields()).is_empty()
 
 ## Un geste inconnu se poserait sur une phase sans que rien ne le refuse : la phase
 ## autoriserait quelque chose que personne ne demande jamais, donc rien.
