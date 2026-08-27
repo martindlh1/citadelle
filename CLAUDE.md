@@ -446,6 +446,19 @@ et la phrase n'était juste que dans le second. Depuis qu'un bouton nomme le pas
 plus rien d'autre n'a à le nommer : c'est le doublon habituel, avec en prime une chance sur
 deux de mentir.
 
+**Un appel qui publie un signal peut rouvrir ce qu'on s'apprêtait à fermer.** *(Écrit à
+`P2b`.)* Le harnais refermait le bilan de journée **après** `RunManager.end_phase()`, ce qui
+semblait l'ordre naturel — on finit la phase, puis on range ce qu'on lisait. Or cette porte
+publie `phase_changed` avant de rendre la main, si bien que la phase suivante rouvrait le
+bilan *à l'intérieur de cette ligne* : il s'ouvrait et se refermait dans la même fonction, et
+le soir s'affichait sans lui.
+
+La règle : **ce qu'on range avant un appel appartient à ce qui précède ; ce qu'on ouvre après
+appartient à ce qui suit.** Un `EventBus` rend l'ordre des lignes trompeur, parce qu'une
+partie de la suite s'exécute au milieu de l'appel. Le symptôme est muet — rien ne plante,
+rien ne compile de travers, une vue ne s'affiche simplement jamais —, donc il ne se voit
+qu'en capture.
+
 **Une vue sur laquelle on clique porte `MOUSE_FILTER_STOP`**, à l'inverse des vues de lecture, qui laissent passer en `IGNORE` pour que le curseur de cellule continue de piocher dessous. Le geste tombe alors dans le `gui_input` de la vue et n'atteint jamais `_unhandled_input` du harnais, ce qui est exactement le partage voulu — sans quoi un clic sur une fiche jouerait aussi la carte tenue sur la case cachée derrière.
 
 ### Sélection de cellule

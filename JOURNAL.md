@@ -4,6 +4,160 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-27 — `P2b` : la journée se souvient d'elle-même, et le soir a quelque chose à lire
+
+**État : terminé**, et `P2` avec lui. Trois commits sur `feat/i2b-knobs`. Les trois commandes
+passent : boot sans erreur ni warning, tout `src/domain/` parse, **826 tests verts contre
+810**. Quatre captures.
+
+C'est le seul point de la famille `P2` qui touche le domaine, et il a fallu commencer par
+là : **rien ne se souvenait d'une journée.**
+
+### Le manque, et où il était
+
+Chaque `PhaseReport` était émis puis oublié, et `DayReport` ne porte que l'upkeep et la
+vague. Une journée n'existait donc nulle part entre ses phases : le joueur qui voulait
+savoir ce qu'elle avait rapporté n'avait qu'un compte rendu de phase, dont la moitié était
+déjà remplacée par la suivante.
+
+`RunState` retient désormais les rapports des phases **qui ont résolu**, une journée neuve
+les efface, et `RunOrchestrator.day_summary()` en compose un `DaySummary` avec ce que le
+village doit à manger. L'accumulation est dans le domaine et non dans une vue, par
+l'argument que `DESIGN.md` 2 donne depuis l'écriture du jalon : l'événement de 3.7 et les
+états d'ouvrier de `X6` voudront tous deux poser une ligne dans ce bilan, et un accumulateur
+d'adapter devrait réapprendre chaque nouvelle source.
+
+Trois précisions que l'écriture a demandées, et aucune n'était dans la ligne de `DESIGN.md`.
+
+**Seules les phases qui résolvent entrent.** Une phase qui ne résout pas n'a rien produit,
+donc rien à additionner — et la compter parmi les résolutions ferait mentir la seule colonne
+du bilan qui dise combien de fois la journée a travaillé. Le modèle retenu à `I2b` en a
+justement une par jour.
+
+**L'effacement se lit sur `advance()`.** Le cycle dit lui-même qu'un jour vient de s'ouvrir,
+ce qui évite à `RunState` de porter un souvenir de plus — comparer un numéro de jour d'avant
+à un numéro d'après aurait été exactement le genre d'état que `I2` a refusé pour la vague en
+attente.
+
+**La coupure de bataille tient.** Quand une vague attend, le cycle ne bouge pas, donc le
+bilan est encore là : on lit sa journée, on se bat, et c'est la bataille qui ouvre le
+lendemain — donc qui efface. Un cas de test l'épingle, parce que ça se lit mal.
+
+### Le refus qui porte le jalon
+
+**Le bilan ne compte aucun oisif**, et il n'a pas d'accesseur pour ça.
+
+Un oisif est un état de **phase**. Quelqu'un qui chôme le matin et travaille l'après-midi
+n'est pas un demi-oisif, et additionner deux ensembles de personnes rend un nombre qui ne
+désigne personne. Les postes tenus, eux, s'additionnent sans mentir : ce sont des
+**affectations** et non des gens, donc « la journée a fait travailler douze fois quelqu'un »
+veut dire quelque chose.
+
+C'est la même distinction que `I2b` avait tirée un cran plus bas — une phase qui ne résout
+pas ne compte aucun oisif, parce qu'un oisif est un reproche et qu'un reproche suppose qu'on
+pouvait faire autrement. Ici la raison change : ce n'est plus « on ne pouvait pas », c'est
+« ce n'est pas une quantité ».
+
+Un cas de test le vérifie, et c'est le seul du fichier qui vérifie une **absence** : tous les
+autres contrôlent une addition, ce qui se relit d'un coup d'œil, alors qu'un refus ne se
+relit nulle part. Sans lui, le premier écran qui réclamerait « et les oisifs ? » les
+obtiendrait.
+
+### Le chiffre qui doit être le même des deux côtés
+
+`ProductionResolver.upkeep_due()` devient publique, troisième fois après `staffing_refusal()`
+à `I1` et `family_of()` à `W2`, et toujours pour le même motif : une seconde question se pose
+sur la même règle. Le bilan se lit **avant** la fermeture, donc avant qu'on ait rien prélevé,
+et il doit pourtant annoncer ce qu'on doit.
+
+Les deux appelants passent par la même multiplication plutôt que de la recopier, et le cas de
+test qui compte croise les deux : **ce que le bilan annonce comme dû est exactement ce que la
+fermeture prend**. Le jour où ce qu'on doit dépendra d'autre chose que du nombre de présents
+— un blessé qui mange double, un absent d'expédition qui ne mange pas —, l'annonce et le
+prélèvement bougeront ensemble ou pas du tout.
+
+### Ce que la vue demande, et ce qu'elle ne calcule pas
+
+Elle n'additionne rien : le bilan arrive fait. Elle pose **deux questions** au domaine et
+dessine les réponses — la seconde étant celle qui compte le plus du soir. « La réserve
+paiera-t-elle l'upkeep ? » va au `Ledger`, et la ligne vire à l'orange quand non. Savoir
+qu'on va manquer **avant** de fermer est la seule chose de ce panneau sur laquelle on puisse
+encore agir ; après, c'est une famine constatée.
+
+Elle s'ouvre sur une **question au domaine** et jamais sur un nom de phase : *cette phase
+ferme-t-elle la journée sans rien autoriser ?* C'est ce qui garde la promesse d'échanger la
+journée par un `.tres` — le modèle à deux phases, dont la dernière se joue encore, n'ouvre
+pas de modale par-dessus les cartes. La touche `B` l'ouvre à tout moment, ce qui lui rend son
+accès dans ce modèle-là.
+
+### Les deux horloges, réparées par les deux bouts
+
+Le compte rendu de phase annonçait « Jour 3 · Soir » pendant que le bandeau annonçait
+« Jour 4 · Matin ». Son bandeau ne disait quelque chose qu'à la fin d'une journée — « fin de
+journée » — et restait **vide** le reste du temps, si bien que le titre se lisait comme
+l'état courant alors qu'il nomme la phase qui vient de finir.
+
+Le bilan prend en charge « où en est-on », et le panneau annonce désormais son propre temps —
+**passé** — à toutes les résolutions. Une ligne de code, et le malentendu tombe.
+
+### Le défaut trouvé en capture, et il est instructif
+
+Le bilan **s'ouvrait et se refermait dans la même fonction**. Le harnais le fermait après
+`RunManager.end_phase()`, ce qui semblait l'ordre naturel : on finit la phase, puis on range
+ce qu'on lisait. Or cette porte publie `phase_changed` **avant de rendre la main**, donc la
+phase suivante rouvrait le bilan à l'intérieur de cette ligne — et la ligne d'après le
+refermait aussitôt.
+
+Le symptôme est muet : rien ne plante, rien ne compile de travers, le soir s'affiche
+simplement sans son bilan. Seule une capture le montre. La règle en sort et vaut plus que le
+cas : **ce qu'on range avant un appel appartient à ce qui précède ; ce qu'on ouvre après
+appartient à ce qui suit.** Un bus de signaux rend l'ordre des lignes trompeur, parce qu'une
+partie de la suite s'exécute au milieu de l'appel.
+
+### Ce qui ne bouge pas
+
+**Aucun DTO de `contracts/` n'a été créé ni modifié**, le septième jalon d'affilée après
+`E2`, `W2`, `P1a`, `P1b`, `I2b` et `P2a`. `DaySummary` vit dans `domain/run/` par le critère
+habituel : aucun second système du domaine ne le franchit — il va du Cycle de jour aux
+adapters, et `DESIGN.md` 3.8 pose que ce système-ci est justement celui qui a le droit de
+connaître tous les autres.
+
+### Prochain jalon
+
+**`M1`**, le menu. C'est l'écran de fin de `P2a` qui le rend nécessaire : proposer de
+relancer désigne un endroit d'où l'on lance, et il n'y en a pas. C'est aussi le **premier
+jalon du projet qui demande une `.tscn` et la scène principale de `project.godot`**, donc le
+premier que je ne peux pas livrer seul — je décrirai l'arbre, tu le câbleras.
+
+Puis **`I3`**, avec la nourriture en tête et son premier chiffre : vingt-sept récoltées pour
+quatre-vingt-cinq dues sur quinze journées.
+
+`M2` — la persistance — attend toujours une mesure et non du temps : **combien de temps te
+prend un run joué à la main.**
+
+Et **l'arbitrage de `I2b` reste ouvert**. Il ne se referme qu'en jouant, et `P2` vient de
+rendre ces quinze journées nettement moins pénibles à mener — ce qui était tout son objet.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché. `M1` sera le premier à en
+demander.
+
+- **Le soir ouvre un bilan.** Ce que la journée a récolté, les paliers, les chantiers, ce
+  qu'il y a à nourrir ce soir — et la vague, quand il y en a une. Le bouton **Finir la
+  journée** referme le bilan et ferme la journée : c'est le même geste, pas deux.
+- **`B` ouvre le bilan à tout moment**, et le referme. Un clic à côté le referme aussi, pour
+  regarder le village avant de décider.
+- **La ligne « À nourrir ce soir » vire à l'orange** quand la réserve ne suivra pas. C'est la
+  seule chose du soir qu'on puisse encore corriger.
+- **Le compte rendu de phase dit « résolu »** à chaque résolution. Il parlait au présent
+  d'une phase passée, ce qui le mettait en contradiction avec le bandeau juste à gauche.
+- **La branche n'est pas fusionnée** : `feat/i2b-knobs`, onze commits — six pour `I2b`, un
+  pour `DESIGN.md`, deux pour `P2a`, trois pour `P2b`.
+
+---
+
+
 ## 2026-08-27 — `P2a` : le pas se nomme, la fin se regarde, et trois défauts plus vieux que le jalon
 
 **État : terminé.** Deux commits sur `feat/i2b-knobs`, à la suite de `I2b`. Les trois

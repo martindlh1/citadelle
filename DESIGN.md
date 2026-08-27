@@ -784,9 +784,10 @@ arbitrer un `.tres`.
     qui renverse une décision : il ne se traite qu'une fois choisi *comment* on désigne —
     un cycle au clic, un menu, ou une pile visible sur la case. La question précède le code.
 
-- **P2** — **Ce que plusieurs runs entiers ont réclamé.** Seconde passe de confort, ouverte
-  après `I2b` et sur le même argument que la première : le contenu vient d'une partie jouée,
-  pas d'une déduction. Découpée par ce que chaque point **touche**, comme `P1`.
+- **P2** ✅ — **Ce que plusieurs runs entiers ont réclamé.** Seconde passe de confort,
+  ouverte après `I2b` et sur le même argument que la première : le contenu vient d'une
+  partie jouée, pas d'une déduction. Découpée par ce que chaque point **touche**, comme
+  `P1`.
 
   - **P2a** ✅ — **Le geste qu'on répète, et l'écran qu'on ne voyait pas.** Aucun domaine,
     aucun contrat — le sixième jalon d'affilée après `E2`, `W2`, `P1a`, `P1b` et `I2b`.
@@ -811,10 +812,22 @@ arbitrer un `.tres`.
     déclare —, c'est-à-dire sur le seul texte de la seule image que `--shot-evenings 0`
     existe pour montrer. Et le panneau d'affectation annonçait « cette phase ferme la
     journée » à un run terminé, qui n'en a plus aucune.
-  - **P2b** — **Le bilan de journée** *(cf. 2)*. Le seul point de la famille qui touche le
-    domaine : quelqu'un doit se souvenir de la journée, et ce quelqu'un n'existe pas. Il
-    répare du même coup les deux horloges qui se contredisaient — un compte rendu de phase
-    titré d'une phase passée, sous un bandeau titré de la phase courante.
+  - **P2b** ✅ — **Le bilan de journée** *(cf. 2)*. Le seul point de la famille qui touche
+    le domaine, et il a fallu commencer par lui : `RunState` retient les rapports des phases
+    qui ont résolu, une journée neuve les efface, et `RunOrchestrator.day_summary()` compose
+    un `DaySummary` avec ce que le village doit à manger. `ProductionResolver.upkeep_due()`
+    passe publique pour son second appelant — ce que le bilan annonce et ce que la fermeture
+    prélève sortent de la même ligne, sans quoi l'écran finirait par annoncer un chiffre
+    qu'on ne prélève pas.
+    Le bilan **ne compte aucun oisif**, et c'est le seul refus du jalon : un oisif est un
+    état de *phase*, quelqu'un qui chôme le matin et travaille l'après-midi n'est pas un
+    demi-oisif, et additionner deux ensembles de personnes rendrait un nombre qui ne désigne
+    personne. Les postes tenus, eux, s'additionnent — ce sont des affectations.
+    Il s'ouvre sur une **question au domaine** — cette phase ferme-t-elle la journée sans
+    rien autoriser ? — et jamais sur un nom de phase : un modèle de journée dont la dernière
+    phase se joue encore n'ouvre donc pas de modale par-dessus les cartes. Les deux horloges
+    sont réparées par les deux bouts : le bilan prend en charge « où en est-on », et le
+    compte rendu de phase annonce son propre temps — passé — à toutes les résolutions.
 
 ### Autour du run — `M`
 
@@ -857,9 +870,9 @@ run, ce qui est exactement pourquoi elle est à part.)*
   Ce qu'il contraint en attendant, et c'est sa seule raison d'être écrit maintenant : **aucun rapport ne doit inventer sa propre conséquence.** Un système qui rencontre un état le **compte** et le rapporte ; il ne décide pas de ce qu'il fait. C'est ce que `UpkeepReport` fait déjà des non-nourris, et ce que `DamageReport` fait des pertes.
   *(Relevé après `F1`.)* Le format de combat de 3.6 le fait passer de confortable à **structurant**, et lui donne sa première forme concrète : les points de vie sont la ressource d'une manche, un ouvrier à zéro meurt, et ce qu'un **survivant** emporte est un effet progressif selon la part de vie perdue. Sans lui, un combat n'a que deux issues — rien, ou définitif —, et le joueur qui a bien joué ne sent rien du tout. C'est le premier état dont on connaisse déjà et la source et la graduation.
 
-**Ordre suivant** — **`P2b`**, le bilan de journée, seul point de `P2` qui reste. Plusieurs runs entiers ont été joués après `I2b`, et ils ont rendu une liste : elle est ci-dessus, et elle se périme comme celle de `P1` si on attend. Puis **`I3`**, avec la nourriture en tête et son premier chiffre.
+**Ordre suivant** — **`M1`**, le menu, que l'écran de fin de `P2a` rend nécessaire en proposant de relancer. Puis **`I3`**, avec la nourriture en tête et son premier chiffre. Plusieurs runs entiers ont été joués après `I2b`, et ils ont rendu une liste : elle est ci-dessus, et elle se périme comme celle de `P1` si on attend. Puis **`I3`**, avec la nourriture en tête et son premier chiffre.
 
-`M1` suit de près, parce que l'écran de fin de `P2a` propose désormais de relancer, ce qui désigne un endroit d'où l'on lance. `M2` attend une mesure et non du temps. Et il reste toujours **`P1c`**, qui attend une **question de design** : comment désigner l'une des deux actions d'une case.
+`M2` attend une mesure et non du temps — la durée d'un run joué à la main. Et il reste toujours **`P1c`**, qui attend une **question de design** : comment désigner l'une des deux actions d'une case.
 
 **L'arbitrage de `I2b` reste ouvert** et ne se referme qu'en jouant. `P2` ne le remplace pas — il rend les quinze journées moins pénibles à mener, ce qui est exactement le service que `P1` a rendu avant lui.
 
