@@ -162,12 +162,12 @@ tout la même chose.
 
 Depuis `P1b`, elle imprime une ligne de **mise en page** : où finit la colonne de droite,
 où commence la main, et lequel des deux mord sur l'autre. Elle existe parce que le défaut
-qu'elle mesure a mis trois jalons à se faire voir — le panneau d'affectation descendait sur
-les cartes, et le dire demandait de sonder une image pixel par pixel, donc en pixels de
-**fenêtre** là où la mise en page raisonne en pixels **logiques**. Deux repères qu'on ne
-peut pas soustraire l'un à l'autre, et dont la confusion a d'ailleurs fait annoncer 28 px
-de recouvrement là où il n'y en avait aucun. Un recouvrement positif sur cette ligne est un
-défaut, quelle que soit la résolution demandée.
+qu'elle mesure a mis trois jalons à se faire voir — le panneau d'affectation descendait
+sur les cartes, et le dire demandait de sonder une image pixel par pixel, ce qui coûte une
+heure et rend un chiffre en pixels de **fenêtre** là où la mise en page raisonne en pixels
+**logiques** *(voir la sonde ci-dessous)*. Les deux bords sont demandés aux vues, en
+`global_position`, donc dans le même repère. Un recouvrement positif sur cette ligne est
+un défaut, quelle que soit la résolution demandée.
 
 Elle **n'imprime plus** le rapport du dernier soir : depuis `E2` c'est un panneau, et un
 panneau se regarde. Le réécrire en texte à côté aurait donné deux mises en forme du même

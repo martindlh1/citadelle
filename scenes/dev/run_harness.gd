@@ -1429,14 +1429,16 @@ func _capture_if_asked() -> void:
 ## défaut, et il se lit sur la sortie standard de n'importe quelle capture au lieu de se
 ## redécouvrir.
 ##
-## Les deux bords sont **demandés aux vues** et jamais recalculés. La première version de
-## cette ligne déduisait le haut de la bande du viewport moins `band_height()`, et elle
-## annonçait 28 px de recouvrement là où il n'y en avait aucun : un `Control` ancré sous un
-## `Node` se dimensionne sur la fenêtre, qui fait ici 676, tandis que `get_visible_rect()`
-## rend la taille logique après étirement, qui en fait 648. Deux nombres justes dans deux
-## repères différents, soustraits l'un à l'autre — exactement le genre de table à laquelle
-## `F1` dit de ne pas faire confiance. Comparés dans le repère où ils vivent tous les
-## deux, il n'y a rien à corriger.
+## Les deux bords sont **demandés aux vues** et jamais recalculés : `_crew` dit où il finit,
+## `_hand_view` dit où elle commence, et les deux répondent en `global_position`, donc dans
+## le même repère. Déduire le haut de la bande d'une soustraction sur le viewport aurait
+## marché ici et cassé le jour où la main change d'ancrage.
+##
+## Elle mesure contre la **bande** que la main réserve, et non contre le haut visible d'une
+## carte, qui est plus bas. C'est volontaire et c'est plus sévère : la bande comprend
+## `HOVER_LIFT`, la course qu'une carte survolée a au-dessus d'elle, donc un panneau qui
+## s'arrête pile au bord ne recouvrira pas non plus la carte qu'on désigne. « 0 px de
+## dégagement » est l'état visé et non un frôlement.
 func _fit_line() -> String:
 	var band := _hand_view.global_position.y
 	var bottom := _crew.global_position.y + _crew.size.y

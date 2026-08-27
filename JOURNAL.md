@@ -4,6 +4,172 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-27 — `P1b` : la colonne tient, les piles se lisent, la fiche raccourcit
+
+**État : terminé.** Quatre commits sur `feat/p1b-lists`. Les trois commandes passent : boot
+sans erreur ni warning, tout `src/domain/` parse, **786 tests verts contre 779**. Huit
+captures, à trois résolutions.
+
+Le jalon livre **quatre** points et non trois. Le quatrième — la fiche d'ouvrier compacte —
+vient de l'humain à l'ouverture, exactement comme le repli du panneau était venu en cours
+de `P1a`. Il a aussi décidé du partage à l'intérieur du panneau : **les fiches sont
+prioritaires, c'est la liste des actions qui défile.**
+
+### Ce que valait le défaut, en chiffres
+
+`P1a` l'avait renvoyé ici en le mesurant à dix-huit pixels au sixième jour. La mesure était
+juste et optimiste : au **douzième** jour, où une cinquième ligne d'action s'ajoute, le
+panneau descendait vingt-huit pixels sous la bande de la main.
+
+C'est la cinquième ligne qui fait tout. À quatre lignes le panneau s'arrêtait seize pixels
+**au-dessus** des cartes ; à cinq il passait vingt-huit **dessous**. `MAX_ROWS` valait trois
+à `W2`, cinq depuis `I2`, sur l'argument parfaitement raisonnable que cinq est ce qu'une
+main d'actions peut poser en une phase — `hand_size` le dit. Le plafond avait donc été
+calibré, et il était faux d'exactement une ligne.
+
+C'est l'argument du jalon, et il vaut mieux que « ça débordait » : **un plafond calibré sur
+une hauteur qu'il ne mesure pas se trompe dès qu'autre chose bouge**, et autre chose bouge
+toujours. Le remplaçant n'est pas un chiffre mieux choisi, c'est un budget en pixels que le
+harnais calcule et passe au panneau.
+
+### Le piège qui a coûté vingt-huit pixels
+
+Le budget se lisait d'abord sur `_right_slot.size.y`, le `MarginContainer` qui porte la
+colonne de droite. C'était faux, et faux d'une façon qui ne se voit pas : **un conteneur
+prend le plus grand de son ancrage et de la taille minimale de son contenu.** Le slot
+mesurait donc 676 là où le viewport en fait 648 — la différence étant, très exactement, le
+débordement du panneau qu'on voulait borner.
+
+Un plafond tiré de là se desserre au moment précis où il devrait serrer. Il **borne une
+hauteur à partir d'elle-même**, et la boucle est silencieuse : tout compile, la ligne de
+budget a l'air d'une soustraction honnête, et il reste vingt-huit pixels de recouvrement.
+
+La réparation est une ligne : on **demande à la main où elle commence**. C'est le même
+geste que `HandView.band_height()` à `P1a`, un cran plus loin — on demandait déjà ce que la
+bande occupe, on demande maintenant où elle est.
+
+### Une heure perdue à sonder des PNG, et la ligne qui l'évite désormais
+
+Pour mesurer le recouvrement j'ai écrit un lecteur PNG et sondé des colonnes de pixels. Ça
+a marché, ça a pris une heure, et **ça rend un chiffre dans le mauvais repère** : le projet
+est en `stretch/mode = "canvas_items"`, donc l'image sort à la taille de la fenêtre pendant
+que la mise en page raisonne dans un viewport logique de 1152×648. En 1920×1080 le facteur
+vaut 1,667 — mes « vingt-huit pixels » sondés en valaient dix-sept, et ne se comparaient à
+rien de ce que dit le code.
+
+Le harnais Run imprime donc désormais, à chaque capture, **où finit la colonne, où commence
+la main, et lequel mord sur l'autre**. Cinq lignes, les deux bords demandés aux vues en
+`global_position`, donc dans le même repère. C'est la discipline que `F1` a écrite pour les
+tables du harnais — une table annonce ce qu'elle doit montrer — appliquée à une image, et
+c'est elle qui a fini par montrer que le budget était trop généreux.
+
+Elle mesure contre la **bande** que la main réserve et non contre le haut visible d'une
+carte, qui est plus bas. C'est volontaire et plus sévère : la bande comprend `HOVER_LIFT`,
+la course qu'une carte survolée a au-dessus d'elle, donc un panneau qui s'arrête pile au
+bord ne recouvrira pas non plus la carte qu'on désigne.
+
+### La fiche d'ouvrier, de six lignes à quatre
+
+Elle portait une ligne par famille avec son multiplicateur, plus le poste et l'XP : six
+lignes à trois familles, sept quand `X2` ouvrira l'Artisanat. Six ouvriers en font deux
+rangées de grille, et c'est cette hauteur-là qui poussait le panneau sur la main — la
+compacter a rendu quatre-vingt-neuf pixels, soit trois fois le débordement.
+
+Ce qui reste est ce qui **décide** : les pistes qui ont franchi un palier, sur une ligne.
+Ce qui part est ce qui s'en déduit — un multiplicateur vient d'un palier, donc l'écrire à
+côté répète le même fait en chiffres à virgule — et ce qui ne sert qu'à comparer de près :
+les pistes entamées sans palier, et l'XP totale. Le tout est à un survol, dans l'infobulle,
+qui est le précédent que `P1a` a posé pour le coût d'une carte.
+
+Deux choses valent d'être notées. Les deux formes sont remplies par **une seule passe** :
+séparées, c'est l'infobulle — qu'aucune capture ne montre — qui aurait dérivé en silence.
+Et les noms de famille restent écrits en entier, alors qu'abréger tiendrait mieux sur la
+ligne : « Con » pour Construction et « Com » pour Combat seraient la table
+identifiant → français que `W1` interdit, à trois lettres près.
+
+Un ouvrier sans aucun palier affiche « sans palier » plutôt que rien, pour la raison que
+`_show_note()` porte depuis `W2` : une ligne qui n'apparaîtrait qu'au premier palier ferait
+grandir la fiche au moment où la colonne a le moins de place.
+
+### Les piles, et l'ordre qu'elles ne diront pas
+
+`Deck` savait dire combien, jamais quoi. Il répond maintenant par un **recensement** —
+carte vers nombre d'exemplaires — et c'est là qu'est la seule décision de design du jalon.
+
+Une pioche est ordonnée : l'index 0 est le sommet. En rendre le contenu dans l'ordre
+dirait au joueur non seulement ce qu'il reste mais *quand ça vient*, ce qui **répondrait
+par accident à l'`OUVERT` de 3.5** sur la main non jouée — « que fait-on d'une main qu'on ne
+peut pas jouer » cesse d'être un pari dès qu'on lit les trois prochaines cartes. C'est
+l'inverse de ce que `P1b` cherche : `DESIGN.md` 8 veut cette vue pour rendre l'arbitrage de
+`I2b` **jouable**, pas pour le trancher.
+
+Le refus vit dans le domaine et pas dans la vue. Rendre l'ordre puis demander à l'adapter
+de ne pas le montrer aurait laissé la règle dans un commentaire, à un appel de distance de
+la fuite. Un recensement n'a pas d'ordre à trahir — même geste que le bloc `production`
+nullable de `E1b` : la cohérence devient structurelle au lieu d'être vérifiée. Un cas de
+test le prouve plutôt que de le supposer : **deux decks mélangés sur deux seeds différents
+recensent à l'identique**, alors qu'un autre cas épingle qu'ils ne piochent pas pareil.
+
+La vue le **dit** quand même, en une ligne sous les colonnes. L'absence d'une information
+ne se voit pas : quatre noms rangés se lisent comme un ordre si rien ne dit le contraire,
+et ce serait le même défaut de forme que le « 2 » au-dessus du « 0 » de `P1a` — lisible, et
+faux.
+
+`P` l'ouvre dans le harnais Run **et** dans le harnais Cartes. Le second n'est pas du luxe :
+c'est la scène où le `Deck` vit seul, donc la seule où l'on peut vider une pioche à la main
+et regarder le remélange. La capture le montre — pioche des bâtiments à zéro, défausse à
+quatre —, état qu'aucune journée du harnais Run n'atteint.
+
+Les trois lignes de compteurs quittent le pavé de texte du harnais Run **au lieu d'être
+doublées**. Troisième fois après `E2` et `W2` : un chiffre affiché à deux endroits est un
+chiffre qui finira par différer de lui-même.
+
+### `--shot-piles`, par la porte habituelle
+
+Quatrième drapeau né de la phrase que ce projet se répète depuis `I2` : un écran qu'aucune
+capture ne peut atteindre est celui que personne ne regardera. La vue des piles est une
+modale qui ne s'obtient que par une touche — aucune suite de journées ne la produit —, donc
+sans drapeau la seule façon de la regarder aurait été de modifier du code pour la regarder.
+
+### Ce qui ne bouge pas
+
+**Aucun DTO de `contracts/` n'a été créé ni modifié**, le quatrième jalon d'affilée après
+`E2`, `W2` et `P1a`. Le domaine gagne deux accesseurs sur `Deck` et rien d'autre ; aucune
+règle de jeu n'a changé.
+
+### Prochain jalon
+
+**`I2b`**, sans réserve cette fois. `P1a` a rendu une phase agréable à mener, `P1b` a rendu
+à l'écran ce que la colonne cachait et donné à lire ce qu'il reste dans les piles : les deux
+choses qu'il fallait pour demander à quelqu'un de jouer quinze journées et d'arbitrer un
+`.tres`.
+
+De la famille `P` il ne reste que **`P1c`**, qui attend une question de design et non du
+temps : comment désigner l'une des deux actions d'une même case — un cycle au clic, un
+menu, une pile visible sur la case. Elle se pose avant le code, et elle se pose à toi.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché.
+
+- **`P` ouvre les piles**, dans le harnais Run comme dans le harnais Cartes. Échap ou un clic
+  n'importe où referme. C'est une modale : tant qu'elle est ouverte, aucune autre touche ne
+  répond.
+- **Les trois lignes « Piles » ont quitté le pavé de texte.** Ce qu'elles disaient est dans
+  la vue, en mieux : quelles cartes, et pas seulement combien.
+- **La pioche ne montre jamais son ordre**, et c'est une décision de design, pas une limite
+  d'affichage. Le domaine ne le rend pas.
+- **Le panneau d'affectation ne déborde plus**, à aucune résolution. La liste des actions
+  défile quand la place manque ; les fiches passent d'abord et restent entières.
+- **La fiche d'ouvrier fait quatre lignes.** Le détail — multiplicateurs, pistes sans palier,
+  XP totale — est dans l'infobulle, au survol.
+- **Chaque capture du harnais Run imprime une ligne de mise en page** : « bas du panneau
+  y=…, haut de la main y=…, N px de dégagement ». Un recouvrement positif y est un défaut.
+- **Un drapeau de plus** : `--shot-piles`, nu, ouvre la vue avant de capturer.
+- **La branche n'est pas fusionnée** : `feat/p1b-lists`, quatre commits.
+
+---
+
 ## 2026-08-27 — `P1a` : la souris suffit, la main affiche ses prix, la phase a une couleur
 
 **État : terminé.** Six commits sur `feat/p1a-comfort`. Les trois commandes passent : boot
