@@ -219,6 +219,17 @@ débordement de la colonne **avant** ses deux points, qui s'y heurteraient tous 
 - **`data/balance/run_balance.tres` a deux lignes de plus** : une `color` par phase — bleu
   le matin, ambre l'après-midi. C'est de la data, donc réglable sans toucher au GDScript ;
   une phase sans couleur fait **refuser le boot**.
+- **`F11` bascule en plein écran**, dans tous les harnais. La touche vit sur `dev_boot.gd`
+  et non dans un harnais : c'est une propriété de la fenêtre, pas de ce qu'on y montre.
+  Elle n'existait nulle part, d'où l'impossibilité de passer en plein écran.
+- **Les bandes sombres sur les côtés ne sont pas du letterboxing.** `project.godot` est déjà
+  en `stretch/aspect = "expand"`, qui n'en ajoute jamais, et la mesure le confirme — le
+  terrain couvre 35 % de la largeur en 1440×810 et 36 % en 1920×1080, donc l'image ne fait
+  que grandir. C'est le cadrage : `CameraRig.frame()` cale la diagonale de la carte sur la
+  **hauteur**, et la `size` d'une caméra orthogonale Godot est verticale. Sur un écran large
+  il reste du monde vide à gauche et à droite, à toute résolution. La molette zoome,
+  `R` recadre, et `frame_margin` dans `data/balance/camera_balance.tres` serre le cadrage
+  si on le veut plus près.
 - **`F2` replie le panneau d'affectation**, et le chevron de sa barre de tête fait la même
   chose à la souris. Replié, il garde le compte, **Auto** et son liseré de phase.
 - **Le compte rendu de phase ne bouge plus** : la colonne de droite s'accroche désormais en

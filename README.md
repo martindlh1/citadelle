@@ -43,6 +43,16 @@ de la 4.7.2 qui expliquent pourquoi il en faut trois et pas une.
 dossier. Le harnais à lancer se choisit dans la constante `HARNESS` de
 `scenes/dev/dev_boot.gd`. Vide, on obtient le rapport de boot.
 
+**`F11` bascule en plein écran**, quel que soit le harnais : la touche vit sur le pivot
+et non dans un harnais, parce que c'est une propriété de la fenêtre et non de ce qu'on y
+montre. C'est le mode *fullscreen* sans bordure, donc à la résolution du bureau.
+
+Le décor sombre qu'on voit à gauche et à droite de la carte n'est **pas** du letterboxing :
+`project.godot` est en `stretch/aspect = "expand"`, qui n'ajoute jamais de bandes. C'est le
+cadrage — `CameraRig.frame()` cale la **diagonale de la carte sur la hauteur** de l'écran,
+et la `size` d'une caméra orthogonale Godot est verticale. Sur un écran large il reste donc
+du monde vide sur les côtés, à toute résolution : la molette zoome, `R` recadre.
+
 ## Capturer un rendu depuis un terminal
 
 Un harnais qui affiche quelque chose ne se vérifie ni au parsing ni aux tests : il

@@ -115,7 +115,8 @@ Le travail clic sur une fiche, puis sur son action — sur la carte ou dans la l
            Espace reste le raccourci : envoyer sur la case survolée sans rien tenir.
 Entrée     fonder le village, tenir la ligne, ou finir la phase — selon ce que le run attend.
 La caméra  Q/E : pivoter. Molette : zoomer. WASD : déplacer. R : recadrer.
-La vue     H : replier ce rapport. F2 : replier l'affectation. F1 : masquer tout le HUD."""
+La vue     H : replier ce rapport. F2 : replier l'affectation. F1 : masquer tout le HUD.
+           F11 : plein écran."""
 
 
 ## Ce que `--shot-evenings` doit valoir pour capturer l'écran de **fondation**.
