@@ -53,7 +53,18 @@ const SUN_YAW_SWEEP := 45.0
 const SUN_HORIZON_PITCH := -30.0
 
 ## Teinte du soleil aux deux bouts de la course, et à midi.
-const SUN_DAWN_COLOR := Color(0.72, 0.82, 1.0)
+##
+## Les deux bouts ne sont **pas** la même lumière retournée, et c'est le seul écart assumé
+## à la physique : une journée à deux phases les pose tous les deux au ras de l'horizon,
+## donc un soleil symétrique ne différerait que par le côté où tombent les ombres — trop
+## discret pour dire l'heure.
+##
+## L'aube est **rosée** et non bleue. La première version l'avait poussée au bleu froid
+## pour l'éloigner du crépuscule, et ça l'éloignait surtout d'une aube : une lumière
+## franchement bleue se lit comme un clair de lune ou un temps couvert, pas comme un lever.
+## Le rose garde la chaleur d'un soleil bas tout en restant à distance de l'ambre du soir,
+## qui tire l'herbe vers l'olive là où l'aube la laisse verte.
+const SUN_DAWN_COLOR := Color(1.0, 0.83, 0.78)
 const SUN_DUSK_COLOR := Color(1.0, 0.72, 0.45)
 const SUN_HIGH_COLOR := Color(1.0, 0.97, 0.92)
 
@@ -75,9 +86,11 @@ const NIGHT_AMBIENT_COLOR := Color(0.30, 0.36, 0.54)
 const NIGHT_AMBIENT_ENERGY := 0.40
 
 ## Ce que l'aube et le crépuscule font au ciel et à l'ambiante.
-const DAWN_SKY_COLOR := Color(0.08, 0.11, 0.16)
+const DAWN_SKY_COLOR := Color(0.13, 0.11, 0.16)
 const DUSK_SKY_COLOR := Color(0.15, 0.10, 0.10)
-const DUSK_AMBIENT_COLOR := Color(0.50, 0.47, 0.52)
+## Violine au lever, chaude au coucher : le même partage que la teinte du soleil.
+const DAWN_AMBIENT_COLOR := Color(0.52, 0.49, 0.58)
+const DUSK_AMBIENT_COLOR := Color(0.52, 0.46, 0.44)
 const DUSK_AMBIENT_ENERGY := 0.48
 
 ## Durée du glissement d'un moment à l'autre.
@@ -227,8 +240,9 @@ func _light(moment: float) -> void:
 		else SUN_ENERGY * lerpf(SUN_LOW_ENERGY, 1.0, noon)
 	var edge_sky := DAWN_SKY_COLOR.lerp(DUSK_SKY_COLOR, moment)
 	var sky := NIGHT_SKY_COLOR if night else edge_sky.lerp(SKY_COLOR, noon)
+	var edge_ambient := DAWN_AMBIENT_COLOR.lerp(DUSK_AMBIENT_COLOR, moment)
 	var ambient := NIGHT_AMBIENT_COLOR if night \
-		else DUSK_AMBIENT_COLOR.lerp(AMBIENT_COLOR, noon)
+		else edge_ambient.lerp(AMBIENT_COLOR, noon)
 	var ambient_energy := NIGHT_AMBIENT_ENERGY if night \
 		else lerpf(DUSK_AMBIENT_ENERGY, AMBIENT_ENERGY, noon)
 
