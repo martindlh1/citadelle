@@ -13,6 +13,7 @@ extends GdUnitTestSuite
 ## auraient rendu les deux situations indiscernables.
 
 const BALANCE_PATH := "res://data/balance/deck_balance.tres"
+const BALANCE_ROOT := "res://data/balance"
 const CARD_ROOT := "res://data/cards"
 
 func test_a_blank_block_reports_everything() -> void:
@@ -158,6 +159,29 @@ func test_the_deck_balance_of_data_is_exploitable() -> void:
 		assert_bool(known.has(String(card))) \
 			.override_failure_message("le deck de départ nomme une carte inconnue : %s" % card) \
 			.is_true()
+
+## Et les decks qu'on garde **sous le coude** ?
+##
+## `I2b` en laisse un second dans `data/balance/`, celui dont la main persiste, pour que
+## l'`OUVERT` de 3.5 se retourne en repointant une ligne de `balance.tres`. Personne ne le
+## lit tant qu'il n'est pas rebranché, donc le boot ne le contrôle pas — et un bloc de
+## rechange qu'on ne peut plus jouer n'est pas une rechange. Même argument que
+## `RunBalanceTest.test_every_day_model_left_in_data_is_playable`, et même compte à deux.
+func test_every_deck_left_in_data_is_playable() -> void:
+	var blocks := 0
+	for file in DirAccess.get_files_at(BALANCE_ROOT):
+		if file.get_extension() != "tres":
+			continue
+		var block := load(BALANCE_ROOT.path_join(file))
+		if not (block is DeckBalance):
+			continue
+		blocks += 1
+		assert_array((block as DeckBalance).missing_fields()) \
+			.override_failure_message("bloc de deck inexploitable : %s" % file) \
+			.is_empty()
+	assert_int(blocks) \
+		.override_failure_message("plus aucun deck de rechange dans data/balance/") \
+		.is_greater_equal(2)
 
 ## Deux actions, un bâtiment, trois tailles de main dont celle des powers à zéro.
 func _filled() -> DeckBalance:

@@ -122,6 +122,18 @@ const ROW_FONT_SIZE := 11
 
 const TITLE := "Affectation"
 const EMPTY_BOARD := "Aucune action posée — prendre une carte et cliquer une cible."
+
+## Et le même plateau vide dans une phase qui ne pose rien.
+##
+## Deux textes plutôt qu'un, parce que le premier **invite à un geste** et qu'une phase qui
+## ferme la journée le refuse : l'écran promettait « prendre une carte et cliquer une
+## cible » là où le domaine répond `wrong_phase`. C'est le même défaut d'invitation que
+## l'orange du `WAITING_COLOR` ci-dessus, trouvé de la même façon — en regardant l'écran
+## d'une phase que le jalon venait de faire exister.
+##
+## Aucun nom de phase ici non plus : la vue demande `permits()` et lit la réponse, comme
+## le bouton **Auto** au-dessous.
+const CLOSING_BOARD := "Rien à poser : cette phase ferme la journée."
 const AUTO_TEXT := "Auto"
 
 ## Le bouton qui replie le panneau, et celui qui le rouvre.
@@ -342,6 +354,8 @@ func show_progress(report: ProgressReport) -> void:
 func _fill_rows(state: RunState, assign: Assignment) -> void:
 	var posted := state.board().to_plan().actions()
 	_empty.visible = posted.is_empty()
+	_empty.text = EMPTY_BOARD if state.cycle().permits(PhaseDef.ACTION_PLAY) \
+		else CLOSING_BOARD
 	_scroll.visible = not posted.is_empty()
 	_row_actions.resize(posted.size())
 	while _row_buttons.size() < posted.size():

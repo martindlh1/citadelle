@@ -250,6 +250,15 @@ static func unstaff(state: RunState, action: int) -> Array[StringName]:
 ## Une phase qui ne résout pas mais ferme la journée ne produit rien et prélève quand
 ## même : une journée coûte à nourrir qu'on y ait travaillé ou non.
 ##
+## **Et elle ne compte aucun oisif**, ce qui n'est pas la même chose que d'en compter zéro
+## par hasard. Un oisif est un reproche — « tu avais six ouvriers et tu n'en as employé
+## que quatre » —, et un reproche suppose qu'on pouvait faire autrement. Dans une phase où
+## personne ne peut être affecté, tout le roster est trivialement oisif : le rapport
+## annoncerait « 6 oisifs » à qui vient de faire travailler ses six ouvriers tout
+## l'après-midi. C'était vrai au mot près et faux à la lecture, ce qui est le défaut que
+## `E2` a nommé et que seule une capture montre. Constaté à `I2b`, sur la phase que le
+## jalon venait de faire exister.
+##
 ## **Les deux résolveurs voient la même ville**, celle d'avant le soir, et l'ordre compte :
 ## les chantiers s'appliquent **après** que la production a été calculée. Sans cette
 ## règle, un entrepôt achevé ce soir relèverait la réserve du même soir, et un chantier
@@ -273,6 +282,7 @@ static func resolve(state: RunState) -> PhaseReport:
 	var progress := ProgressReport.empty()
 	var completed: Array[Vector2i] = []
 	var lines: Array[WorkLine] = []
+	var resting: Array[StringName] = []
 
 	if cycle.resolves():
 		var plan := state.board().to_plan()
@@ -286,13 +296,14 @@ static func resolve(state: RunState) -> PhaseReport:
 		lines = production.work()
 		lines.append_array(sites.work())
 		progress = SkillResolver.award_lines(state.roster(), lines, balance.workforce)
+		resting = _idle(labor, lines)
 
 	var day_report: DayReport = null
 	if cycle.closes_the_day():
 		day_report = close_the_day(state)
 
 	return PhaseReport.create(cycle.day(), cycle.phase().id, production, sites, progress,
-		_idle(labor, lines), completed, day_report)
+		resting, completed, day_report)
 
 ## Fait tomber cette vague sur le village, applique ce qu'elle ordonne, et rend ce que ça a
 ## coûté.

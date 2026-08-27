@@ -14,6 +14,7 @@ extends GdUnitTestSuite
 ## `C4` a exigé qu'au moins un bâtiment de `data/` déclare un `build_actions`.
 
 const BALANCE_PATH := "res://data/balance/run_balance.tres"
+const BALANCE_ROOT := "res://data/balance"
 
 func test_a_blank_block_reports_everything() -> void:
 	assert_array(RunBalance.new().missing_fields()).contains(
@@ -250,6 +251,33 @@ func test_the_starting_building_needs_no_site_work() -> void:
 ## démarrer, donc il ne dit jamais *quoi* dans une suite de tests. Celui-ci le nomme.
 func test_the_real_file_reports_nothing() -> void:
 	assert_array((load(BALANCE_PATH) as RunBalance).missing_fields()).is_empty()
+
+## Et les modèles de journée qu'on garde **sous le coude** ?
+##
+## `I2b` en laisse un second dans `data/balance/` — celui qu'on n'a pas retenu —, pour que
+## l'arbitrage de `DESIGN.md` 2 se retourne en repointant une ligne de `balance.tres`.
+## Personne ne le lit tant qu'il n'est pas rebranché, donc `GameDatabase` ne le contrôle
+## pas : un champ qui s'y viderait ne se verrait que le jour où l'on veut comparer, ce qui
+## est exactement le mauvais jour. Une variante qu'on ne peut plus jouer n'est pas une
+## variante, c'est un fichier mort.
+##
+## Le compte est exigé à deux et non à un : sans lui, le cas passerait tout aussi bien sur
+## un dossier qui n'aurait plus de rechange du tout.
+func test_every_day_model_left_in_data_is_playable() -> void:
+	var models := 0
+	for file in DirAccess.get_files_at(BALANCE_ROOT):
+		if file.get_extension() != "tres":
+			continue
+		var block := load(BALANCE_ROOT.path_join(file))
+		if not (block is RunBalance):
+			continue
+		models += 1
+		assert_array((block as RunBalance).missing_fields()) \
+			.override_failure_message("modèle de journée inexploitable : %s" % file) \
+			.is_empty()
+	assert_int(models) \
+		.override_failure_message("plus aucune journée de rechange dans data/balance/") \
+		.is_greater_equal(2)
 
 ## Un bloc renseigné à la main, sur des noms de phase et de vague qui n'existent dans aucun
 ## .tres — la même discipline que `DayCycleTest` : figer un nom livré rendrait plus coûteux

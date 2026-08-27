@@ -914,7 +914,8 @@ func _refresh_markers() -> void:
 ## chaque image met ses nœuds à jour **sur place**, et celle-ci ne le fait pas.
 func _refresh_targets() -> void:
 	_refresh_markers()
-	_hand_view.show_hand(_state().deck().hand(), _held_slot, _state().ledger())
+	_hand_view.show_hand(_state().deck().hand(), _held_slot, _state().ledger(),
+		_state().cycle())
 	var held := _held_card()
 	if held.is_empty() or not ActionTargeting.handles(held):
 		_targets.clear()

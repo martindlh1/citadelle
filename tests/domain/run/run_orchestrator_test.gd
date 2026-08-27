@@ -767,6 +767,21 @@ func test_a_day_may_close_on_a_phase_that_allows_nothing() -> void:
 	assert_int(state.ledger().amount(&"food")).is_equal(OPENING_FOOD - 3)
 	assert_int(state.cycle().day()).is_equal(2)
 
+## Une phase qui ne résout pas ne compte **aucun** oisif, et ce n'est pas zéro par hasard.
+##
+## Un oisif est un reproche, et un reproche suppose qu'on pouvait faire autrement. Le soir
+## n'affecte personne, donc le roster entier y est trivialement oisif : sans ce cas, le
+## compte rendu annonçait « 6 oisifs » à qui venait de faire travailler ses six ouvriers
+## tout l'après-midi. Vrai au mot près, faux à la lecture — trouvé en capture, comme les
+## trois défauts d'écran de `I2`.
+func test_a_phase_that_resolves_nothing_counts_no_one_idle() -> void:
+	var state := _open(SEED, _two_working_phases_and_a_close())
+	RunOrchestrator.end_phase(state)
+	var afternoon := RunOrchestrator.end_phase(state)
+	var close := RunOrchestrator.end_phase(state)
+	assert_array(afternoon.idle()).has_size(3)
+	assert_array(close.idle()).is_empty()
+
 ## La conséquence du modèle sur la main, et elle vaut d'être épinglée parce qu'elle se lit
 ## mal : la main est tirée à la fin de la dernière phase qui **produit**, donc elle traverse
 ## le soir sans que rien n'y touche. Le compte reste juste — une main par phase qui résout —
