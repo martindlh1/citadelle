@@ -134,6 +134,15 @@ const EMPTY_BOARD := "Aucune action posée — prendre une carte et cliquer une 
 ## Aucun nom de phase ici non plus : la vue demande `permits()` et lit la réponse, comme
 ## le bouton **Auto** au-dessous.
 const CLOSING_BOARD := "Rien à poser : cette phase ferme la journée."
+
+## Et le même plateau vide une fois le run terminé.
+##
+## Un troisième texte, parce que les deux autres parlent d'une phase et qu'il n'y en a
+## plus : `permits()` rend faux sur un run fini, donc sans lui l'écran annonçait « cette
+## phase ferme la journée » sur une partie qui n'en avait plus aucune. Même famille de
+## défaut que celle que `I2b` venait de corriger, un cran plus loin — et trouvée de la même
+## façon, en regardant l'écran d'un état que le jalon venait de rendre visible.
+const ENDED_BOARD := "Le run est terminé."
 const AUTO_TEXT := "Auto"
 
 ## Le bouton qui replie le panneau, et celui qui le rouvre.
@@ -354,8 +363,7 @@ func show_progress(report: ProgressReport) -> void:
 func _fill_rows(state: RunState, assign: Assignment) -> void:
 	var posted := state.board().to_plan().actions()
 	_empty.visible = posted.is_empty()
-	_empty.text = EMPTY_BOARD if state.cycle().permits(PhaseDef.ACTION_PLAY) \
-		else CLOSING_BOARD
+	_empty.text = _empty_text(state)
 	_scroll.visible = not posted.is_empty()
 	_row_actions.resize(posted.size())
 	while _row_buttons.size() < posted.size():
@@ -391,6 +399,12 @@ func _fill_rows(state: RunState, assign: Assignment) -> void:
 ## qu'il faut nommer : ce panneau se redessine à chaque image, donc le calcul se pose au
 ## pire une image après le geste qui l'a changé. Les captures s'en accommodent aussi,
 ## `DevShot.WARMUP_FRAMES` en laissant passer trois.
+## Ce que dit un plateau vide, selon ce que le run permet encore.
+func _empty_text(state: RunState) -> String:
+	if state.cycle().is_over():
+		return ENDED_BOARD
+	return EMPTY_BOARD if state.cycle().permits(PhaseDef.ACTION_PLAY) else CLOSING_BOARD
+
 func _fit_rows() -> void:
 	var wanted := _rows.get_combined_minimum_size().y
 	var elsewhere := get_combined_minimum_size().y - _scroll.custom_minimum_size.y

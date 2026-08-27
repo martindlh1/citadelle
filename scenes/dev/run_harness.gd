@@ -113,7 +113,7 @@ La carte   clic gauche : jouer sur la case survolée. Clic droit : retirer.
 Le travail clic sur une fiche, puis sur son action — sur la carte ou dans la liste. Ou Auto.
            Clic droit sur une fiche : la rappeler. Retour arrière : rappeler toute une action.
            Espace reste le raccourci : envoyer sur la case survolée sans rien tenir.
-Entrée     fonder le village, tenir la ligne, ou finir la phase — selon ce que le run attend.
+Entrée     le pas que le bouton en bas à droite annonce : fonder, finir, tenir la ligne, relancer.
 La caméra  Q/E : pivoter. Molette : zoomer. WASD : déplacer. R : recadrer.
 La vue     H : replier ce rapport. F2 : replier l'affectation. F1 : masquer tout le HUD.
            P : voir les piles. F11 : plein écran."""
@@ -210,6 +210,24 @@ var _report_level := Report.FULL
 ## `CLAUDE.md` refuse en premier, écrit à l'envers.
 var _left_slot: MarginContainer
 var _right_slot: MarginContainer
+
+## Le bouton de pas et l'écran de fin, ajoutés à `P2a`.
+##
+## Le bouton vit dans un troisième créneau, **dans la bande de la main** et non dans la
+## colonne de droite : celle-ci a débordé trois fois — `W2`, `I2`, `P1a` —, et on ne lui
+## confie pas le geste le plus fréquent du jeu.
+var _step_slot: MarginContainer
+var _step: StepButton
+var _end_screen: RunEndScreen
+
+## Le seed du run **courant**, qui n'est plus `SEED` dès qu'on relance.
+##
+## `SEED` reste la valeur d'ouverture, donc ce qu'une capture et la chronique montrent ;
+## celui-ci est ce que l'écran affiche et ce qu'un relancement fait avancer. Les deux
+## seraient le même tant que rien ne relance, et c'est précisément pour ça qu'il fallait
+## les séparer avant : un `SEED` lu à l'écran après un relancement aurait annoncé le seed
+## d'un run qu'on ne joue plus.
+var _run_seed := SEED
 
 ## Ouvrier sélectionné dans le panneau, ou &"" si aucun.
 ##
@@ -308,9 +326,31 @@ func _ready() -> void:
 	_piles.dismissed.connect(_show_piles)
 	add_child(_piles)
 
+	# Le bouton de pas, **dans la bande de la main** et calé sur le bas des cartes. La marge
+	# se demande à la main plutôt que d'être recopiée, comme celle de la colonne de droite
+	# depuis `P1b` : la bande seule sait où elle commence et où elle finit.
+	_step = StepButton.create()
+	_step.step_requested.connect(_press_on)
+	_step_slot = _hud_slot(_step, Control.SIZE_SHRINK_END, Control.SIZE_SHRINK_END,
+		HandView.band_bottom())
+	add_child(_step_slot)
+
+	# En dernier, donc au-dessus de la vue des piles elle-même : un run fini l'est pendant
+	# qu'une modale est ouverte comme pendant qu'elle ne l'est pas, et le verdict passe
+	# devant tout le reste.
+	_end_screen = RunEndScreen.create()
+	_end_screen.restart_requested.connect(_restart)
+	_end_screen.dismissed.connect(_end_screen.dismiss)
+	add_child(_end_screen)
+
 	EventBus.phase_resolved.connect(_on_phase_resolved)
 	EventBus.battle_pending.connect(_on_battle_pending)
 	EventBus.battle_resolved.connect(_on_battle_resolved)
+	# `run_finished` et non `run_ended` : `EventBus` distingue la partie **jouée** de la
+	# partie **rangée**, et son commentaire dit depuis `I2` qu'« un écran de fin vit entre
+	# les deux ». Écouter la seconde ferait apparaître le verdict au moment où le run
+	# disparaît, donc trop tard pour en lire quoi que ce soit.
+	EventBus.run_finished.connect(_on_run_finished)
 	# La première ligne du jeu doit parler du premier geste. « Prendre une carte » était
 	# vrai tant qu'un run s'ouvrait Cœur posé et main tirée ; depuis `I2` il n'y a ni
 	# l'un ni l'autre, et l'écran conseillerait un geste que le domaine refuse.
@@ -338,6 +378,12 @@ func _process(_delta: float) -> void:
 	_bar.show_ledger(_state().ledger(), _last_delta)
 	_crew.set_height_budget(_crew_budget())
 	_crew.show_state(_state(), _held_worker, RunManager.phase())
+	# Le bouton de pas est relu à chaque image, comme le panneau d'affectation et pour la
+	# même raison : sa réponse dépend de l'état du run, donc de six gestes différents.
+	# Le rafraîchir sur événement aurait demandé de les énumérer, et un oubli dans cette
+	# liste se lirait comme un bouton qui propose le pas d'avant. Il ne redessine rien tant
+	# que le libellé ne change pas.
+	_step.show_state(_state())
 	_label.text = _report()
 	_hover.text = _hover_line()
 
@@ -478,6 +524,7 @@ func _toggle_hud() -> void:
 	_left_slot.visible = shown
 	_right_slot.visible = shown
 	_hand_view.visible = shown
+	_step_slot.visible = shown
 	if shown:
 		_last_action = "HUD rendu. F1 pour le remasquer."
 
@@ -780,6 +827,13 @@ func _unstaff_here() -> void:
 ## défaut » que `F1` annonçait pour le déploiement automatique, et c'est le même geste :
 ## la règle automatique de `I1` survit comme raccourci, le clic reste le choix.
 func _press_on() -> void:
+	# Un run fini passe en premier, et c'est la seule question qui vaille alors : les trois
+	# autres portent sur une journée qui n'existe plus. C'est aussi ce qui fait que le
+	# bouton de pas n'a jamais d'état mort — `StepButton.show_state()` départage dans le
+	# même ordre, et les deux chemins doivent dire la même chose.
+	if _state().cycle().is_over():
+		_restart()
+		return
 	if _state().awaits_its_heart():
 		_found_at(_state().suggested_heart_anchor())
 		return
@@ -787,6 +841,57 @@ func _press_on() -> void:
 		_fight()
 		return
 	_end_phase()
+
+## Referme le run courant et en ouvre un neuf, sur le seed suivant.
+##
+## **Le seed suivant et non un tirage libre.** Un seed au hasard rendrait le harnais
+## différent à chaque lancement, donc les captures incomparables d'une session à l'autre —
+## ce que ce projet refuse depuis `I0`, et ce que la chronique de `I2b` exige pour que
+## quatre variantes se comparent. `+ 1` est frais pour le joueur et reproductible pour nous,
+## et l'écran l'affiche pour qu'on puisse revenir à un run précis quand on le veut.
+##
+## Le relief est **régénéré** : c'est un run neuf, pas une reprise. Le monde le reçoit par
+## `show_grid()` plutôt que d'être reconstruit — `DevWorld` sait repointer ses trois
+## renderers et son curseur, et refaire l'arbre perdrait la caméra là où le joueur l'avait
+## laissée.
+##
+## Tout ce que le harnais tenait du run précédent est remis à zéro ici, et il faut que la
+## liste soit exhaustive : un `_battle_names` oublié ferait nommer les morts d'hier dans la
+## bataille de demain — exactement le défaut que `I2` a trouvé en capture, retourné.
+func _restart() -> void:
+	var balance := GameDatabase.get_balance()
+	_run_seed += 1
+	if RunManager.is_running():
+		RunManager.close()
+	var grid := TerrainGen.generate(_run_seed, balance.terrain_gen.map_size,
+		balance.terrain_gen)
+	RunManager.open(RunState.open(_run_seed, grid, _make_roster(), _make_catalogue(),
+		_make_buildings(), balance))
+	_world.show_grid(grid)
+	_renderer.rebuild(_state().city())
+	_held_slot = NO_SLOT
+	_held_worker = &""
+	_turns = 0
+	_direction = PlayedAction.DIRECTION_UP
+	_battle_label = ""
+	_battle_day = 0
+	_battle_names = {}
+	_ending_label = ""
+	_last_delta = {}
+	_panel.clear()
+	_battle.clear()
+	_end_screen.dismiss()
+	_last_action = "Poser le Cœur : un clic sur la carte, ou Entrée pour la case suggérée."
+	_refresh_targets()
+
+## Le run vient de se terminer : on montre comment.
+##
+## Le seed lui est **passé** plutôt que lu sur le run : l'écran vit entre `run_finished` et
+## `run_ended`, donc entre le moment où la partie est jouée et celui où `RunManager` la
+## range, et lui faire redemander un état qui peut déjà avoir disparu serait une
+## dépendance de plus pour rien.
+func _on_run_finished(outcome: RunOutcome) -> void:
+	_end_screen.show_outcome(outcome, _run_seed)
 
 ## Termine la phase. C'est `RunManager` qui décide si ça résout — le harnais ne connaît
 ## pas la journée, il la traverse.
@@ -814,7 +919,7 @@ func _end_phase() -> PhaseReport:
 			finished, _state().pending_wave().label]
 		return report
 	if _state().cycle().is_over():
-		_last_action = "%s terminée — %s." % [finished, _verdict()]
+		_last_action = "%s terminée — %s." % [finished, _outcome_word(_state().outcome())]
 		return report
 	_last_action = "%s terminée. Au tour de %s." % [finished, _phase_label()]
 	return report
@@ -857,7 +962,7 @@ func _fight() -> BattleReport:
 	# geste du joueur l'ait visé.
 	_renderer.rebuild(_state().city())
 	if _state().cycle().is_over():
-		_last_action = "%s : %s." % [_battle_label, _verdict()]
+		_last_action = "%s : %s." % [_battle_label, _outcome_word(_state().outcome())]
 		return report
 	_last_action = "%s repoussée." % _battle_label if report.is_held() 		else "%s a frappé. Au tour de %s." % [_battle_label, _phase_label()]
 	return report
@@ -989,7 +1094,6 @@ func _report() -> String:
 	if not forecast.is_empty():
 		lines.append(forecast)
 	lines.append("")
-	lines.append_array(_closing_lines())
 	if _report_level == Report.ESSENTIAL:
 		lines.append(_last_action)
 		return "\n".join(lines)
@@ -1030,7 +1134,7 @@ func _forecast_line() -> String:
 func _banner() -> String:
 	var cycle := _state().cycle()
 	if _state().awaits_its_heart():
-		return "Fondation   |   poser le Cœur : clic sur la carte, ou Entrée pour la case suggérée   |   seed %d" 			% SEED
+		return "Fondation   |   poser le Cœur : clic sur la carte, ou Entrée pour la case suggérée   |   seed %d" 			% _run_seed
 	if cycle.is_over():
 		return "Run terminé   |   %s" % _verdict()
 	if _state().awaits_a_battle():
@@ -1055,50 +1159,23 @@ func _banner() -> String:
 func _verdict() -> String:
 	var ending := _state().outcome()
 	if ending == null:
-		return "%d jour(s) joués, seed %d" % [_state().cycle().days(), SEED]
+		return "%d jour(s) joués, seed %d" % [_state().cycle().days(), _run_seed]
 	return "%s   |   jour %d, score %d" % [_outcome_word(ending), ending.day(),
 		ending.score()]
 
 func _outcome_word(ending: RunOutcome) -> String:
 	return "Victoire" if ending.is_victory() else "Défaite"
 
-## Le détail du score, sur sa propre ligne du rapport.
+## Le détail d'une fin a quitté ce pavé à `P2a`, pour `RunEndScreen`.
 ##
-## Les quatre termes que `DESIGN.md` 5 énumère, parce qu'un total seul ne dit pas ce qui l'a
-## fait — c'est la raison pour laquelle `RunOutcome` les garde à côté de la somme.
-func _score_line() -> String:
-	var ending := _state().outcome()
-	if ending == null:
-		return ""
-	return "Score %d — %d en réserve, %d bâtiment(s) debout, %d ouvrier(s), %d niveau(x)." \
-		% [ending.score(), ending.resources(), ending.buildings(), ending.workers(),
-			ending.levels()]
+## Il y était depuis `I2` — la cause en clair, puis le score et ses quatre termes —, à côté
+## de l'aide au clavier, c'est-à-dire dans la seule zone de l'écran qu'on cesse de lire au
+## bout de deux minutes. Une partie de quinze journées s'achevait donc sur une phrase qu'on
+## pouvait manquer. L'écran de fin les **remplace** au lieu de les doubler, quatrième fois
+## après `E2`, `W2` et `P1b` : un chiffre affiché à deux endroits est un chiffre qui finira
+## par différer de lui-même. Ce que le bandeau garde est un mot et un total, ce qu'un
+## bandeau sait porter.
 
-## Pourquoi le run s'est arrêté, en clair.
-##
-## La traduction d'une constante du domaine, comme `_staffing_refusal()` depuis `I1` : un
-## `RunOutcome` rend `&"heart"`, l'écran en fait une phrase. Le repli par défaut existe pour
-## qu'une quatrième cause, le jour où il y en aura une, se lise plutôt que de disparaître.
-func _cause_of(ending: RunOutcome) -> String:
-	match ending.cause():
-		RunOutcome.CAUSE_SURVIVED:
-			return "La dernière journée est passée, le village tient debout."
-		RunOutcome.CAUSE_HEART:
-			return "Le Cœur est tombé."
-		RunOutcome.CAUSE_ROSTER:
-			return "Il ne reste plus personne au village."
-	return "Fin : %s." % ending.cause()
-
-## Le détail du score s'ajoute au rapport une fois le run fini, et lui seul : les autres
-## lignes décrivent une partie en cours.
-func _closing_lines() -> PackedStringArray:
-	var lines := PackedStringArray()
-	if not _state().cycle().is_over():
-		return lines
-	lines.append(_cause_of(_state().outcome()))
-	lines.append(_score_line())
-	lines.append("")
-	return lines
 
 ## Ce que la phase courante autorise, en clair. L'écran ne suppose rien : il pose les
 ## deux questions au domaine et affiche les réponses.
@@ -1791,6 +1868,12 @@ func _capture_if_asked() -> void:
 		_scripted_skip_phases(DevShot.argument(DevShot.SHOT_PHASES_FLAG).to_int())
 		if not _state().awaits_a_battle() and not _state().cycle().is_over():
 			_scripted_open_phase()
+	# Après la suite de journées et avant tout le reste : relancer refait le run entier —
+	# relief compris —, donc appliquer un cran de HUD ou poser le soleil avant lui les
+	# poserait sur une partie qu'on jette. C'est aussi le seul passage automatique qui
+	# emprunte `_restart()`.
+	if DevShot.has_flag(DevShot.SHOT_RESTART_FLAG):
+		_restart()
 	_apply_shot_view()
 	# Le soleil se pose **d'un coup** pour une capture. Trois images de chauffe ne couvrent
 	# pas un glissement de neuf dixièmes de seconde : sans ça, toute capture montrerait un
@@ -1810,6 +1893,7 @@ func _capture_if_asked() -> void:
 		_state().ledger().total(), _state().ledger().capacity()])
 	print("[run_harness] %s" % _hover_line())
 	print("[run_harness] %s" % _fit_line())
+	print("[run_harness] %s" % _step_fit_line())
 	var error := get_viewport().get_texture().get_image().save_png(path)
 	print("[run_harness] capture vers %s : %s" % [path, error_string(error)])
 	get_tree().quit(OK if error == OK else FAILED)
@@ -1846,6 +1930,23 @@ func _fit_line() -> String:
 		else "%d px de dégagement" % (band - bottom)
 	return "colonne droite : bas du panneau y=%d, haut de la main y=%d, %s" % [
 		bottom, band, verdict]
+
+## La même mesure, couchée : le bouton de pas vit **dans** la bande de la main, à droite,
+## et la main est centrée — donc elle grandit vers lui à chaque carte de plus.
+##
+## Elle existe pour la raison que `P1b` a payée d'une heure passée à sonder des PNG : un
+## recouvrement se mesure en pixels de **mise en page**, que seules les vues connaissent,
+## et pas en pixels d'image, qui valent 1,667 fois moins en 1920×1080. La faire dire au
+## harnais coûte cinq lignes et la rend lisible sur toutes les captures suivantes.
+##
+## Le bord droit est demandé à la main et non déduit de sa taille : la vue est ancrée sur
+## toute la largeur de l'écran, donc son propre bord droit ne dit rien de ses cartes.
+func _step_fit_line() -> String:
+	var cards := _hand_view.right_edge()
+	var button := _step.global_position.x
+	var verdict := "recouvrement %d px" % (cards - button) if cards > button 		else "%d px de dégagement" % (button - cards)
+	return "bande basse : droite des cartes x=%d, gauche du bouton x=%d, %s" % [
+		cards, button, verdict]
 
 ## Applique le cran de HUD demandé par `--shot-view`, s'il l'est.
 ##

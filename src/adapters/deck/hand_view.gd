@@ -152,7 +152,14 @@ const UNPLAYABLE_TEXT := "Cette phase ne pose pas de carte."
 ## vraiment *Soir* et qui, elle, ne résout rien. Le mot avait toujours désigné la phase et
 ## non l'heure — depuis que `PhaseReport` s'est séparé de `DayReport` à `I1` —, mais il
 ## avait cessé d'être lisible ainsi le jour où `data/` a pu nommer un soir.
-const EMPTY_TEXT := "Main vide — Entrée termine la phase."
+##
+## Elle a fini par ne plus rien nommer du tout, à `P2a`. Une main est vide dans **deux**
+## situations — avant la fondation, et quand on a tout joué —, et la phrase n'était juste
+## que dans la seconde : sur l'écran de fondation elle annonçait « Entrée termine la
+## phase » alors qu'Entrée pose le Cœur. Le bouton de pas dit désormais ce qu'Entrée fait,
+## et il le dit dans les deux cas ; le redire ici serait le doublon habituel, avec en prime
+## une chance sur deux de se tromper.
+const EMPTY_TEXT := "Main vide."
 
 ## Rang qui n'encadre aucune carte.
 const NO_HELD := -1
@@ -188,6 +195,15 @@ var _buildings: Dictionary[StringName, BuildingData] = {}
 static func band_height() -> float:
 	return CARD_HEIGHT + HOVER_LIFT + 2 * CARD_GAP
 
+## De combien le bas des cartes est remonté du bas de l'écran.
+##
+## Publique pour la même raison que `band_height()` : un second endroit en dépend. Ce que le
+## HUD pose **dans** la bande, à côté des cartes — le bouton de pas depuis `P2a` —, doit
+## s'aligner sur elles, et le recopier serait le doublon qu'`E2` a payé sur la réserve puis
+## `P1a` sur cette bande même.
+static func band_bottom() -> float:
+	return CARD_GAP
+
 ## Vue prête à être ajoutée à l'arbre.
 static func create(catalogue: CardCatalogue, palette: CommodityPalette,
 		buildings: Dictionary[StringName, BuildingData]) -> HandView:
@@ -207,6 +223,22 @@ static func create(catalogue: CardCatalogue, palette: CommodityPalette,
 	# et une main qui les avalerait rendrait le bas de la carte injouable.
 	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return view
+
+## Où la dernière carte finit, en coordonnées d'écran. Zéro tant que rien n'est dessiné.
+##
+## La vue occupe toute la **largeur** — elle est ancrée `BOTTOM_WIDE` et centre ses rangées
+## —, donc son propre bord droit est celui de l'écran et ne dit rien de la main. Ce qu'un
+## voisin a besoin de savoir est où finissent les **cartes**, et il n'y a qu'elle pour le
+## dire. Troisième accesseur de mesure après `band_height()` et `band_bottom()`, et le même
+## argument les trois fois : la bande sait seule ce qu'elle occupe.
+func right_edge() -> float:
+	var edge := 0.0
+	for child in get_children():
+		var row := child as Control
+		if row == null:
+			continue
+		edge = maxf(edge, row.global_position.x + row.size.x)
+	return edge
 
 ## Redessine la main, la carte de rang `held` encadrée.
 ##
@@ -371,8 +403,21 @@ func _make_line(text: String, size: int, color: Color, wrap := true) -> Label:
 	label.add_theme_color_override("font_color", color)
 	return label
 
+## Le mot d'une main vide.
+##
+## **`AUTOWRAP_OFF`, et c'est un correctif.** Un `Label` qui s'enroule reporte une largeur
+## minimale minuscule ; seul enfant d'un `HBoxContainer`, il reçoit donc cette largeur-là et
+## se coupe **une lettre par ligne**. « Main vide » se dessinait à la verticale sur l'écran
+## de fondation depuis `I2` — c'est-à-dire sur le seul texte de la seule image que ce
+## drapeau existe pour montrer —, et personne ne l'avait regardé d'assez près.
+##
+## C'est la leçon que `P1a` a écrite sur cette vue, un cran plus large : elle disait « tout
+## libellé qui porte un nombre passe en `AUTOWRAP_OFF` », parce qu'un « 20 » coupé en « 2 »
+## au-dessus de « 0 » est lisible et faux. Un enroulement ne se justifie que là où la
+## largeur est **bornée par autre chose** — la carte, qui a la sienne. Une phrase posée
+## seule dans un conteneur qui distribue n'a rien pour la borner.
 func _make_empty_notice() -> Label:
-	return _make_line(EMPTY_TEXT, LABEL_FONT_SIZE, INDEX_COLOR)
+	return _make_line(EMPTY_TEXT, LABEL_FONT_SIZE, INDEX_COLOR, false)
 
 ## Le coût d'une carte, ou un lot vide si elle n'en a pas.
 ##
