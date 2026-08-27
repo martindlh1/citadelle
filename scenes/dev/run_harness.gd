@@ -318,11 +318,45 @@ func _ready() -> void:
 ## comme une réserve qui ne bouge pas.
 func _process(_delta: float) -> void:
 	_refresh_ghost()
+	_refresh_light()
 	_bar.show_ledger(_state().ledger(), _last_delta)
 	_crew.set_height_budget(_crew_budget())
 	_crew.show_state(_state(), _held_worker, RunManager.phase())
 	_label.text = _report()
 	_hover.text = _hover_line()
+
+## Où en est le soleil, selon où en est la journée.
+##
+## La fraction est `phase_index / (phase_count - 1)` : la **position** de la phase dans sa
+## journée, jamais son nom, ce que `DESIGN.md` 2 interdit depuis `I1`. Deux phases donnent
+## donc un matin et un soir ; une journée à trois phases gagnerait un midi sans qu'une
+## ligne bouge ici, et une journée à une seule phase se joue à midi — le seul moment qui
+## ait un sens quand il n'y a pas de « plus tard ».
+##
+## La nuit tombe sur les deux états où la journée ne se joue plus : une **bataille armée**,
+## qui est le soir d'une journée refermée depuis `I2`, et un **run fini**. Les deux se lisent
+## déjà sur le run ; aucun drapeau n'a été ajouté pour éclairer quoi que ce soit.
+##
+## Appelé à chaque image et non sur événement, par la règle que `CLAUDE.md` pose pour les
+## vues : énumérer les gestes qui changent le moment — franchir une phase, armer une vague,
+## la résoudre, finir le run, fonder — c'est se donner cinq occasions d'en oublier un, et
+## l'oubli se lirait comme un soleil bloqué. Le plateau ne glisse que si le moment a bien
+## changé, donc l'appel ne coûte rien.
+func _refresh_light() -> void:
+	var cycle := _state().cycle()
+	if cycle.is_over() or _state().awaits_a_battle():
+		_world.light_night()
+		return
+	_world.light_day(_day_progress(cycle))
+
+## La position de la phase courante dans sa journée, de 0 à 1.
+##
+## Une journée d'une seule phase rend 0.5 et non 0 : la division serait par zéro, et
+## « la seule phase de la journée » n'est pas plus un lever qu'un coucher.
+static func _day_progress(cycle: DayCycle) -> float:
+	if cycle.phase_count() <= 1:
+		return 0.5
+	return float(cycle.phase_index()) / float(cycle.phase_count() - 1)
 
 ## Ce qui reste au panneau d'affectation une fois la colonne servie.
 ##
@@ -1399,6 +1433,13 @@ func _capture_if_asked() -> void:
 		if not _state().awaits_a_battle() and not _state().cycle().is_over():
 			_scripted_open_phase()
 	_apply_shot_view()
+	# Le soleil se pose **d'un coup** pour une capture. Trois images de chauffe ne couvrent
+	# pas un glissement de neuf dixièmes de seconde : sans ça, toute capture montrerait un
+	# soleil à mi-course entre le moment précédent et le bon, ce qui est exactement le genre
+	# d'image à laquelle `F1` dit de ne pas faire confiance — vraisemblable, et fausse.
+	var cycle := _state().cycle()
+	_world.settle_light(DevWorld.NIGHT if cycle.is_over() or _state().awaits_a_battle() \
+		else _day_progress(cycle))
 	if DevShot.has_flag(DevShot.SHOT_PILES_FLAG):
 		_show_piles()
 	for _frame in DevShot.WARMUP_FRAMES:

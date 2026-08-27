@@ -22,11 +22,70 @@ const SKY_COLOR := Color(0.09, 0.11, 0.14)
 const AMBIENT_COLOR := Color(0.45, 0.52, 0.62)
 const AMBIENT_ENERGY := 0.55
 
-## Orientation du soleil. Volontairement décalée de l'axe de la caméra : c'est ce
+## Orientation du soleil à midi. Volontairement décalée de l'axe de la caméra : c'est ce
 ## décalage qui donne aux quatre flancs d'une colonne quatre valeurs différentes, donc
 ## au relief son volume. Un éclairage frontal aplatirait tout.
+##
+## C'est aussi le **milieu de la course** ci-dessous, et le soleil y passe à midi. Une
+## journée à deux phases ne montre donc jamais cette valeur-là : elle en montre les deux
+## bords. C'est voulu — T2 l'a réglée comme le meilleur compromis d'une image fixe, et la
+## question d'un soleil qui bouge est ailleurs.
 const SUN_ROTATION_DEGREES := Vector3(-52.0, -125.0, 0.0)
 const SUN_ENERGY := 1.15
+
+## Le lacet que le soleil gagne du matin au soir, de part et d'autre de midi.
+##
+## Quatre-vingt-dix degrés en tout, et ce n'est pas un chiffre rond choisi pour être rond :
+## les colonnes du terrain sont alignées sur la grille, donc leurs quatre flancs regardent
+## 0, 90, 180 et 270. Un soleil dont le lacet tombe sur un multiple de 45 donne la même
+## valeur à deux flancs et **aplatit le relief** — c'est la même raison qui a décalé le
+## soleil de l'axe de la caméra à T2. À ±45° de −125, les deux bouts de la course tombent
+## à dix degrés d'un multiple de 45, exactement comme la valeur de midi. La course est donc
+## la plus large qui garde ses deux extrémités aussi lisibles que le réglage d'origine.
+const SUN_YAW_SWEEP := 45.0
+
+## Hauteur du soleil au lever et au coucher, contre celle de midi.
+##
+## Rasante aux deux bouts : c'est elle qui allonge les ombres et qui **donne l'heure** sans
+## qu'un chiffre l'écrive. Pas plus rasante que ça, en revanche — la portée d'ombre est
+## serrée sur ce que la caméra voit, et une ombre plus longue que cette portée se coupe net
+## au milieu de la carte.
+const SUN_HORIZON_PITCH := -30.0
+
+## Teinte du soleil aux deux bouts de la course, et à midi.
+const SUN_DAWN_COLOR := Color(0.72, 0.82, 1.0)
+const SUN_DUSK_COLOR := Color(1.0, 0.72, 0.45)
+const SUN_HIGH_COLOR := Color(1.0, 0.97, 0.92)
+
+## Ce que le soleil rend au ras de l'horizon, en part de son énergie de midi.
+const SUN_LOW_ENERGY := 0.82
+
+## La nuit : une lune froide, basse en énergie, et son lacet.
+##
+## Elle garde un lacet **décalé** pour la raison qui vaut au soleil : une nuit qui aplatit
+## le relief est une nuit où l'on ne voit plus où poser un bâtiment. Elle vient de l'autre
+## côté, ce qui inverse les flancs éclairés et se lit tout de suite comme un autre moment.
+const MOON_ROTATION_DEGREES := Vector3(-58.0, 55.0, 0.0)
+const MOON_COLOR := Color(0.62, 0.72, 1.0)
+const MOON_ENERGY := 0.34
+
+## Ce que la nuit fait au ciel et à l'ambiante.
+const NIGHT_SKY_COLOR := Color(0.03, 0.04, 0.07)
+const NIGHT_AMBIENT_COLOR := Color(0.30, 0.36, 0.54)
+const NIGHT_AMBIENT_ENERGY := 0.40
+
+## Ce que l'aube et le crépuscule font au ciel et à l'ambiante.
+const DAWN_SKY_COLOR := Color(0.08, 0.11, 0.16)
+const DUSK_SKY_COLOR := Color(0.15, 0.10, 0.10)
+const DUSK_AMBIENT_COLOR := Color(0.50, 0.47, 0.52)
+const DUSK_AMBIENT_ENERGY := 0.48
+
+## Durée du glissement d'un moment à l'autre.
+##
+## Court : c'est une **transition** et non un cycle jour/nuit qui tourne tout seul. Le
+## soleil ne bouge qu'aux moments où la partie change de phase, et le glissement est là
+## pour qu'on voie *que* ça a changé, pas pour qu'on le regarde.
+const LIGHT_SLIDE_SECONDS := 0.9
 
 ## Marge de portée des ombres au-delà du recul du rig. Elle doit couvrir la moitié
 ## arrière de ce que la caméra voit au zoom le plus large ; en dessous, le fond de la
@@ -34,11 +93,33 @@ const SUN_ENERGY := 1.15
 ## monde pour rien et tout se floute.
 const SUN_SHADOW_MARGIN := 60.0
 
+## La nuit, et « rien n'a encore été éclairé ». Deux valeurs hors de [0, 1], donc hors de
+## toute progression de journée possible : le premier appel glisse donc toujours.
+const NIGHT := -1.0
+const UNLIT := -2.0
+
 var _metrics: TerrainMetrics
 var _renderer: TerrainRenderer
 var _decor: Array[TerrainDecorRenderer]
 var _rig: CameraRig
 var _cursor: CellCursor
+var _sun: DirectionalLight3D
+var _environment: Environment
+
+## Le glissement en cours, gardé pour être tué par le suivant. Sans ça, deux transitions
+## rapprochées — une phase franchie puis une bataille armée — tirent la même propriété
+## chacune de son côté et le soleil hésite à mi-chemin. Même précaution que le tween de
+## rotation de `CameraRig`.
+var _slide: Tween
+
+## Le moment actuellement éclairé : 0 au lever, 1 au coucher, et NIGHT pour la nuit.
+##
+## Il existe pour que `light_day()` soit appelable **à chaque image** sans relancer son
+## glissement, exactement comme les vues du HUD se mettent à jour sur place plutôt que de
+## se reconstruire. L'appelant n'a donc aucune liste de gestes à énumérer — et c'est ce qui
+## évite l'oubli que `CLAUDE.md` décrit : un moment qui ne changerait qu'à la phase
+## résoudrait mal une bataille armée ou une fin de run.
+var _moment := UNLIT
 
 ## Plateau prêt à être ajouté à l'arbre, déjà peuplé pour cette grille et cadré dessus.
 static func create(grid: HeightGrid, metrics: TerrainMetrics, balance: BalanceData) -> DevWorld:
@@ -48,8 +129,11 @@ static func create(grid: HeightGrid, metrics: TerrainMetrics, balance: BalanceDa
 	var world := DevWorld.new()
 	world.name = "DevWorld"
 	world._metrics = metrics
-	world.add_child(_make_environment())
-	world.add_child(_make_sun())
+	var environment := _make_environment()
+	world._environment = environment.environment
+	world.add_child(environment)
+	world._sun = _make_sun()
+	world.add_child(world._sun)
 	world._renderer = TerrainRenderer.create(grid, metrics)
 	world.add_child(world._renderer)
 	world._decor = TerrainDecorRenderer.create_all(_palette(), metrics)
@@ -67,6 +151,23 @@ static func create(grid: HeightGrid, metrics: TerrainMetrics, balance: BalanceDa
 	# enchaînait sur son propre show_grid().
 	world.show_grid(grid)
 	return world
+
+## Éclaire ce moment de la journée : 0 au lever, 1 au coucher.
+##
+## `progress` est la position de la phase dans sa journée, et **pas** un nom de phase :
+## `DESIGN.md` 2 pose qu'aucun nom n'apparaît dans le code, et le prendre en fraction rend
+## la chose vraie sans effort. Une journée à deux phases montre le matin et le soir ; une
+## journée à trois gagne un midi sans qu'une ligne change. C'est la même promesse que
+## `PhaseDef` tient depuis `I1` — changer la journée est une édition de `.tres`.
+##
+## Appelable à chaque image : sans changement de moment, elle ne fait rien.
+func light_day(progress: float) -> void:
+	_light(clampf(progress, 0.0, 1.0))
+
+## Éclaire la nuit. Ce que le harnais en fait — une bataille, une fin de run, une journée
+## refermée — ne regarde pas le plateau.
+func light_night() -> void:
+	_light(NIGHT)
 
 ## La caméra et son rig : rotation, zoom, cadrage.
 func rig() -> CameraRig:
@@ -99,6 +200,56 @@ static func _palette() -> Array[TerrainData]:
 	for id in GameDatabase.list_terrain_ids():
 		terrains.append(GameDatabase.get_terrain(id))
 	return terrains
+
+## Fait glisser le plateau vers ce moment, s'il n'y est pas déjà.
+##
+## Cinq propriétés glissent ensemble : l'orientation du soleil, sa teinte, son énergie,
+## puis le ciel et l'ambiante. Les cinq sur le **même** tween en parallèle, sinon le soleil
+## se coucherait pendant que le ciel serait encore à midi.
+func _light(moment: float) -> void:
+	if is_equal_approx(moment, _moment):
+		return
+	_moment = moment
+	if _slide != null and _slide.is_valid():
+		_slide.kill()
+	var night := is_equal_approx(moment, NIGHT)
+	# La hauteur suit un arc : rasante aux deux bouts, haute au milieu. Un sinus le dit
+	# en une ligne là où deux interpolations dos à dos demanderaient de traiter le milieu
+	# comme un cas.
+	var noon := 0.0 if night else sin(moment * PI)
+	var rotation := MOON_ROTATION_DEGREES if night else Vector3(
+		lerpf(SUN_HORIZON_PITCH, SUN_ROTATION_DEGREES.x, noon),
+		SUN_ROTATION_DEGREES.y + lerpf(-SUN_YAW_SWEEP, SUN_YAW_SWEEP, moment),
+		0.0)
+	var horizon := SUN_DAWN_COLOR.lerp(SUN_DUSK_COLOR, moment)
+	var colour := MOON_COLOR if night else horizon.lerp(SUN_HIGH_COLOR, noon)
+	var energy := MOON_ENERGY if night \
+		else SUN_ENERGY * lerpf(SUN_LOW_ENERGY, 1.0, noon)
+	var edge_sky := DAWN_SKY_COLOR.lerp(DUSK_SKY_COLOR, moment)
+	var sky := NIGHT_SKY_COLOR if night else edge_sky.lerp(SKY_COLOR, noon)
+	var ambient := NIGHT_AMBIENT_COLOR if night \
+		else DUSK_AMBIENT_COLOR.lerp(AMBIENT_COLOR, noon)
+	var ambient_energy := NIGHT_AMBIENT_ENERGY if night \
+		else lerpf(DUSK_AMBIENT_ENERGY, AMBIENT_ENERGY, noon)
+
+	_slide = create_tween().set_parallel(true)
+	_slide.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_slide.tween_property(_sun, "rotation_degrees", rotation, LIGHT_SLIDE_SECONDS)
+	_slide.tween_property(_sun, "light_color", colour, LIGHT_SLIDE_SECONDS)
+	_slide.tween_property(_sun, "light_energy", energy, LIGHT_SLIDE_SECONDS)
+	_slide.tween_property(_environment, "background_color", sky, LIGHT_SLIDE_SECONDS)
+	_slide.tween_property(_environment, "ambient_light_color", ambient,
+		LIGHT_SLIDE_SECONDS)
+	_slide.tween_property(_environment, "ambient_light_energy", ambient_energy,
+		LIGHT_SLIDE_SECONDS)
+
+## Pose le plateau sur ce moment **sans glisser**. Ce dont une capture a besoin : trois
+## images de chauffe ne suffisent pas à une transition de neuf dixièmes de seconde, donc
+## une capture scriptée photographierait un soleil à mi-course.
+func settle_light(moment: float) -> void:
+	_light(moment)
+	if _slide != null and _slide.is_valid():
+		_slide.custom_step(LIGHT_SLIDE_SECONDS)
 
 static func _make_environment() -> WorldEnvironment:
 	var environment := Environment.new()
