@@ -14,6 +14,25 @@ extends HBoxContainer
 ## réponse. Une carte sans cible se prend en main et n'allume rien, ce qui est une
 ## information plus honnête qu'un panneau éteint.
 ##
+## **Le coût, lui, s'affiche — et l'affaiblissement d'une carte trop chère aussi.** Ce
+## n'est pas une entorse au paragraphe ci-dessus, c'est son autre moitié. La vue ne
+## *décide* pas qu'une carte est impayable : elle passe le coût à `Ledger.can_afford()` et
+## dessine la réponse, ce que CLAUDE.md écrit noir sur blanc — « la réserve est-elle
+## pleine ? se demande au domaine, et la vue affiche la réponse ». La faute serait
+## `if ledger.wood >= data.cost`, pas l'appel.
+##
+## `DESIGN.md` 8 le demande depuis la première partie jouée à la main, et sa raison est
+## celle d'une main et non d'une carte : « une main de sept cartes dont on ne connaît le
+## prix qu'une par une se joue à l'aveugle ». La ligne de survol donnait déjà le prix de la
+## carte **tenue** ; c'est justement ce qui obligeait à toutes les prendre pour comparer.
+##
+## **Une carte d'action ne porte pas de coût, et ce n'est pas un oubli.** Ce qu'une action
+## dépense, ce sont des ouvriers, et combien elle en accepte dépend de la cible — les
+## postes d'un bâtiment, les crans qui restent à un chantier, un chiffre d'équilibrage sur
+## une case nue. Ce prix-là ne se connaît qu'en visant, donc il se lit sur la ligne de
+## survol et sur les cibles allumées, jamais sur la carte. Lui inventer un chiffre fixe ici
+## serait mentir sur la seule chose que le joueur voudrait comparer.
+##
 ## Construite en code, sans .tscn : c'est la règle des harnais, et cette vue n'a pas
 ## encore de raison d'entrer dans scenes/ui/. Le jour où elle en aura une, elle
 ## déménagera avec sa mise en forme, pas avec ses règles — elle n'en a pas.
@@ -34,8 +53,28 @@ extends HBoxContainer
 signal card_picked(slot: int)
 
 ## Largeur et hauteur d'une carte, en pixels.
+##
+## La hauteur a gagné douze pixels à `P1a` pour loger le coût sous le libellé, et **trois
+## captures ont été nécessaires pour arriver à ce chiffre-là** plutôt qu'à un autre.
+##
+## Le coût a d'abord partagé la ligne du rang, qui semblait à moitié vide, ce qui laissait
+## la carte à 74. C'était le mauvais choix, et pour une raison qui n'appartient pas à cette
+## vue : le panneau d'affectation **déborde de sa colonne** aux journées chargées et couvre
+## le haut des cartes posées sous lui — dix-huit pixels de bande au sixième jour d'un run
+## de test, c'est-à-dire exactement la ligne du rang. Le rang y était déjà illisible avant
+## `P1a` ; y ranger le coût l'aurait rendu invisible lui aussi, et un prix qu'on ne voit
+## qu'à certaines journées est pire qu'un prix absent.
+##
+## Sous le libellé, le coût est dans le tiers **bas** de la carte, celui que rien ne
+## recouvre. La carte plus haute fait remonter le bord de la bande, donc élargit ce que le
+## panneau cache — mais ce qu'il cache reste le rang, qui est un rappel de touche et non
+## une information de décision.
+##
+## Le débordement lui-même n'est pas réparé ici, et il ne peut pas l'être : c'est la
+## troisième fois du projet qu'une colonne de droite ne tient pas — après `W2` et `I2` —,
+## et `DESIGN.md` 8 lui garde un point à part.
 const CARD_WIDTH := 104
-const CARD_HEIGHT := 74
+const CARD_HEIGHT := 86
 
 ## Écart entre deux cartes, et entre deux pools.
 const CARD_GAP := 6
@@ -77,6 +116,26 @@ const INDEX_COLOR := Color(0.62, 0.66, 0.72)
 const LABEL_FONT_SIZE := 13
 const INDEX_FONT_SIZE := 11
 
+## Le coût, sous le libellé.
+const COST_FONT_SIZE := 11
+
+## Écart entre deux chiffres d'un coût. Serré : ce sont les segments d'une même somme,
+## pas une liste.
+const COST_GAP := 5
+
+## Ce qui reste de l'encre d'une carte que la réserve ne paie pas.
+##
+## Un affaiblissement et **pas** une couleur d'alarme, et c'est une leçon de la passe
+## jouée à la main : l'orange veut dire *danger* sur les quatre autres panneaux — famine,
+## écrêtage, pertes d'une vague. Une main de sept cartes dont trois sont trop chères
+## s'afficherait entièrement en alarme le premier jour, où rien n'est en train de mal
+## tourner. « Pas maintenant » et « attention » sont deux messages ; ils doivent avoir deux
+## formes.
+const UNAFFORDABLE_DIM := 0.42
+
+## Ce que l'infobulle ajoute quand la réserve ne suit pas.
+const UNAFFORDABLE_TEXT := "Réserve insuffisante."
+
 ## Main vide.
 const EMPTY_TEXT := "Main vide — Entrée résout le soir et repioche."
 
@@ -85,18 +144,49 @@ const NO_HELD := -1
 
 var _catalogue: CardCatalogue
 
+## De quoi mettre un coût en forme : le libellé, la couleur et le rang d'une ressource.
+##
+## La même palette que la barre de réserve, et c'est tout l'intérêt — un « 15 » vert
+## d'ombre sur une carte est le même vert que le segment de bois de la jauge, à un
+## centimètre au-dessus. La couleur n'a donc rien à apprendre au joueur qu'il ne lise déjà.
+var _palette: CommodityPalette
+
+## Bâtiment -> sa `BuildingData`, pour lire un coût.
+##
+## Indexée par identifiant de **bâtiment** et non de carte : c'est `CardData.building` qui
+## fait le lien, et il existe précisément parce que rien n'oblige une carte à porter le nom
+## de ce qu'elle pose. Deux cartes qui poseraient la même ferme à deux prix sont ce qu'un
+## draft de méta-progression fera un jour, et cette table les sert déjà.
+var _buildings: Dictionary[StringName, BuildingData] = {}
+
+## Hauteur totale que la main occupe en bas de l'écran, marges comprises.
+##
+## Publique et calculée ici parce que **deux endroits en dépendent** : la bande elle-même,
+## et la marge basse que le HUD doit garder pour ne pas descendre sur les cartes. Le
+## harnais portait ce second chiffre à la main — un `88.0` recopié —, et c'est le doublon
+## que `E2` avait déjà payé sur la réserve : un chiffre écrit à deux endroits est un
+## chiffre qui finira par différer de lui-même. Il a d'ailleurs différé à `P1a`, où la
+## carte a grandi.
+##
+## `HOVER_LIFT` y est compris : c'est la course que les cartes ont au-dessus d'elles pour
+## se soulever, et l'oublier rognerait le haut de la carte survolée.
+static func band_height() -> float:
+	return CARD_HEIGHT + HOVER_LIFT + 2 * CARD_GAP
+
 ## Vue prête à être ajoutée à l'arbre.
-static func create(catalogue: CardCatalogue) -> HandView:
+static func create(catalogue: CardCatalogue, palette: CommodityPalette,
+		buildings: Dictionary[StringName, BuildingData]) -> HandView:
 	assert(catalogue != null, "main à l'écran sans catalogue")
+	assert(palette != null, "main à l'écran sans palette de ressources")
 	var view := HandView.new()
 	view.name = "HandView"
 	view._catalogue = catalogue
+	view._palette = palette
+	view._buildings = buildings
 	view.add_theme_constant_override("separation", POOL_GAP)
 	view.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	view.alignment = BoxContainer.ALIGNMENT_CENTER
-	# HOVER_LIFT est compris dans la bande : c'est la course que les cartes ont au-dessus
-	# d'elles pour se soulever, et l'oublier ferait rogner le haut de la carte survolée.
-	view.offset_top = -(CARD_HEIGHT + HOVER_LIFT + 2 * CARD_GAP)
+	view.offset_top = -band_height()
 	view.offset_bottom = -CARD_GAP
 	# Les clics traversent : le curseur de cellule pioche sous la souris à chaque image,
 	# et une main qui les avalerait rendrait le bas de la carte injouable.
@@ -113,7 +203,12 @@ static func create(catalogue: CardCatalogue) -> HandView:
 ## La numérotation suit Hand.cards(), donc l'ordre de CardData.POOLS puis l'ordre de
 ## pioche. C'est celui que le harnais lit sur les touches 1 à 9, et le même d'une image à
 ## l'autre — un affichage qui suivrait l'ordre d'un Dictionary changerait sous les doigts.
-func show_hand(hand: Hand, held: int) -> void:
+##
+## Le `Ledger` sert à une seule question, posée une fois par carte de bâtiment : la réserve
+## paie-t-elle ce coût ? La vue n'en lit aucun montant et n'en additionne rien. C'est le
+## même partage qu'avec le catalogue, à qui elle ne demande qu'un texte.
+func show_hand(hand: Hand, held: int, ledger: Ledger) -> void:
+	assert(ledger != null, "main à l'écran sans réserve")
 	for child in get_children():
 		child.queue_free()
 		remove_child(child)
@@ -129,7 +224,7 @@ func show_hand(hand: Hand, held: int) -> void:
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_theme_constant_override("separation", CARD_GAP)
 		for card in cards:
-			row.add_child(_make_card(card, pool, slot, slot == held))
+			row.add_child(_make_card(card, pool, slot, slot == held, ledger))
 			slot += 1
 		add_child(row)
 
@@ -149,7 +244,9 @@ func show_hand(hand: Hand, held: int) -> void:
 ## Control qui traite l'événement le consomme, donc l'_unhandled_input du harnais ne le
 ## voit jamais. Le routage est tenu par la structure, pas par un test dans le harnais.
 func _make_card(card: StringName, pool: StringName, slot: int,
-		selected: bool) -> MarginContainer:
+		selected: bool, ledger: Ledger) -> MarginContainer:
+	var cost := _cost_of(card)
+	var affordable := cost.is_empty() or ledger.can_afford(cost)
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT)
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -157,14 +254,18 @@ func _make_card(card: StringName, pool: StringName, slot: int,
 	var column := VBoxContainer.new()
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
-	column.add_child(_make_line("%d" % (slot + 1), INDEX_FONT_SIZE, INDEX_COLOR))
-	column.add_child(_make_line(_label_of(card), LABEL_FONT_SIZE, LABEL_COLOR))
+	column.add_child(_make_line("%d" % (slot + 1), INDEX_FONT_SIZE,
+		_inked(INDEX_COLOR, affordable)))
+	column.add_child(_make_line(_label_of(card), LABEL_FONT_SIZE,
+		_inked(LABEL_COLOR, affordable)))
+	if not cost.is_empty():
+		column.add_child(_make_cost_row(cost, affordable))
 	panel.add_child(column)
 
 	var wrapper := MarginContainer.new()
 	wrapper.mouse_filter = Control.MOUSE_FILTER_STOP
 	wrapper.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	wrapper.tooltip_text = _label_of(card)
+	wrapper.tooltip_text = _tooltip_of(card, cost, affordable)
 	wrapper.add_child(panel)
 	_lift(wrapper, false)
 	wrapper.gui_input.connect(_on_card_input.bind(slot))
@@ -222,18 +323,87 @@ func _make_style(pool: StringName, selected: bool, hovered: bool) -> StyleBoxFla
 		style.border_color = HOVER_COLOR
 	return style
 
-func _make_line(text: String, size: int, color: Color) -> Label:
+## Une ligne de carte. `wrap` décide si le texte a le droit de se replier.
+##
+## Il ne l'a pas pour un **chiffre**, et la capture de `P1a` dit pourquoi : un libellé se
+## replie sur ses espaces, mais `AUTOWRAP_WORD_SMART` coupe aussi ce qui n'a pas d'espace
+## dès que la largeur manque, et la largeur manque toujours dans un `HBoxContainer` qui
+## distribue. « 20 bois » s'affichait donc « 2 » au-dessus de « 0 » — un coût de vingt lu
+## comme deux chiffres empilés, ce qui est pire qu'illisible : c'est lisible et faux.
+func _make_line(text: String, size: int, color: Color, wrap := true) -> Label:
 	var label := Label.new()
 	label.text = text
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if wrap \
+		else TextServer.AUTOWRAP_OFF
 	label.add_theme_font_size_override("font_size", size)
 	label.add_theme_color_override("font_color", color)
 	return label
 
 func _make_empty_notice() -> Label:
 	return _make_line(EMPTY_TEXT, LABEL_FONT_SIZE, INDEX_COLOR)
+
+## Le coût d'une carte, ou un lot vide si elle n'en a pas.
+##
+## Vide couvre trois cas qui n'ont pas à se distinguer ici : une carte d'action, une carte
+## que le catalogue ignore, et un bâtiment gratuit — le camp de bûcheron en est un dans
+## `data/`. Les trois se dessinent pareil, c'est-à-dire sans ligne de coût, et la carte
+## gratuite y gagne : « 0 » écrit en toutes lettres serait un prix, et il n'y en a pas.
+func _cost_of(card: StringName) -> Dictionary[StringName, int]:
+	var empty: Dictionary[StringName, int] = {}
+	if not _catalogue.has(card):
+		return empty
+	var data := _catalogue.card(card)
+	if not data.places_a_building():
+		return empty
+	var building := _buildings.get(data.building) as BuildingData
+	return empty if building == null else building.cost
+
+## Le coût, un chiffre par ressource, chacun de la couleur de la sienne.
+##
+## Des **chiffres nus** et pas « 15 Bois » : la carte fait cent quatre pixels de large, et
+## deux ressources écrites en toutes lettres n'y tiennent pas à onze points. La couleur
+## porte l'identité, exactement comme sur la jauge segmentée du haut de l'écran — et le
+## texte entier reste dans l'infobulle, qui est là pour ce qui ne tient pas.
+##
+## Aucun des chiffres ne se replie, et c'est le contraire d'un détail : voir `_make_line()`.
+##
+## L'ordre est celui de la palette, donc celui de la barre de réserve : deux affichages du
+## même lot doivent donner la même ligne.
+func _make_cost_row(cost: Dictionary[StringName, int], affordable: bool) -> HBoxContainer:
+	var row := HBoxContainer.new()
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", COST_GAP)
+	for id in _palette.keys_of(cost):
+		row.add_child(_make_line("%d" % cost[id], COST_FONT_SIZE,
+			_inked(_palette.color_of(id), affordable), false))
+	return row
+
+## L'infobulle : ce que la carte pose, ce qu'elle coûte en toutes lettres, et le refus de
+## la réserve s'il y a lieu.
+##
+## C'est le pendant de la ligne de coût, et il porte ce qu'elle n'a pas la place de dire.
+## Le nom des ressources y est écrit, ce qui rend la couleur apprenable au lieu d'être à
+## deviner — une carte qui ne se lirait qu'à la teinte serait illisible pour qui les
+## confond.
+func _tooltip_of(card: StringName, cost: Dictionary[StringName, int],
+		affordable: bool) -> String:
+	var text := _label_of(card)
+	if cost.is_empty():
+		return text
+	text += "\n%s" % _palette.bundle_text(cost)
+	return text if affordable else "%s\n%s" % [text, UNAFFORDABLE_TEXT]
+
+## Une couleur telle qu'on l'écrit sur une carte que la réserve paie, ou telle qu'on la
+## laisse pâlir sur une carte qu'elle ne paie pas.
+##
+## L'alpha et non la saturation : les couleurs de ressource viennent de `data/` et rien ici
+## ne doit décider de ce à quoi elles ressemblent. Les affaiblir toutes du même facteur
+## garde leurs écarts entre elles, donc garde la ligne lisible.
+func _inked(color: Color, affordable: bool) -> Color:
+	return color if affordable else Color(color, color.a * UNAFFORDABLE_DIM)
 
 ## Libellé d'une carte, ou son identifiant si le catalogue l'ignore.
 ##

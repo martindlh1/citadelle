@@ -137,7 +137,11 @@ func _ready() -> void:
 	_roster = _make_roster()
 	_ledger = Ledger.from_stock(_economy.starting_stock, _economy.base_storage_cap)
 
-	_hand_view = HandView.create(_catalogue)
+	# La main affiche le coût d'une carte de bâtiment depuis `P1a`, donc elle réclame de
+	# quoi le lire et de quoi le colorer. Ce harnais avait déjà sa réserve : elle sert ici
+	# à la même question qu'ailleurs — la paie-t-on ? — et à rien d'autre.
+	_hand_view = HandView.create(_catalogue, CommodityPalette.from_database(),
+		_make_buildings())
 	_hand_view.card_picked.connect(_hold)
 	add_child(_hand_view)
 	_label = _make_label()
@@ -382,7 +386,7 @@ func _release() -> void:
 ## plutôt que la seule case survolée, sans le payer soixante fois par seconde.
 func _refresh_targets() -> void:
 	_marker.rebuild(_board.to_plan(), _assignment(), _terrain)
-	_hand_view.show_hand(_deck.hand(), _held_slot)
+	_hand_view.show_hand(_deck.hand(), _held_slot, _ledger)
 	var held := _held_card()
 	if held.is_empty() or not ActionTargeting.handles(held):
 		_targets.clear()
@@ -664,6 +668,13 @@ func _make_roster() -> Roster:
 	for given_name in GIVEN_NAMES:
 		workers.append(Worker.create(StringName(given_name.to_lower()), given_name))
 	return Roster.create(workers)
+
+## Les bâtiments du catalogue, indexés pour que la main lise un coût.
+func _make_buildings() -> Dictionary[StringName, BuildingData]:
+	var table: Dictionary[StringName, BuildingData] = {}
+	for id in GameDatabase.list_building_ids():
+		table[id] = GameDatabase.get_building(id)
+	return table
 
 func _make_rng() -> RandomNumberGenerator:
 	var rng := RandomNumberGenerator.new()
