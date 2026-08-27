@@ -196,6 +196,23 @@ Trois raisons : c'est diffable dans git, ça ne casse jamais au réenregistremen
 
 D'où la discipline : **chaque table du harnais annonce ce qu'elle doit montrer**, en toutes lettres, dans le rapport lui-même. C'est le rôle du verdict en fin de fichier, et il sert autant à celui qui écrit la table qu'à celui qui la relit six mois plus tard. Une table dont on ne sait pas dire ce qu'elle prouverait ne prouve rien.
 
+**Deux colonnes qui viennent du même compteur ne prouvent rien en se ressemblant.**
+*(Écrit à `I2b`.)* Une table annonçait « un upkeep par journée quel que soit le nombre de
+phases » et imprimait le même accumulateur sous « jours » et sous « upkeeps » : leur égalité
+était une tautologie, sur une ligne parfaitement alignée qui portait l'énoncé le plus
+important du tableau. Une colonne qui doit **corroborer** une autre se prend ailleurs — ici
+le jour au cycle, l'upkeep au nombre de rapports de journée reçus.
+
+**Et une mesure qui emprunte un raccourci mesure le raccourci.** Deux chiffres faux le même
+jour, dans la même chronique, tous deux de cette famille. Le premier comptait une défausse
+et une pioche entières sur une phase qui ne résout pas et ne touche donc à rien : vingt et
+une cartes par journée pour une main de sept sur deux résolutions. Le second comptait les
+cartes **avant** la bataille, alors que c'est elle qui ouvre la phase suivante quand une
+vague attend — un modèle annonçait donc sept cartes servies le jour d'une vague et quatorze
+les autres, ce qui n'était pas une différence de jeu mais un défaut de mesure. Les deux
+compilaient, s'alignaient, et étaient plausibles : c'est la relecture de la table contre ce
+qu'elle prétend montrer qui les a trouvés, pas un test.
+
 **Un chemin de capture qui court-circuite les gestes du joueur finit par mentir.**
 *(Écrit à `P1a`.)* La capture scriptée du harnais Run appelait `RunManager.play()` en
 direct, sans passer par le geste que la souris déclenche — donc sans rien redessiner.
@@ -395,6 +412,23 @@ qu'on a cliqué une fiche — qui l'on tient est un état de jeu, le harnais le 
 il **décide** seul d'être replié ou non, parce que sa propre taille ne regarde personne
 d'autre. Un repli remonté au harnais aurait été un état de plus à faire circuler pour rien.
 
+**Une vue qui invite à un geste doit demander si le geste est possible.** *(Écrit à
+`I2b`.)* Le jalon a fait exister une phase qui n'autorise rien, et l'écran s'y est mis à
+mentir de deux façons d'un coup : la main s'affichait à pleine encre, numérotée, curseur de
+main compris, et le panneau d'affectation conseillait de « prendre une carte et cliquer une
+cible » — pendant que le domaine répondait `wrong_phase` à chaque clic. Ce n'est pas une
+faute d'architecture, c'est son symétrique : la vue ne **jugeait** rien, elle ne demandait
+rien non plus. `HandView` interroge donc `DayCycle.permits()` exactement comme elle
+interroge `Ledger.can_afford()`, et affaiblit la même encre — les deux disent « pas
+maintenant », et ce qui les sépare est une **raison**, donc une infobulle.
+
+Le corollaire vaut d'être noté parce qu'il vient de la même capture : **un rapport peut être
+vrai au mot près et faux à la lecture**. Le soir annonçait « 6 oisifs » à qui venait de
+faire travailler ses six ouvriers tout l'après-midi. Un oisif est un reproche, un reproche
+suppose qu'on pouvait faire autrement, et dans une phase où l'on ne peut affecter personne
+tout le monde est trivialement oisif. La réparation est du domaine et non de la vue : une
+phase qui ne résout pas n'en compte aucun.
+
 **Une vue sur laquelle on clique porte `MOUSE_FILTER_STOP`**, à l'inverse des vues de lecture, qui laissent passer en `IGNORE` pour que le curseur de cellule continue de piocher dessous. Le geste tombe alors dans le `gui_input` de la vue et n'atteint jamais `_unhandled_input` du harnais, ce qui est exactement le partage voulu — sans quoi un clic sur une fiche jouerait aussi la carte tenue sur la case cachée derrière.
 
 ### Sélection de cellule
@@ -432,6 +466,29 @@ L'occlusion par le relief est un problème connu du système Terrain. V1 : la ro
 `resolves` est un booléen, donc le seul champ de tout `data/balance/` que la doctrine du zéro ne protège pas : effacé par un réenregistrement, il vaut faux sans que rien ne le dise. Le filet est posé un cran plus haut — `RunBalance` exige qu'**au moins une** phase de la journée résolve. Même geste que `C4` sur `build_actions`.
 
 **Une phase résout, une journée ferme, et ce sont deux choses.** Une phase produit ce que les actions posées rapportent ; une journée prélève l'upkeep, et demain l'événement et le combat. La fin de journée n'est **pas** un champ de `PhaseDef` : c'est la fin de la dernière phase, par définition, et un booléen en data pourrait dire le contraire de la liste qui le porte. Elle ne dépend pas non plus de `resolves` — une journée coûte à nourrir même si sa dernière phase ne produit rien. Écrire quoi que ce soit qui fasse manger une fois par phase reviendrait à rendre la structure de la journée inséparable de son équilibrage, ce que `DESIGN.md` 2 veut précisément pouvoir échanger séparément.
+
+**Une `Resource` ne peut juger que ce qu'elle voit seule ; le reste monte d'un cran.**
+*(Écrit à `I2b`.)* `PhaseDef` refusait une phase qui n'autorise rien **et** ne résout pas,
+au motif qu'elle n'est qu'un tour perdu. Le motif était bon et la conclusion fausse : la
+**dernière** phase d'une journée ferme cette journée — donc prélève l'upkeep et fait tomber
+la vague —, et ça n'est ni autoriser ni résoudre. Une `PhaseDef` ne sait pas qu'elle est
+dernière, alors que `RunBalance` voit la liste ; la règle vit donc là, avec l'exception
+nommée, comme l'unicité de `id` et comme `phases.none_resolves` avant elle.
+
+Le coût du mauvais étage n'était pas théorique : ce contrôle **refusait au boot le seul
+modèle de journée qu'on voulait jouer**. Le test à faire avant d'écrire un `missing_fields()`
+tient en une question — *cette Resource a-t-elle sous les yeux tout ce que la règle regarde ?*
+Si la réponse est non, la règle appartient au bloc qui l'agrège.
+
+**Un champ de `data/` peut refuser une valeur plutôt que de l'interpréter.**
+*(Écrit à `I2b`.)* `DeckBalance.carry_over` dit par pool combien de cartes non jouées
+survivent à une phase, et n'accepte que deux valeurs : zéro, ou la taille de la main. Le
+milieu — garder deux cartes sur cinq — demanderait de dire *lesquelles*, et aucun écran ne
+sait le demander ; le résoudre par une règle d'ancienneté aurait tranché une question de
+`DESIGN.md` par un arbitraire enfoui dans un résolveur. Refuser est le même geste que le
+bloc `production` nullable de `E1b` : **la cohérence devient structurelle au lieu d'être
+vérifiée**, et le jour où le geste existe c'est le contrôle qui se desserre, pas le domaine
+qui change.
 
 ### Effectifs — un vivier ou deux, indécidé
 
