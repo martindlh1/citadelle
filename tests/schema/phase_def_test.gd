@@ -11,8 +11,7 @@ extends GdUnitTestSuite
 const ACTIONS := PhaseDef.ACTIONS
 
 func test_a_blank_phase_reports_its_missing_fields() -> void:
-	assert_array(PhaseDef.new().missing_fields()).contains(
-		["id", "label", "color", "allows"])
+	assert_array(PhaseDef.new().missing_fields()).contains(["id", "label", "color"])
 
 func test_a_complete_phase_reports_nothing() -> void:
 	assert_array(_working().missing_fields()).is_empty()
@@ -53,21 +52,31 @@ func test_an_unknown_action_is_reported() -> void:
 	phase.allows = kinds
 	assert_array(phase.missing_fields()).contains(["allows.barter.unknown"])
 
-## Une phase qui n'autorise rien **et** ne résout pas est un tour perdu.
-func test_a_phase_that_permits_nothing_and_resolves_nothing_is_reported() -> void:
-	var phase := _working()
-	var none: Array[StringName] = []
-	phase.allows = none
-	phase.resolves = false
-	assert_array(phase.missing_fields()).contains(["allows"])
-
-## Mais une phase qui n'autorise rien et **résout** est parfaitement légitime : c'est le
-## soir du modèle asymétrique de DESIGN.md 2, où l'on regarde la journée se dérouler.
+## Une phase qui n'autorise rien et **résout** est parfaitement légitime : c'est le soir
+## du modèle asymétrique de DESIGN.md 2, où l'on regarde la journée se dérouler.
 func test_a_resolving_phase_may_permit_nothing() -> void:
 	var phase := _working()
 	var none: Array[StringName] = []
 	phase.allows = none
 	phase.resolves = true
+	assert_array(phase.missing_fields()).is_empty()
+
+## Et une phase qui n'autorise rien et ne résout pas **n'est plus jugée ici**.
+##
+## Ce fichier la refusait jusqu'à `I2b`, au motif qu'elle n'est qu'un tour perdu. Le motif
+## était bon et la conclusion fausse : la dernière phase d'une journée ferme cette journée,
+## donc prélève l'upkeep et fait tomber la vague — et une `PhaseDef` ne sait pas qu'elle
+## est dernière. La règle est montée dans `RunBalance`, qui voit la liste, exactement comme
+## l'unicité de `id`. Voir `RunBalanceTest.test_an_idle_phase_before_the_last_is_reported`
+## et son pendant qui autorise le soir.
+##
+## Le cas reste ici, retourné, pour que personne ne « rétablisse » le contrôle en croyant
+## à un trou : c'est un déplacement, pas un oubli.
+func test_an_idle_phase_is_judged_by_the_day_and_not_by_itself() -> void:
+	var phase := _working()
+	var none: Array[StringName] = []
+	phase.allows = none
+	phase.resolves = false
 	assert_array(phase.missing_fields()).is_empty()
 
 func test_a_phase_permits_only_what_it_declares() -> void:

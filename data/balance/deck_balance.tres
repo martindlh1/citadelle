@@ -19,4 +19,9 @@ hand_size = Dictionary[StringName, int]({
 &"building": 2,
 &"power": 0
 })
+carry_over = Dictionary[StringName, int]({
+&"action": 0,
+&"building": 0,
+&"power": 0
+})
 draft_choices = 3

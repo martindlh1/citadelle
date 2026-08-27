@@ -149,11 +149,23 @@ func missing_fields() -> PackedStringArray:
 	return missing
 
 ## Incohérences de la liste des phases.
+##
+## Trois contrôles ne peuvent se faire qu'ici, et c'est ce qui les distingue de ceux de
+## `PhaseDef` : aucun ne se répond en regardant une phase seule.
+##
+## L'**unicité** de l'identifiant, qui demande de voir les autres. Le fait qu'**au moins
+## une** phase résolve, qui rattrape la disparition d'un booléen. Et le **tour perdu** —
+## une phase qui n'autorise rien et ne résout pas —, qui vivait dans `PhaseDef` jusqu'à
+## `I2b` et n'aurait jamais dû : la **dernière** phase de la journée ferme cette journée,
+## donc prélève l'upkeep et fait tomber la vague, et une phase ne sait pas qu'elle est
+## dernière. La règle refusait ainsi le seul modèle de journée où ce que la journée coûte
+## a son propre moment, et le refusait au boot.
 func _phase_fields() -> PackedStringArray:
 	var missing := PackedStringArray()
 	if phases.is_empty():
 		missing.append("phases")
 		return missing
+	var last := phases.size() - 1
 	var seen: Dictionary[StringName, bool] = {}
 	for index in phases.size():
 		var phase := phases[index]
@@ -165,6 +177,8 @@ func _phase_fields() -> PackedStringArray:
 		if seen.has(phase.id):
 			missing.append("phases.%d.id.duplicate" % index)
 		seen[phase.id] = true
+		if index < last and phase.allows.is_empty() and not phase.resolves:
+			missing.append("phases.%d.allows" % index)
 	if resolving_phases().is_empty():
 		missing.append("phases.none_resolves")
 	return missing

@@ -42,6 +42,33 @@ func test_two_phases_sharing_an_id_are_reported() -> void:
 	balance.phases[1].id = balance.phases[0].id
 	assert_array(balance.missing_fields()).contains(["phases.1.id.duplicate"])
 
+## Une phase qui n'autorise rien et ne résout pas est un tour perdu — **sauf la dernière**.
+##
+## La règle vivait sur `PhaseDef` jusqu'à `I2b`, où elle a refusé au boot le seul modèle de
+## journée où ce que la journée coûte a son propre moment. Une phase ne sait pas qu'elle est
+## dernière ; ce bloc, si.
+func test_an_idle_phase_before_the_last_is_reported() -> void:
+	var balance := _working()
+	var none: Array[StringName] = []
+	balance.phases[0].allows = none
+	balance.phases[0].resolves = false
+	assert_array(balance.missing_fields()).contains(["phases.0.allows"])
+
+## Le pendant, et c'est lui qui porte le modèle de journée retenu à `I2b` : deux phases qui
+## produisent, puis un **soir** qui n'autorise rien, ne résout rien, et ferme la journée.
+## Fermer une journée n'est ni autoriser ni résoudre — c'est prélever l'upkeep et faire
+## tomber la vague —, et c'est pourquoi la dernière phase échappe à la règle.
+##
+## Aucun nom de phase n'est écrit ici, comme partout ailleurs : ce sont des rangs.
+func test_the_last_phase_of_a_day_may_do_nothing_but_close_it() -> void:
+	var balance := _working()
+	var phases: Array[PhaseDef] = [_phase(&"first", true), _phase(&"second", true),
+		_phase(&"third", false)]
+	var none: Array[StringName] = []
+	phases[2].allows = none
+	balance.phases = phases
+	assert_array(balance.missing_fields()).is_empty()
+
 ## Les défauts d'une phase remontent préfixés de son rang, comme BalanceData préfixe les
 ## siens du nom de leur bloc : sans le rang, un `label` manquant ne dirait pas laquelle.
 func test_a_broken_phase_is_reported_under_its_index() -> void:
