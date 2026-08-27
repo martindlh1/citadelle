@@ -69,9 +69,19 @@ const UNSET_COLOR := Color(0.0, 0.0, 0.0, 1.0)
 
 ## Gestes autorisés, parmi ACTIONS.
 ##
-## Une phase qui n'autorise rien est légitime dès lors qu'elle résout : c'est le soir du
-## modèle asymétrique, où l'on regarde la journée se dérouler. Une phase qui n'autorise
-## rien **et** ne résout pas ne serait qu'un tour perdu.
+## Une phase qui n'autorise rien est légitime : c'est le soir du modèle asymétrique, où
+## l'on regarde la journée se dérouler.
+##
+## **Ce fichier a longtemps refusé qu'elle ne résolve pas non plus**, au motif qu'une
+## phase qui n'autorise rien et ne produit rien n'est qu'un tour perdu. Le motif était bon
+## et la conclusion fausse : la **dernière** phase d'une journée ferme cette journée, donc
+## prélève l'upkeep et fait tomber la vague, et ça n'est ni « autoriser » ni « résoudre ».
+## Une `PhaseDef` seule ne peut pas savoir qu'elle est dernière — la règle est montée dans
+## `RunBalance`, qui voit la liste. Même partage que l'unicité de `id`, qu'aucune phase ne
+## peut vérifier sur elle-même.
+##
+## Ce n'est pas un cas théorique : c'est le modèle de journée que `I2b` a retenu — deux
+## phases qui produisent, un soir qui ne fait que payer.
 @export var allows: Array[StringName]
 
 ## Une résolution se déclenche-t-elle à la fin de cette phase ?
@@ -105,6 +115,4 @@ func missing_fields() -> PackedStringArray:
 	for kind in allows:
 		if not is_known_action(kind):
 			missing.append("allows.%s.unknown" % kind)
-	if allows.is_empty() and not resolves:
-		missing.append("allows")
 	return missing

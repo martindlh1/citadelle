@@ -282,6 +282,10 @@ func _deck() -> DeckBalance:
 	sizes[CardData.POOL_BUILDING] = HAND_BUILDINGS
 	sizes[CardData.POOL_POWER] = 0
 	deck.hand_size = sizes
+	var carried: Dictionary[StringName, int] = {}
+	for pool in CardData.POOLS:
+		carried[pool] = 0
+	deck.carry_over = carried
 	deck.draft_choices = 3
 	return deck
 

@@ -136,8 +136,30 @@ const UNAFFORDABLE_DIM := 0.42
 ## Ce que l'infobulle ajoute quand la réserve ne suit pas.
 const UNAFFORDABLE_TEXT := "Réserve insuffisante."
 
+## Ce que l'infobulle ajoute quand la phase ne pose rien.
+##
+## Elle emprunte l'affaiblissement ci-dessus plutôt que d'en inventer un second, et c'est
+## juste : les deux disent « pas maintenant », et les distinguer par la teinte demanderait
+## au joueur d'apprendre deux gris. Ce qui les sépare est la **raison**, et une raison se
+## lit, donc elle est dans l'infobulle. Celle-ci passe **avant** l'autre quand les deux
+## valent : une réserve insuffisante est un problème qu'on peut résoudre, une phase qui ne
+## pose rien est un fait qu'on ne discute pas.
+const UNPLAYABLE_TEXT := "Cette phase ne pose pas de carte."
+
 ## Main vide.
-const EMPTY_TEXT := "Main vide — Entrée résout le soir et repioche."
+##
+## « Entrée résout le soir » jusqu'à `I2b`, où une journée a gagné une phase qui s'appelle
+## vraiment *Soir* et qui, elle, ne résout rien. Le mot avait toujours désigné la phase et
+## non l'heure — depuis que `PhaseReport` s'est séparé de `DayReport` à `I1` —, mais il
+## avait cessé d'être lisible ainsi le jour où `data/` a pu nommer un soir.
+##
+## Elle a fini par ne plus rien nommer du tout, à `P2a`. Une main est vide dans **deux**
+## situations — avant la fondation, et quand on a tout joué —, et la phrase n'était juste
+## que dans la seconde : sur l'écran de fondation elle annonçait « Entrée termine la
+## phase » alors qu'Entrée pose le Cœur. Le bouton de pas dit désormais ce qu'Entrée fait,
+## et il le dit dans les deux cas ; le redire ici serait le doublon habituel, avec en prime
+## une chance sur deux de se tromper.
+const EMPTY_TEXT := "Main vide."
 
 ## Rang qui n'encadre aucune carte.
 const NO_HELD := -1
@@ -173,6 +195,15 @@ var _buildings: Dictionary[StringName, BuildingData] = {}
 static func band_height() -> float:
 	return CARD_HEIGHT + HOVER_LIFT + 2 * CARD_GAP
 
+## De combien le bas des cartes est remonté du bas de l'écran.
+##
+## Publique pour la même raison que `band_height()` : un second endroit en dépend. Ce que le
+## HUD pose **dans** la bande, à côté des cartes — le bouton de pas depuis `P2a` —, doit
+## s'aligner sur elles, et le recopier serait le doublon qu'`E2` a payé sur la réserve puis
+## `P1a` sur cette bande même.
+static func band_bottom() -> float:
+	return CARD_GAP
+
 ## Vue prête à être ajoutée à l'arbre.
 static func create(catalogue: CardCatalogue, palette: CommodityPalette,
 		buildings: Dictionary[StringName, BuildingData]) -> HandView:
@@ -193,6 +224,22 @@ static func create(catalogue: CardCatalogue, palette: CommodityPalette,
 	view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	return view
 
+## Où la dernière carte finit, en coordonnées d'écran. Zéro tant que rien n'est dessiné.
+##
+## La vue occupe toute la **largeur** — elle est ancrée `BOTTOM_WIDE` et centre ses rangées
+## —, donc son propre bord droit est celui de l'écran et ne dit rien de la main. Ce qu'un
+## voisin a besoin de savoir est où finissent les **cartes**, et il n'y a qu'elle pour le
+## dire. Troisième accesseur de mesure après `band_height()` et `band_bottom()`, et le même
+## argument les trois fois : la bande sait seule ce qu'elle occupe.
+func right_edge() -> float:
+	var edge := 0.0
+	for child in get_children():
+		var row := child as Control
+		if row == null:
+			continue
+		edge = maxf(edge, row.global_position.x + row.size.x)
+	return edge
+
 ## Redessine la main, la carte de rang `held` encadrée.
 ##
 ## `held` est un **rang** dans Hand.cards() et non un identifiant. La première version
@@ -207,8 +254,19 @@ static func create(catalogue: CardCatalogue, palette: CommodityPalette,
 ## Le `Ledger` sert à une seule question, posée une fois par carte de bâtiment : la réserve
 ## paie-t-elle ce coût ? La vue n'en lit aucun montant et n'en additionne rien. C'est le
 ## même partage qu'avec le catalogue, à qui elle ne demande qu'un texte.
-func show_hand(hand: Hand, held: int, ledger: Ledger) -> void:
+##
+## Le `DayCycle` sert exactement de la même façon, et pour une phase que `I2b` a fait
+## exister : celle qui ne pose rien et se contente de fermer la journée. Sans elle, la main
+## s'y affichait à pleine encre, numérotée, avec son curseur de main — c'est-à-dire qu'elle
+## **promettait un geste que le domaine refuse**. La vue ne le décide pas plus qu'elle ne
+## décide qu'une carte est trop chère : elle demande `permits()` et dessine la réponse.
+##
+## `null` veut dire « aucune journée ne gouverne cette main », ce qui est le cas du harnais
+## Cartes, où le `Deck` vit seul et où l'on joue quand on veut. C'est la même convention
+## que le `phase` nul d'`AssignmentPanel`, qui veut dire hors run.
+func show_hand(hand: Hand, held: int, ledger: Ledger, cycle: DayCycle = null) -> void:
 	assert(ledger != null, "main à l'écran sans réserve")
+	var playable := cycle == null or cycle.permits(PhaseDef.ACTION_PLAY)
 	for child in get_children():
 		child.queue_free()
 		remove_child(child)
@@ -224,7 +282,7 @@ func show_hand(hand: Hand, held: int, ledger: Ledger) -> void:
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_theme_constant_override("separation", CARD_GAP)
 		for card in cards:
-			row.add_child(_make_card(card, pool, slot, slot == held, ledger))
+			row.add_child(_make_card(card, pool, slot, slot == held, ledger, playable))
 			slot += 1
 		add_child(row)
 
@@ -244,9 +302,13 @@ func show_hand(hand: Hand, held: int, ledger: Ledger) -> void:
 ## Control qui traite l'événement le consomme, donc l'_unhandled_input du harnais ne le
 ## voit jamais. Le routage est tenu par la structure, pas par un test dans le harnais.
 func _make_card(card: StringName, pool: StringName, slot: int,
-		selected: bool, ledger: Ledger) -> MarginContainer:
+		selected: bool, ledger: Ledger, playable := true) -> MarginContainer:
 	var cost := _cost_of(card)
 	var affordable := cost.is_empty() or ledger.can_afford(cost)
+	# Deux refus, une seule encre. `_inked()` prend donc « peut-on la poser », et
+	# l'infobulle prend les deux, parce qu'elle est le seul endroit qui puisse dire lequel
+	# des deux vaut.
+	var ready := affordable and playable
 	var panel := PanelContainer.new()
 	panel.custom_minimum_size = Vector2(CARD_WIDTH, CARD_HEIGHT)
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -255,17 +317,17 @@ func _make_card(card: StringName, pool: StringName, slot: int,
 	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	column.alignment = BoxContainer.ALIGNMENT_CENTER
 	column.add_child(_make_line("%d" % (slot + 1), INDEX_FONT_SIZE,
-		_inked(INDEX_COLOR, affordable)))
+		_inked(INDEX_COLOR, ready)))
 	column.add_child(_make_line(_label_of(card), LABEL_FONT_SIZE,
-		_inked(LABEL_COLOR, affordable)))
+		_inked(LABEL_COLOR, ready)))
 	if not cost.is_empty():
-		column.add_child(_make_cost_row(cost, affordable))
+		column.add_child(_make_cost_row(cost, ready))
 	panel.add_child(column)
 
 	var wrapper := MarginContainer.new()
 	wrapper.mouse_filter = Control.MOUSE_FILTER_STOP
 	wrapper.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	wrapper.tooltip_text = _tooltip_of(card, cost, affordable)
+	wrapper.tooltip_text = _tooltip_of(card, cost, affordable, playable)
 	wrapper.add_child(panel)
 	_lift(wrapper, false)
 	wrapper.gui_input.connect(_on_card_input.bind(slot))
@@ -341,8 +403,21 @@ func _make_line(text: String, size: int, color: Color, wrap := true) -> Label:
 	label.add_theme_color_override("font_color", color)
 	return label
 
+## Le mot d'une main vide.
+##
+## **`AUTOWRAP_OFF`, et c'est un correctif.** Un `Label` qui s'enroule reporte une largeur
+## minimale minuscule ; seul enfant d'un `HBoxContainer`, il reçoit donc cette largeur-là et
+## se coupe **une lettre par ligne**. « Main vide » se dessinait à la verticale sur l'écran
+## de fondation depuis `I2` — c'est-à-dire sur le seul texte de la seule image que ce
+## drapeau existe pour montrer —, et personne ne l'avait regardé d'assez près.
+##
+## C'est la leçon que `P1a` a écrite sur cette vue, un cran plus large : elle disait « tout
+## libellé qui porte un nombre passe en `AUTOWRAP_OFF` », parce qu'un « 20 » coupé en « 2 »
+## au-dessus de « 0 » est lisible et faux. Un enroulement ne se justifie que là où la
+## largeur est **bornée par autre chose** — la carte, qui a la sienne. Une phrase posée
+## seule dans un conteneur qui distribue n'a rien pour la borner.
 func _make_empty_notice() -> Label:
-	return _make_line(EMPTY_TEXT, LABEL_FONT_SIZE, INDEX_COLOR)
+	return _make_line(EMPTY_TEXT, LABEL_FONT_SIZE, INDEX_COLOR, false)
 
 ## Le coût d'une carte, ou un lot vide si elle n'en a pas.
 ##
@@ -389,12 +464,15 @@ func _make_cost_row(cost: Dictionary[StringName, int], affordable: bool) -> HBox
 ## deviner — une carte qui ne se lirait qu'à la teinte serait illisible pour qui les
 ## confond.
 func _tooltip_of(card: StringName, cost: Dictionary[StringName, int],
-		affordable: bool) -> String:
+		affordable: bool, playable: bool) -> String:
 	var text := _label_of(card)
-	if cost.is_empty():
-		return text
-	text += "\n%s" % _palette.bundle_text(cost)
-	return text if affordable else "%s\n%s" % [text, UNAFFORDABLE_TEXT]
+	if not cost.is_empty():
+		text += "\n%s" % _palette.bundle_text(cost)
+	if not playable:
+		return "%s\n%s" % [text, UNPLAYABLE_TEXT]
+	if not affordable:
+		return "%s\n%s" % [text, UNAFFORDABLE_TEXT]
+	return text
 
 ## Une couleur telle qu'on l'écrit sur une carte que la réserve paie, ou telle qu'on la
 ## laisse pâlir sur une carte qu'elle ne paie pas.

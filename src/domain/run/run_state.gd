@@ -71,6 +71,22 @@ var _staffing: Dictionary[StringName, int] = {}
 ## est ce que `CityState.has_anchor()` sait vérifier en une ligne.
 var _heart := NO_CELL
 
+## Les rapports des phases qui ont **résolu** dans la journée en cours, dans l'ordre.
+##
+## L'« quelqu'un doit se souvenir de la journée » de `DESIGN.md` 2, et personne ne le
+## faisait : un `PhaseReport` était rendu puis oublié, si bien qu'une journée n'existait
+## nulle part entre ses phases. Ils sont retenus **ici** et non dans une vue, par le même
+## argument que le brouillon d'affectation à `I1` : ce qui persiste d'un run est du run, et
+## une accumulation d'adapter ne se rejouerait pas d'un seed à l'autre.
+##
+## Seules les phases qui résolvent y entrent. Une phase qui ne résout pas n'a rien produit,
+## donc rien à additionner, et la compter parmi les résolutions ferait mentir la seule
+## colonne du bilan qui dise combien de fois la journée a travaillé.
+##
+## Ce fichier ne les additionne pas : il les tient. Le bilan est composé par
+## `RunOrchestrator.day_summary()`, qui est le seul à voir aussi ce que la journée doit.
+var _day_reports: Array[PhaseReport] = []
+
 ## La vague qui attend, ou null.
 ##
 ## L'« état de plus sur le run » que `DESIGN.md` 3.8 annonçait avant d'en avoir besoin. Un
@@ -192,16 +208,42 @@ func building(id: StringName) -> BuildingData:
 func labor() -> LaborForce:
 	return _roster.to_labor(_balance.workforce)
 
-## Pioche la main de la phase, dans les trois pools, aux tailles de `data/balance/`.
+## Complète la main de la phase, dans les trois pools, jusqu'aux tailles de
+## `data/balance/`.
 ##
 ## Le seul endroit où la politique de pioche est écrite. `D1` avait laissé ce moment
 ## dehors en toutes lettres — « le Deck offre les gestes, la journée choisit quand les
 ## faire » — et la journée, c'est ce dossier.
+##
+## **Elle complète depuis `I2b` au lieu de tirer une main neuve**, et c'est ce qui donne
+## son prix au report de `DeckBalance.carry_over` : une carte gardée est une carte de
+## moins piochée. Sans ça, garder sa main serait gratuit — on tiendrait cinq actions
+## reportées **plus** cinq fraîches, et le pool cesserait d'être la contrainte que
+## `DESIGN.md` 3.5 en fait. La « limite de jeu par tour » que 3.5 adjoignait à la main
+## persistante devient du même coup inutile : le plafond est la taille de main elle-même.
+##
+## À report nul la main est vide quand on arrive ici, donc `held` vaut zéro et le
+## comportement est exactement celui de `I1`.
 func draw_phase() -> void:
+	var hand := _deck.hand()
 	for pool in CardData.POOLS:
 		var size: int = _balance.deck.hand_size.get(pool, 0)
-		if size > 0:
-			_deck.draw(pool, size, _rng)
+		var held := hand.count_in(pool)
+		if size > held:
+			_deck.draw(pool, size - held, _rng)
+
+## Retient ce que cette phase a rendu, pour le bilan de la journée.
+func record_phase(report: PhaseReport) -> void:
+	assert(report != null, "phase retenue sans rapport")
+	_day_reports.append(report)
+
+## Ce que les phases de la journée en cours ont rendu, dans l'ordre. Copie.
+func day_reports() -> Array[PhaseReport]:
+	return _day_reports.duplicate()
+
+## Oublie la journée écoulée. Appelé quand une nouvelle s'ouvre, et là seulement.
+func clear_day_reports() -> void:
+	_day_reports.clear()
 
 ## Envoie cet ouvrier sur cette action. Aucune règle n'est vérifiée ici : c'est
 ## `RunOrchestrator.staff()` qui pose les questions, comme `ActionBoard.post()` passe par

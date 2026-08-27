@@ -13,12 +13,14 @@ extends GdUnitTestSuite
 ## auraient rendu les deux situations indiscernables.
 
 const BALANCE_PATH := "res://data/balance/deck_balance.tres"
+const BALANCE_ROOT := "res://data/balance"
 const CARD_ROOT := "res://data/cards"
 
 func test_a_blank_block_reports_everything() -> void:
 	assert_array(DeckBalance.new().missing_fields()) \
 		.contains(["draft_choices", "starting_deck",
-			"hand_size.action", "hand_size.building", "hand_size.power"])
+			"hand_size.action", "hand_size.building", "hand_size.power",
+			"carry_over.action", "carry_over.building", "carry_over.power"])
 
 func test_a_complete_block_reports_nothing() -> void:
 	assert_array(_filled().missing_fields()).is_empty()
@@ -54,6 +56,71 @@ func test_a_table_that_draws_nothing_at_all_is_reported() -> void:
 	balance.hand_size[CardData.POOL_ACTION] = 0
 	balance.hand_size[CardData.POOL_BUILDING] = 0
 	assert_array(balance.missing_fields()).contains(["hand_size.all_zero"])
+
+# --- Le report de main ------------------------------------------------------------------
+
+## Le bouton de l'`OUVERT` de DESIGN.md 3.5, et les deux seules valeurs qu'il accepte.
+##
+## Zéro défausse tout — la boucle depuis `I1`. `hand_size` garde tout — la main persistante.
+## Les deux se lisent dans le même fichier et se croisent, ce qu'un booléen n'aurait pas
+## permis puisque « tout garder » n'est pas le même nombre d'un pool à l'autre.
+func test_both_playable_carry_settings_are_complete() -> void:
+	var balance := _filled()
+	balance.carry_over[CardData.POOL_ACTION] = 0
+	assert_array(balance.missing_fields()).is_empty()
+	balance.carry_over[CardData.POOL_ACTION] = balance.hand_size[CardData.POOL_ACTION]
+	assert_array(balance.missing_fields()).is_empty()
+
+## Le cas qui porte le champ. Garder deux cartes sur cinq demande de dire *lesquelles*, et
+## aucun écran ne sait le demander : le milieu est refusé **structurellement** plutôt que
+## résolu par une règle d'ancienneté qui choisirait à la place du joueur. Le jour où le
+## geste existe, c'est ce contrôle-ci qui se desserre, et rien d'autre.
+func test_a_partial_carry_is_reported() -> void:
+	var balance := _filled()
+	balance.carry_over[CardData.POOL_ACTION] = 2
+	assert_array(balance.missing_fields()).contains(["carry_over.action.partial"])
+
+## Garder plus que ce qu'on tient ne veut rien dire : la pioche complète jusqu'à
+## `hand_size`, donc la main ne dépasse jamais ce plafond. Même doctrine qu'un exemplaire
+## à zéro dans le deck de départ — une ligne qui ne dit rien est une faute de contenu.
+func test_a_carry_above_the_hand_is_reported() -> void:
+	var balance := _filled()
+	balance.carry_over[CardData.POOL_ACTION] = 6
+	assert_array(balance.missing_fields()).contains(["carry_over.action.above_the_hand"])
+
+## Le pool des powers pioche zéro et reporte zéro : les deux valeurs se confondent, et
+## c'est le seul endroit où elles le peuvent. Ni `partial` ni `above_the_hand` ne doit s'y
+## déclencher, sans quoi le bloc livré serait refusé au boot pour un pool vide.
+func test_a_pool_that_draws_nothing_carries_nothing_without_complaint() -> void:
+	var balance := _filled()
+	assert_int(balance.carry_over[CardData.POOL_POWER]).is_equal(0)
+	assert_array(balance.missing_fields()).is_empty()
+
+func test_a_missing_carry_pool_is_reported() -> void:
+	var balance := _filled()
+	balance.carry_over.erase(CardData.POOL_BUILDING)
+	assert_array(balance.missing_fields()).contains(["carry_over.building"])
+
+func test_an_unknown_carry_pool_is_reported() -> void:
+	var balance := _filled()
+	balance.carry_over[&"trinket"] = 0
+	assert_array(balance.missing_fields()).contains(["carry_over.trinket.unknown"])
+
+func test_a_negative_carry_is_reported() -> void:
+	var balance := _filled()
+	balance.carry_over[CardData.POOL_ACTION] = -1
+	assert_array(balance.missing_fields()).contains(["carry_over.action"])
+
+## Un `hand_size` en défaut se signale une fois, pas deux. Sans ce cas, une main négative
+## rendrait aussi un `carry_over` incohérent, et on chercherait deux défauts là où il n'y
+## en a qu'un.
+func test_a_broken_hand_does_not_also_break_the_carry() -> void:
+	var balance := _filled()
+	balance.hand_size[CardData.POOL_ACTION] = -1
+	var missing := balance.missing_fields()
+	assert_array(missing).contains(["hand_size.action"])
+	assert_array(missing).not_contains(["carry_over.action.above_the_hand"])
+	assert_array(missing).not_contains(["carry_over.action.partial"])
 
 func test_an_empty_starting_deck_is_reported() -> void:
 	var balance := _filled()
@@ -93,6 +160,29 @@ func test_the_deck_balance_of_data_is_exploitable() -> void:
 			.override_failure_message("le deck de départ nomme une carte inconnue : %s" % card) \
 			.is_true()
 
+## Et les decks qu'on garde **sous le coude** ?
+##
+## `I2b` en laisse un second dans `data/balance/`, celui dont la main persiste, pour que
+## l'`OUVERT` de 3.5 se retourne en repointant une ligne de `balance.tres`. Personne ne le
+## lit tant qu'il n'est pas rebranché, donc le boot ne le contrôle pas — et un bloc de
+## rechange qu'on ne peut plus jouer n'est pas une rechange. Même argument que
+## `RunBalanceTest.test_every_day_model_left_in_data_is_playable`, et même compte à deux.
+func test_every_deck_left_in_data_is_playable() -> void:
+	var blocks := 0
+	for file in DirAccess.get_files_at(BALANCE_ROOT):
+		if file.get_extension() != "tres":
+			continue
+		var block := load(BALANCE_ROOT.path_join(file))
+		if not (block is DeckBalance):
+			continue
+		blocks += 1
+		assert_array((block as DeckBalance).missing_fields()) \
+			.override_failure_message("bloc de deck inexploitable : %s" % file) \
+			.is_empty()
+	assert_int(blocks) \
+		.override_failure_message("plus aucun deck de rechange dans data/balance/") \
+		.is_greater_equal(2)
+
 ## Deux actions, un bâtiment, trois tailles de main dont celle des powers à zéro.
 func _filled() -> DeckBalance:
 	var balance := DeckBalance.new()
@@ -106,5 +196,10 @@ func _filled() -> DeckBalance:
 	hand[CardData.POOL_BUILDING] = 2
 	hand[CardData.POOL_POWER] = 0
 	balance.hand_size = hand
+	var carry: Dictionary[StringName, int] = {}
+	carry[CardData.POOL_ACTION] = 0
+	carry[CardData.POOL_BUILDING] = 0
+	carry[CardData.POOL_POWER] = 0
+	balance.carry_over = carry
 	balance.draft_choices = 3
 	return balance

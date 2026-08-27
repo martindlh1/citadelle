@@ -250,6 +250,15 @@ static func unstaff(state: RunState, action: int) -> Array[StringName]:
 ## Une phase qui ne résout pas mais ferme la journée ne produit rien et prélève quand
 ## même : une journée coûte à nourrir qu'on y ait travaillé ou non.
 ##
+## **Et elle ne compte aucun oisif**, ce qui n'est pas la même chose que d'en compter zéro
+## par hasard. Un oisif est un reproche — « tu avais six ouvriers et tu n'en as employé
+## que quatre » —, et un reproche suppose qu'on pouvait faire autrement. Dans une phase où
+## personne ne peut être affecté, tout le roster est trivialement oisif : le rapport
+## annoncerait « 6 oisifs » à qui vient de faire travailler ses six ouvriers tout
+## l'après-midi. C'était vrai au mot près et faux à la lecture, ce qui est le défaut que
+## `E2` a nommé et que seule une capture montre. Constaté à `I2b`, sur la phase que le
+## jalon venait de faire exister.
+##
 ## **Les deux résolveurs voient la même ville**, celle d'avant le soir, et l'ordre compte :
 ## les chantiers s'appliquent **après** que la production a été calculée. Sans cette
 ## règle, un entrepôt achevé ce soir relèverait la réserve du même soir, et un chantier
@@ -273,6 +282,7 @@ static func resolve(state: RunState) -> PhaseReport:
 	var progress := ProgressReport.empty()
 	var completed: Array[Vector2i] = []
 	var lines: Array[WorkLine] = []
+	var resting: Array[StringName] = []
 
 	if cycle.resolves():
 		var plan := state.board().to_plan()
@@ -286,13 +296,22 @@ static func resolve(state: RunState) -> PhaseReport:
 		lines = production.work()
 		lines.append_array(sites.work())
 		progress = SkillResolver.award_lines(state.roster(), lines, balance.workforce)
+		resting = _idle(labor, lines)
 
 	var day_report: DayReport = null
 	if cycle.closes_the_day():
 		day_report = close_the_day(state)
 
-	return PhaseReport.create(cycle.day(), cycle.phase().id, production, sites, progress,
-		_idle(labor, lines), completed, day_report)
+	var report := PhaseReport.create(cycle.day(), cycle.phase().id, production, sites,
+		progress, resting, completed, day_report)
+	# Retenu pour le bilan de la journée, et **seulement si la phase a produit**. Une phase
+	# qui ne résout pas n'a rien à additionner ; l'y mettre ferait compter une résolution de
+	# plus, c'est-à-dire mentir sur la seule colonne qui dise combien de fois la journée a
+	# travaillé. C'est ici plutôt que dans `end_phase()` parce que c'est le seul endroit qui
+	# **produise** un rapport : un second producteur, un jour, n'aurait pas à y penser.
+	if cycle.resolves():
+		state.record_phase(report)
+	return report
 
 ## Fait tomber cette vague sur le village, applique ce qu'elle ordonne, et rend ce que ça a
 ## coûté.
@@ -361,6 +380,28 @@ static func fight(state: RunState) -> BattleReport:
 
 	return BattleReport.create(damage, plundered, progress)
 
+## Ce que la journée en cours a rendu jusqu'ici, et ce que la fermer va coûter.
+##
+## `DESIGN.md` 2 en fait la seconde moitié du soir depuis `P2b` : « on y lit le bilan de la
+## journée avant de la fermer ». Il se lit donc **à tout moment** de la journée, et il rend
+## un bilan vide le matin d'un jour qui commence — ce qui est la bonne réponse et non un cas
+## particulier.
+##
+## Il est ici et pas sur `RunState` parce qu'il enchaîne **deux questions** posées à deux
+## systèmes : ce que les phases ont rendu, que le run tient, et ce que le village doit à
+## manger, que l'Économie sait seule. C'est la définition de ce fichier — « il ne calcule
+## rien, il enchaîne deux questions là où chaque système n'en répond qu'à une ».
+##
+## L'upkeep est **dû** et non consommé, puisqu'il se prélève à la fermeture. Les deux ne
+## diffèrent qu'en famine, et 2. a tranché ce que ça coûte contre ce que ça évite : un
+## bilan qui n'ajoute aucun geste, le bouton qui le referme étant celui qui ferme la
+## journée.
+static func day_summary(state: RunState) -> DaySummary:
+	assert(state != null, "bilan de journée sans run")
+	var day := mini(state.cycle().day(), state.cycle().days())
+	return DaySummary.of(day, state.day_reports(),
+		ProductionResolver.upkeep_due(state.labor(), state.balance().economy))
+
 ## Ferme la journée : prélève l'upkeep, arme la vague du jour, et rend ce qu'elle a coûté.
 ##
 ## Une porte à part parce que c'est ici que `F1` devait s'ajouter, et il s'y ajoute **par un
@@ -399,8 +440,11 @@ static func close_the_day(state: RunState) -> DayReport:
 ## par phase qui résout**. Deux phases qui résolvent rendent donc deux mains par jour et
 ## deux récoltes — mais un seul upkeep, parce que manger suit la journée et non la phase.
 ##
-## Ce que ça décide du sort de la main non jouée — elle est défaussée — est l'état par
-## défaut de l'`OUVERT` de 3.5 et non une réponse. `I2b` le tranchera.
+## Ce que ça décide du sort de la main non jouée **est un réglage depuis `I2b`**, et non
+## plus une ligne d'ici. `DeckBalance.carry_over` dit par pool ce qui survit, cette porte
+## l'applique, et l'`OUVERT` de 3.5 se tourne en éditant un `.tres` — ce qu'il fallait
+## pour qu'une partie jouée l'arbitre au lieu d'une déduction. Le défaut livré reste la
+## défausse totale, qui est l'état de `I1` et non une réponse.
 ##
 ## **Elle cesse d'être atomique à `I2`**, et c'est le seul travail que la discussion sur le
 ## format de combat a ajouté au jalon. `DESIGN.md` 3.8 l'a écrit avant qu'on en ait besoin :
@@ -424,7 +468,7 @@ static func end_phase(state: RunState) -> PhaseReport:
 	if resolves:
 		state.board().clear()
 		state.clear_staffing()
-		state.deck().discard_hand()
+		_drop_what_is_not_carried(state)
 	if not state.awaits_a_battle():
 		_open_next_phase(state)
 	return report
@@ -533,6 +577,26 @@ static func _restore_capacity(state: RunState, balance: EconomyBalance) -> void:
 	state.ledger().set_capacity(
 		ProductionResolver.capacity_for(state.city().to_snapshot(), balance))
 
+## Défausse la main des pools qui ne reportent pas, et laisse les autres en place.
+##
+## L'application de `DeckBalance.carry_over`, et le seul endroit du projet qui la lise.
+## Elle est ici plutôt que dans le `Deck` par la même ligne que tout le reste de ce
+## fichier : le `Deck` offre `discard_pool()`, la journée décide de l'appeler. Un deck qui
+## connaîtrait sa propre politique de fin de phase saurait quelque chose de la journée.
+##
+## Un pool absent de la table vaut zéro, donc se défausse : c'est le comportement de `I1`,
+## et c'est la bonne dégradation — une table incomplète ne doit pas faire *garder* une main
+## par accident. Le boot refuse de toute façon une clé manquante dans `data/`.
+##
+## Un report **partiel** garderait tout plutôt que rien. Le cas n'existe pas — le bloc
+## d'équilibrage le refuse —, et s'il apparaissait par un fixture de test, garder est la
+## dégradation qui se voit, là où défausser se confondrait avec le défaut.
+static func _drop_what_is_not_carried(state: RunState) -> void:
+	var deck := state.balance().deck
+	for pool in CardData.POOLS:
+		if int(deck.carry_over.get(pool, 0)) <= 0:
+			state.deck().discard_pool(pool)
+
 ## Ouvre la phase suivante : avance le cycle, repioche si la précédente résolvait, et
 ## constate la victoire si le run vient d'épuiser ses journées.
 ##
@@ -545,9 +609,22 @@ static func _restore_capacity(state: RunState, balance: EconomyBalance) -> void:
 ## attend, le cycle pointe encore sur la phase qui vient de finir. C'est ce qui permet à
 ## `RunState` de ne porter qu'un seul champ pour l'attente — la vague — au lieu de traîner
 ## un souvenir de ce qu'il restait à faire.
+##
+## La conséquence à connaître pour lire une journée dont la **dernière phase ne résout
+## pas** — le modèle retenu à `I2b` : la main est tirée à la fin de la dernière phase qui
+## produit, et **traverse** la phase de fermeture sans que rien n'y touche. Le joueur
+## regarde donc l'upkeep tomber et la vague arriver en tenant déjà la main de demain
+## matin, ce qui est une information plutôt qu'un défaut. Le compte est juste dans tous les
+## cas : **une main par phase qui résout**, et le report de `carry_over` s'applique là où
+## la défausse a lieu, donc jamais sur une phase qui ne résout pas.
 static func _open_next_phase(state: RunState) -> void:
 	var draws := state.cycle().resolves()
-	state.cycle().advance()
+	# Une journée neuve efface le bilan de la précédente, et c'est le **seul** endroit qui
+	# l'efface. `advance()` dit lui-même qu'un jour vient de s'ouvrir, ce qui évite d'avoir
+	# à comparer un numéro de jour d'avant à un numéro d'après — le genre de souvenir que
+	# `RunState` n'a justement pas à porter.
+	if state.cycle().advance():
+		state.clear_day_reports()
 	if state.cycle().is_over():
 		_finish(state, RunOutcome.CAUSE_SURVIVED)
 		return

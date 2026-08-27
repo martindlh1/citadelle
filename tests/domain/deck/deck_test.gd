@@ -115,6 +115,27 @@ func test_discarding_the_hand_empties_the_three_pools_at_once() -> void:
 	assert_int(deck.discard_size(CardData.POOL_ACTION)).is_equal(3)
 	assert_int(deck.discard_size(CardData.POOL_BUILDING)).is_equal(2)
 
+## La porte par laquelle passe le report de main de DESIGN.md 3.5 : un pool se défausse
+## seul, et les deux autres ne bougent pas. Sans elle, « garder ses bâtiments et défausser
+## ses actions » aurait été un cas particulier écrit dans l'orchestrateur au lieu d'un
+## réglage — alors que 3.5 pose la question par pool, pas pour la main entière.
+func test_discarding_one_pool_leaves_the_others_alone() -> void:
+	var deck := _deck()
+	deck.draw(CardData.POOL_ACTION, 3, _rng(SEED))
+	deck.draw(CardData.POOL_BUILDING, 2, _rng(SEED))
+	assert_int(deck.discard_pool(CardData.POOL_ACTION)).is_equal(3)
+	assert_int(deck.hand_size(CardData.POOL_ACTION)).is_equal(0)
+	assert_int(deck.discard_size(CardData.POOL_ACTION)).is_equal(3)
+	assert_int(deck.hand_size(CardData.POOL_BUILDING)).is_equal(2)
+	assert_int(deck.discard_size(CardData.POOL_BUILDING)).is_equal(0)
+
+## Une main de pool déjà vide se défausse sans rien casser : c'est l'état d'une phase
+## entièrement jouée, et celui du pool des powers à tous les instants jusqu'à X4.
+func test_discarding_an_empty_pool_is_not_an_error() -> void:
+	var deck := _deck()
+	assert_int(deck.discard_pool(CardData.POOL_POWER)).is_equal(0)
+	assert_bool(deck.hand().is_empty()).is_true()
+
 ## L'inverse exact de `discard()`, et la porte qu'une annulation emprunte.
 func test_taking_a_card_back_returns_it_to_the_hand() -> void:
 	var deck := _deck()

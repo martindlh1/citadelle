@@ -113,10 +113,10 @@ La carte   clic gauche : jouer sur la case survolée. Clic droit : retirer.
 Le travail clic sur une fiche, puis sur son action — sur la carte ou dans la liste. Ou Auto.
            Clic droit sur une fiche : la rappeler. Retour arrière : rappeler toute une action.
            Espace reste le raccourci : envoyer sur la case survolée sans rien tenir.
-Entrée     fonder le village, tenir la ligne, ou finir la phase — selon ce que le run attend.
+Entrée     le pas que le bouton en bas à droite annonce : fonder, finir, tenir la ligne, relancer.
 La caméra  Q/E : pivoter. Molette : zoomer. WASD : déplacer. R : recadrer.
 La vue     H : replier ce rapport. F2 : replier l'affectation. F1 : masquer tout le HUD.
-           P : voir les piles. F11 : plein écran."""
+           P : voir les piles. B : le bilan de la journée. F11 : plein écran."""
 
 
 ## Ce que `--shot-evenings` doit valoir pour capturer l'écran de **fondation**.
@@ -127,6 +127,18 @@ La vue     H : replier ce rapport. F2 : replier l'affectation. F1 : masquer tout
 ## valeur est comparée en **texte** et non convertie, pour distinguer un « 0 » écrit
 ## exprès d'un drapeau absent, que `to_int()` rend tous les deux à zéro.
 const SHOT_FOUNDING := "0"
+
+## Les blocs d'équilibrage de rechange que `I2b` laisse dans `data/balance/`, et le nom qui
+## veut dire « celui que `balance.tres` désigne ».
+##
+## Deux identifiants de contenu écrits dans un `.gd`, ce que les conventions évitent
+## partout ailleurs — et c'est ici inévitable : le travail de la chronique est justement de
+## **nommer** les variantes qu'elle compare, et une variante anonyme ne se compare à rien.
+## Ils passent par l'index de `GameDatabase` et non par un chemin, donc un fichier déplacé
+## rend un null que l'assertion de `_chronicle_balance()` nomme, plutôt qu'un `load()` muet.
+const SPARE_NONE := &""
+const SPARE_TWO_PHASES := &"run_balance_two_phases"
+const SPARE_PERSISTENT_DECK := &"deck_balance_persistent"
 
 var _metrics: TerrainMetrics
 var _world: DevWorld
@@ -198,6 +210,27 @@ var _report_level := Report.FULL
 ## `CLAUDE.md` refuse en premier, écrit à l'envers.
 var _left_slot: MarginContainer
 var _right_slot: MarginContainer
+
+## Le bouton de pas et l'écran de fin, ajoutés à `P2a`.
+##
+## Le bouton vit dans un troisième créneau, **dans la bande de la main** et non dans la
+## colonne de droite : celle-ci a débordé trois fois — `W2`, `I2`, `P1a` —, et on ne lui
+## confie pas le geste le plus fréquent du jeu.
+var _step_slot: MarginContainer
+var _step: StepButton
+var _end_screen: RunEndScreen
+
+## Le bilan de la journée, ouvert au soir. Voir `_show_summary()`.
+var _summary: DaySummaryView
+
+## Le seed du run **courant**, qui n'est plus `SEED` dès qu'on relance.
+##
+## `SEED` reste la valeur d'ouverture, donc ce qu'une capture et la chronique montrent ;
+## celui-ci est ce que l'écran affiche et ce qu'un relancement fait avancer. Les deux
+## seraient le même tant que rien ne relance, et c'est précisément pour ça qu'il fallait
+## les séparer avant : un `SEED` lu à l'écran après un relancement aurait annoncé le seed
+## d'un run qu'on ne joue plus.
+var _run_seed := SEED
 
 ## Ouvrier sélectionné dans le panneau, ou &"" si aucun.
 ##
@@ -296,15 +329,51 @@ func _ready() -> void:
 	_piles.dismissed.connect(_show_piles)
 	add_child(_piles)
 
+	# Le bouton de pas, **dans la bande de la main** et calé sur le bas des cartes. La marge
+	# se demande à la main plutôt que d'être recopiée, comme celle de la colonne de droite
+	# depuis `P1b` : la bande seule sait où elle commence et où elle finit.
+	_step = StepButton.create()
+	_step.step_requested.connect(_press_on)
+	_step_slot = _hud_slot(_step, Control.SIZE_SHRINK_END, Control.SIZE_SHRINK_END,
+		HandView.band_bottom())
+	add_child(_step_slot)
+
+	# En dernier, donc au-dessus de la vue des piles elle-même : un run fini l'est pendant
+	# qu'une modale est ouverte comme pendant qu'elle ne l'est pas, et le verdict passe
+	# devant tout le reste.
+	# Le bilan de la journée, sous l'écran de fin et au-dessus du reste : les deux sont des
+	# modales, et une partie finie passe devant une journée à lire.
+	_summary = DaySummaryView.create(_palette)
+	_summary.close_requested.connect(_press_on)
+	_summary.dismissed.connect(_summary.dismiss)
+	add_child(_summary)
+
+	_end_screen = RunEndScreen.create()
+	_end_screen.restart_requested.connect(_restart)
+	_end_screen.dismissed.connect(_end_screen.dismiss)
+	add_child(_end_screen)
+
 	EventBus.phase_resolved.connect(_on_phase_resolved)
 	EventBus.battle_pending.connect(_on_battle_pending)
 	EventBus.battle_resolved.connect(_on_battle_resolved)
+	# `run_finished` et non `run_ended` : `EventBus` distingue la partie **jouée** de la
+	# partie **rangée**, et son commentaire dit depuis `I2` qu'« un écran de fin vit entre
+	# les deux ». Écouter la seconde ferait apparaître le verdict au moment où le run
+	# disparaît, donc trop tard pour en lire quoi que ce soit.
+	EventBus.run_finished.connect(_on_run_finished)
+	# Le bilan s'ouvre à l'entrée d'une phase qui ne fait que fermer la journée, et c'est
+	# `phase_changed` qui le dit — jamais un nom de phase, que `DESIGN.md` 2 interdit.
+	EventBus.phase_changed.connect(_on_phase_changed)
 	# La première ligne du jeu doit parler du premier geste. « Prendre une carte » était
 	# vrai tant qu'un run s'ouvrait Cœur posé et main tirée ; depuis `I2` il n'y a ni
 	# l'un ni l'autre, et l'écran conseillerait un geste que le domaine refuse.
 	if _state().awaits_its_heart():
 		_last_action = "Poser le Cœur : un clic sur la carte, ou Entrée pour la case suggérée."
 	_refresh_targets()
+	# Avant la capture, et exclusive d'elle : la chronique rouvre le run quatre fois, donc
+	# une image prise après elle montrerait la dernière variante et non celle de `data/`.
+	# Elle quitte d'elle-même, ce qui rend l'ordre suffisant sans qu'un garde s'y ajoute.
+	_chronicle_if_asked()
 	_capture_if_asked()
 
 ## Le survol change sans que rien ne soit joué — la souris bouge, la caméra tourne — donc
@@ -322,6 +391,12 @@ func _process(_delta: float) -> void:
 	_bar.show_ledger(_state().ledger(), _last_delta)
 	_crew.set_height_budget(_crew_budget())
 	_crew.show_state(_state(), _held_worker, RunManager.phase())
+	# Le bouton de pas est relu à chaque image, comme le panneau d'affectation et pour la
+	# même raison : sa réponse dépend de l'état du run, donc de six gestes différents.
+	# Le rafraîchir sur événement aurait demandé de les énumérer, et un oubli dans cette
+	# liste se lirait comme un bouton qui propose le pas d'avant. Il ne redessine rien tant
+	# que le libellé ne change pas.
+	_step.show_state(_state())
 	_label.text = _report()
 	_hover.text = _hover_line()
 
@@ -422,6 +497,8 @@ func _handle_key(event: InputEventKey) -> void:
 			_unstaff_here()
 		KEY_ENTER, KEY_KP_ENTER:
 			_press_on()
+		KEY_B:
+			_show_summary()
 		KEY_H:
 			_cycle_report()
 		KEY_F1:
@@ -462,6 +539,7 @@ func _toggle_hud() -> void:
 	_left_slot.visible = shown
 	_right_slot.visible = shown
 	_hand_view.visible = shown
+	_step_slot.visible = shown
 	if shown:
 		_last_action = "HUD rendu. F1 pour le remasquer."
 
@@ -764,6 +842,13 @@ func _unstaff_here() -> void:
 ## défaut » que `F1` annonçait pour le déploiement automatique, et c'est le même geste :
 ## la règle automatique de `I1` survit comme raccourci, le clic reste le choix.
 func _press_on() -> void:
+	# Un run fini passe en premier, et c'est la seule question qui vaille alors : les trois
+	# autres portent sur une journée qui n'existe plus. C'est aussi ce qui fait que le
+	# bouton de pas n'a jamais d'état mort — `StepButton.show_state()` départage dans le
+	# même ordre, et les deux chemins doivent dire la même chose.
+	if _state().cycle().is_over():
+		_restart()
+		return
 	if _state().awaits_its_heart():
 		_found_at(_state().suggested_heart_anchor())
 		return
@@ -772,6 +857,97 @@ func _press_on() -> void:
 		return
 	_end_phase()
 
+## Referme le run courant et en ouvre un neuf, sur le seed suivant.
+##
+## **Le seed suivant et non un tirage libre.** Un seed au hasard rendrait le harnais
+## différent à chaque lancement, donc les captures incomparables d'une session à l'autre —
+## ce que ce projet refuse depuis `I0`, et ce que la chronique de `I2b` exige pour que
+## quatre variantes se comparent. `+ 1` est frais pour le joueur et reproductible pour nous,
+## et l'écran l'affiche pour qu'on puisse revenir à un run précis quand on le veut.
+##
+## Le relief est **régénéré** : c'est un run neuf, pas une reprise. Le monde le reçoit par
+## `show_grid()` plutôt que d'être reconstruit — `DevWorld` sait repointer ses trois
+## renderers et son curseur, et refaire l'arbre perdrait la caméra là où le joueur l'avait
+## laissée.
+##
+## Tout ce que le harnais tenait du run précédent est remis à zéro ici, et il faut que la
+## liste soit exhaustive : un `_battle_names` oublié ferait nommer les morts d'hier dans la
+## bataille de demain — exactement le défaut que `I2` a trouvé en capture, retourné.
+func _restart() -> void:
+	var balance := GameDatabase.get_balance()
+	_run_seed += 1
+	if RunManager.is_running():
+		RunManager.close()
+	var grid := TerrainGen.generate(_run_seed, balance.terrain_gen.map_size,
+		balance.terrain_gen)
+	RunManager.open(RunState.open(_run_seed, grid, _make_roster(), _make_catalogue(),
+		_make_buildings(), balance))
+	_world.show_grid(grid)
+	_renderer.rebuild(_state().city())
+	_held_slot = NO_SLOT
+	_held_worker = &""
+	_turns = 0
+	_direction = PlayedAction.DIRECTION_UP
+	_battle_label = ""
+	_battle_day = 0
+	_battle_names = {}
+	_ending_label = ""
+	_last_delta = {}
+	_panel.clear()
+	_battle.clear()
+	_summary.dismiss()
+	_end_screen.dismiss()
+	_last_action = "Poser le Cœur : un clic sur la carte, ou Entrée pour la case suggérée."
+	_refresh_targets()
+
+## Le run vient de se terminer : on montre comment.
+##
+## Le seed lui est **passé** plutôt que lu sur le run : l'écran vit entre `run_finished` et
+## `run_ended`, donc entre le moment où la partie est jouée et celui où `RunManager` la
+## range, et lui faire redemander un état qui peut déjà avoir disparu serait une
+## dépendance de plus pour rien.
+func _on_run_finished(outcome: RunOutcome) -> void:
+	# Le bilan de la dernière journée s'efface : deux modales empilées feraient lire un
+	# récapitulatif de journée derrière un verdict de run, et la partie est finie.
+	_summary.dismiss()
+	_end_screen.show_outcome(outcome, _run_seed)
+
+## Une phase vient de commencer. Le bilan de la journée s'ouvre si c'est le moment de lire.
+##
+## **Le moment se demande au domaine et jamais à un nom de phase** : c'est une phase qui
+## ferme la journée et n'autorise aucun geste, donc une phase où il n'y a rien d'autre à
+## faire que lire. `DESIGN.md` 2 en fait la seconde moitié du soir, et cette condition-là
+## est ce qui garde la promesse d'échanger la journée par un `.tres` — un modèle dont la
+## dernière phase se joue encore n'ouvre pas de modale par-dessus les cartes.
+func _on_phase_changed(_day: int, _phase: StringName) -> void:
+	if _is_a_reading_phase():
+		_show_summary()
+
+## La phase courante est-elle une phase où l'on ne fait que lire ?
+func _is_a_reading_phase() -> bool:
+	var cycle := _state().cycle()
+	if cycle.is_over() or not cycle.closes_the_day():
+		return false
+	return not cycle.permits(PhaseDef.ACTION_PLAY) \
+		and not cycle.permits(PhaseDef.ACTION_ASSIGN)
+
+## Ouvre le bilan de la journée, ou le referme s'il est déjà là.
+##
+## La vague est **nommée** à la vue plutôt que devinée par elle : ce qui tombe cette nuit
+## se lit sur le calendrier de `data/balance/`, et un panneau qui irait le chercher
+## connaîtrait l'équilibrage. Même partage que les prénoms des morts sur `BattlePanel`.
+func _show_summary() -> void:
+	if _summary.visible:
+		_summary.dismiss()
+		return
+	var summary := RunManager.day_summary()
+	if summary == null:
+		return
+	var slot := _state().balance().run.wave_on(_state().cycle().day())
+	_summary.show_summary(summary, _state().ledger(),
+		_state().balance().economy.upkeep_resource,
+		"" if slot == null else slot.label)
+
 ## Termine la phase. C'est `RunManager` qui décide si ça résout — le harnais ne connaît
 ## pas la journée, il la traverse.
 ##
@@ -779,23 +955,34 @@ func _press_on() -> void:
 ## **bataille qui attend**. La troisième se lit à ce que le cycle n'a pas bougé, et il
 ## fallait la nommer : annoncer « au tour de Matin » alors qu'on est toujours au Matin qui
 ## vient de finir serait un écran qui ment sur ce qu'il attend.
-func _end_phase() -> void:
+## Elle **rend** le rapport depuis `I2b`, et c'est ce qui permet à la chronique de mesurer
+## une partie sans court-circuiter le geste. `P1a` a payé une fois le raccourci inverse —
+## un scripteur qui appelait `RunManager` en direct capturait un écran d'avant ses propres
+## poses. Un appelant qui veut lire ce qu'une phase a rendu passe donc par ici comme le
+## clavier, et rien ne se dédouble.
+func _end_phase() -> PhaseReport:
 	if _state().cycle().is_over():
 		_last_action = "Run terminé."
-		return
+		return null
 	var finished := _phase_label()
 	_ending_label = finished
-	RunManager.end_phase()
+	# La phase qu'on quitte était peut-être celle qu'on lisait, donc le bilan se referme —
+	# **avant** l'appel et non après. `RunManager.end_phase()` publie `phase_changed`, donc
+	# la phase suivante peut rouvrir le bilan dans cette ligne même : refermer ensuite le
+	# rouvrait puis le fermait aussitôt, et le soir s'affichait sans son bilan.
+	_summary.dismiss()
+	var report := RunManager.end_phase()
 	_held_slot = NO_SLOT
 	_refresh_targets()
 	if _state().awaits_a_battle():
 		_last_action = "%s terminée — %s en approche. Entrée pour tenir la ligne." % [
 			finished, _state().pending_wave().label]
-		return
+		return report
 	if _state().cycle().is_over():
-		_last_action = "%s terminée — %s." % [finished, _verdict()]
-		return
+		_last_action = "%s terminée — %s." % [finished, _outcome_word(_state().outcome())]
+		return report
 	_last_action = "%s terminée. Au tour de %s." % [finished, _phase_label()]
+	return report
 
 ## Pose le Cœur sur cette cellule, et ouvre la première journée.
 ##
@@ -818,10 +1005,10 @@ func _found_at(cell: Vector2i) -> void:
 ##
 ## Le libellé et le jour sont retenus **avant** l'appel : la vague est consommée et le
 ## cycle a avancé quand le signal arrive.
-func _fight() -> void:
+func _fight() -> BattleReport:
 	if not _state().awaits_a_battle():
 		_last_action = "Aucune vague en approche."
-		return
+		return null
 	_battle_label = _state().pending_wave().label
 	_battle_day = _state().cycle().day()
 	_battle_names = {}
@@ -835,9 +1022,10 @@ func _fight() -> void:
 	# geste du joueur l'ait visé.
 	_renderer.rebuild(_state().city())
 	if _state().cycle().is_over():
-		_last_action = "%s : %s." % [_battle_label, _verdict()]
-		return
+		_last_action = "%s : %s." % [_battle_label, _outcome_word(_state().outcome())]
+		return report
 	_last_action = "%s repoussée." % _battle_label if report.is_held() 		else "%s a frappé. Au tour de %s." % [_battle_label, _phase_label()]
+	return report
 
 ## Le seul endroit du harnais qui réagit à un signal plutôt qu'à une touche, et c'est ce
 ## que `I0` avait dessiné : le domaine retourne, `RunManager` publie, l'écran écoute.
@@ -914,7 +1102,8 @@ func _refresh_markers() -> void:
 ## chaque image met ses nœuds à jour **sur place**, et celle-ci ne le fait pas.
 func _refresh_targets() -> void:
 	_refresh_markers()
-	_hand_view.show_hand(_state().deck().hand(), _held_slot, _state().ledger())
+	_hand_view.show_hand(_state().deck().hand(), _held_slot, _state().ledger(),
+		_state().cycle())
 	var held := _held_card()
 	if held.is_empty() or not ActionTargeting.handles(held):
 		_targets.clear()
@@ -965,7 +1154,6 @@ func _report() -> String:
 	if not forecast.is_empty():
 		lines.append(forecast)
 	lines.append("")
-	lines.append_array(_closing_lines())
 	if _report_level == Report.ESSENTIAL:
 		lines.append(_last_action)
 		return "\n".join(lines)
@@ -1006,7 +1194,7 @@ func _forecast_line() -> String:
 func _banner() -> String:
 	var cycle := _state().cycle()
 	if _state().awaits_its_heart():
-		return "Fondation   |   poser le Cœur : clic sur la carte, ou Entrée pour la case suggérée   |   seed %d" 			% SEED
+		return "Fondation   |   poser le Cœur : clic sur la carte, ou Entrée pour la case suggérée   |   seed %d" 			% _run_seed
 	if cycle.is_over():
 		return "Run terminé   |   %s" % _verdict()
 	if _state().awaits_a_battle():
@@ -1031,50 +1219,23 @@ func _banner() -> String:
 func _verdict() -> String:
 	var ending := _state().outcome()
 	if ending == null:
-		return "%d jour(s) joués, seed %d" % [_state().cycle().days(), SEED]
+		return "%d jour(s) joués, seed %d" % [_state().cycle().days(), _run_seed]
 	return "%s   |   jour %d, score %d" % [_outcome_word(ending), ending.day(),
 		ending.score()]
 
 func _outcome_word(ending: RunOutcome) -> String:
 	return "Victoire" if ending.is_victory() else "Défaite"
 
-## Le détail du score, sur sa propre ligne du rapport.
+## Le détail d'une fin a quitté ce pavé à `P2a`, pour `RunEndScreen`.
 ##
-## Les quatre termes que `DESIGN.md` 5 énumère, parce qu'un total seul ne dit pas ce qui l'a
-## fait — c'est la raison pour laquelle `RunOutcome` les garde à côté de la somme.
-func _score_line() -> String:
-	var ending := _state().outcome()
-	if ending == null:
-		return ""
-	return "Score %d — %d en réserve, %d bâtiment(s) debout, %d ouvrier(s), %d niveau(x)." \
-		% [ending.score(), ending.resources(), ending.buildings(), ending.workers(),
-			ending.levels()]
+## Il y était depuis `I2` — la cause en clair, puis le score et ses quatre termes —, à côté
+## de l'aide au clavier, c'est-à-dire dans la seule zone de l'écran qu'on cesse de lire au
+## bout de deux minutes. Une partie de quinze journées s'achevait donc sur une phrase qu'on
+## pouvait manquer. L'écran de fin les **remplace** au lieu de les doubler, quatrième fois
+## après `E2`, `W2` et `P1b` : un chiffre affiché à deux endroits est un chiffre qui finira
+## par différer de lui-même. Ce que le bandeau garde est un mot et un total, ce qu'un
+## bandeau sait porter.
 
-## Pourquoi le run s'est arrêté, en clair.
-##
-## La traduction d'une constante du domaine, comme `_staffing_refusal()` depuis `I1` : un
-## `RunOutcome` rend `&"heart"`, l'écran en fait une phrase. Le repli par défaut existe pour
-## qu'une quatrième cause, le jour où il y en aura une, se lise plutôt que de disparaître.
-func _cause_of(ending: RunOutcome) -> String:
-	match ending.cause():
-		RunOutcome.CAUSE_SURVIVED:
-			return "La dernière journée est passée, le village tient debout."
-		RunOutcome.CAUSE_HEART:
-			return "Le Cœur est tombé."
-		RunOutcome.CAUSE_ROSTER:
-			return "Il ne reste plus personne au village."
-	return "Fin : %s." % ending.cause()
-
-## Le détail du score s'ajoute au rapport une fois le run fini, et lui seul : les autres
-## lignes décrivent une partie en cours.
-func _closing_lines() -> PackedStringArray:
-	var lines := PackedStringArray()
-	if not _state().cycle().is_over():
-		return lines
-	lines.append(_cause_of(_state().outcome()))
-	lines.append(_score_line())
-	lines.append("")
-	return lines
 
 ## Ce que la phase courante autorise, en clair. L'écran ne suppose rien : il pose les
 ## deux questions au domaine et affiche les réponses.
@@ -1377,6 +1538,341 @@ func _make_label() -> Label:
 	label.add_theme_color_override("font_outline_color", Color.BLACK)
 	return label
 
+# --- La chronique ---------------------------------------------------------------------------
+
+## Rejoue le run entier sous chacune des quatre variantes de `I2b`, et imprime ce que ça
+## donne. Rien n'est dessiné : c'est une mesure, pas une image.
+##
+## **Ce qu'elle sert, et ce qu'elle refuse de servir.** `DESIGN.md` 8 confie à `I2b`
+## l'arbitrage de deux `.tres` — la structure de la journée en 2, le sort de la main non
+## jouée en 3.5 — et ces deux questions se tranchent en jouant, pas en comptant. « Deux
+## phases identiques deviennent-elles une corvée ? » n'a aucune colonne dans ce rapport et
+## n'en aura jamais.
+##
+## Ce qu'une partie jouée ne dit pas et qu'une table dit tout de suite, en revanche : **si
+## la comparaison est honnête**. L'upkeep suit la journée et la production suit la phase
+## qui résout — c'est la séparation que 2. a voulue pour que changer la forme d'une journée
+## ne force pas à rééquilibrer la nourriture. Elle a un revers que personne n'avait chiffré :
+## un modèle qui résout moitié moins produit moitié moins **à coût constant**. Sans le
+## nombre, on prendrait cet écart pour un ressenti et l'on arbitrerait la faim en croyant
+## arbitrer le rythme.
+##
+## **Chaque table annonce ce qu'elle doit montrer**, en toutes lettres, et le verdict de fin
+## dit ce qui la démentirait. C'est la discipline que `F1` a écrite après s'être fait avoir
+## par une ligne parfaitement alignée et fausse sur son propre sujet : une table dont on ne
+## sait pas dire ce qu'elle prouverait ne prouve rien.
+##
+## Elle emprunte les **gestes du harnais** — `_scripted_found()`, `_scripted_plays()`,
+## `_scripted_staffing()`, `_end_phase()`, `_fight()` — et non `RunManager` en direct.
+## C'est la règle que `P1a` a payée : un scripteur qui court-circuite le geste finit par
+## mesurer autre chose que ce que le joueur fait. Les quatre runs se jouent donc exactement
+## comme la capture joue le sien, à la carte près.
+func _chronicle_if_asked() -> void:
+	if not DevShot.has_flag(DevShot.CHRONICLE_FLAG):
+		return
+	print("[chronique] seed %d — quatre variantes, le même relief, les mêmes gestes." % SEED)
+	var tallies: Array[Dictionary] = []
+	for variant in _chronicle_variants():
+		tallies.append(_chronicle_one(variant))
+	_print_chronicle_tables(tallies)
+	get_tree().quit()
+
+## Les quatre croisements que `I2b` doit départager.
+##
+## Les deux blocs de rechange sont nommés par leur identifiant d'index et non par leur
+## chemin : `GameDatabase` les a déjà chargés, et un fichier déplacé se signale ici par un
+## null plutôt que par un `load()` silencieux.
+func _chronicle_variants() -> Array[Dictionary]:
+	var variants: Array[Dictionary] = []
+	for day in [SPARE_NONE, SPARE_TWO_PHASES]:
+		for hand in [SPARE_NONE, SPARE_PERSISTENT_DECK]:
+			variants.append({
+				&"label": "%s · %s" % [
+					"2 phases" if day == SPARE_TWO_PHASES else "3 phases",
+					"main reportée" if hand == SPARE_PERSISTENT_DECK else "main défaussée"],
+				&"run": day,
+				&"deck": hand,
+			})
+	return variants
+
+## Joue un run entier sous cette variante et rend ce qu'il a coûté et rapporté.
+##
+## Le relief est **régénéré** à chaque variante plutôt que réutilisé : un terrassement le
+## creuse, et comparer quatre runs sur quatre cartes différentes ne comparerait rien.
+func _chronicle_one(variant: Dictionary) -> Dictionary:
+	var balance := _chronicle_balance(variant)
+	var grid := TerrainGen.generate(SEED, balance.terrain_gen.map_size, balance.terrain_gen)
+	# `RunManager` ne tient qu'un run et refuse d'en ouvrir un second — ce qui est juste, et
+	# ce qui oblige la chronique à refermer avant de repartir. Le premier tour referme celui
+	# que `_ready()` vient d'ouvrir : la variante 0 se joue sur le même équilibrage, mais
+	# repartir d'un run neuf est ce qui garantit que les quatre lignes se comparent.
+	if RunManager.is_running():
+		RunManager.close()
+	RunManager.open(RunState.open(SEED, grid, _make_roster(), _make_catalogue(),
+		_make_buildings(), balance))
+	_renderer.rebuild(_state().city())
+	var tally := _blank_tally(variant, balance)
+	_scripted_found()
+	print("")
+	print("[chronique] %s" % variant[&"label"])
+	print("[chronique]   jour  résol.  jouées  servies  perdues  récolte      "
+		+ "upkeep   stock  vague")
+	while not _state().cycle().is_over():
+		var closing := _chronicle_phase(tally)
+		if closing != null:
+			_print_chronicle_day(tally, closing)
+	_close_tally(tally)
+	return tally
+
+## Joue une phase de bout en bout et note ce qu'elle a fait passer.
+##
+## Les deux comptes de cartes se prennent **de part et d'autre** des deux gestes, et pas
+## autrement : « jouées » est ce que la main perd en posant, « servies » est ce qu'elle
+## gagne à la frontière de phase, une fois retiré ce que le report lui a laissé. Sans le
+## retrait, une main qui reporte tout paraîtrait ne rien recevoir, alors qu'elle reçoit
+## exactement ce qu'elle a dépensé — ce qui est tout le sujet.
+func _chronicle_phase(tally: Dictionary) -> PhaseReport:
+	var cycle := _state().cycle()
+	var closes := cycle.closes_the_day()
+	var held := _state().deck().hand().size()
+	if cycle.permits(PhaseDef.ACTION_PLAY):
+		_scripted_plays()
+	if cycle.permits(PhaseDef.ACTION_ASSIGN):
+		_scripted_staffing()
+	var kept := _hand_by_pool()
+	tally[&"played"] += held - _state().deck().hand().size()
+	if cycle.resolves():
+		tally[&"resolutions"] += 1
+	var resolves := cycle.resolves()
+	var report := _end_phase()
+	# La bataille est le **dernier cran** de la fermeture d'une journée, et c'est elle qui
+	# ouvre la phase suivante quand une vague attend — donc elle qui sert la main. Compter
+	# les cartes avant elle datait la pioche du lendemain : le modèle à deux phases
+	# annonçait sept cartes servies le jour d'une vague et quatorze les autres, ce qui
+	# n'était pas une différence de jeu mais un défaut de mesure. Elle est aussi ici pour
+	# que le pillage entre dans le stock de ce soir plutôt que dans celui de demain.
+	if _state().awaits_a_battle():
+		_chronicle_battle(tally)
+	if resolves:
+		_chronicle_cards(tally, kept)
+	if report != null:
+		_chronicle_report(tally, report)
+	return report if closes else null
+
+## Ce que la frontière de phase a fait des cartes : combien sont parties sans avoir été
+## jouées, combien la pioche a servi pour les remplacer.
+##
+## **Appelée aux seules frontières qui résolvent**, et le premier jet ne l'était pas : une
+## phase qui ne résout pas laisse la main intacte, si bien que la formule ci-dessous y
+## comptait une défausse entière **et** une pioche entière, dont aucune n'avait eu lieu.
+## Vingt et une cartes servies par journée pour une main de sept sur deux résolutions — un
+## chiffre parfaitement aligné, et faux d'une moitié. C'est exactement ce dont `F1` dit de
+## se méfier, trouvé cette fois en relisant la table plutôt qu'en la croyant.
+##
+## Le report est lu sur `carry_over`, donc sur la même table que le domaine applique. Un
+## report partiel — que `DeckBalance` refuse — compterait ici comme « tout gardé », ce qui
+## est la dégradation qu'`RunOrchestrator` fait déjà de son côté : les deux se trompent
+## ensemble ou pas du tout.
+func _chronicle_cards(tally: Dictionary, kept: Dictionary) -> void:
+	var carry := _state().balance().deck.carry_over
+	var hand := _state().deck().hand()
+	for pool in CardData.POOLS:
+		var before: int = kept[pool]
+		var survivors := before if int(carry.get(pool, 0)) > 0 else 0
+		tally[&"dropped"] += before - survivors
+		tally[&"dealt"] += maxi(hand.count_in(pool) - survivors, 0)
+
+## Ce qu'une phase résolue a rapporté, et ce qu'une journée fermée a coûté.
+func _chronicle_report(tally: Dictionary, report: PhaseReport) -> void:
+	var food: StringName = _state().balance().economy.upkeep_resource
+	var produced := report.production().produced()
+	for id in produced:
+		tally[&"harvest"] += int(produced[id])
+	tally[&"grown"] += int(produced.get(food, 0))
+	if not report.closes_the_day():
+		return
+	var upkeep := report.day_report().upkeep()
+	tally[&"upkeeps"] += 1
+	tally[&"due"] += upkeep.due()
+	tally[&"eaten"] += upkeep.consumed()
+	tally[&"unfed"] += upkeep.unfed()
+	if upkeep.is_famine() and tally[&"famine"] == 0:
+		tally[&"famine"] = report.day_report().day()
+
+## Tient la ligne, et note ce qu'elle a coûté en hommes.
+##
+## Le compte se prend sur le roster de part et d'autre plutôt que dans le rapport : c'est
+## la seule lecture qui reste juste le jour où quelqu'un d'autre que la vague fera tomber
+## un ouvrier.
+func _chronicle_battle(tally: Dictionary) -> void:
+	var standing := _state().roster().size()
+	var wave := _state().pending_wave().label
+	var report := _fight()
+	tally[&"fallen"] += standing - _state().roster().size()
+	tally[&"plundered"] += report.total_plundered() if report != null else 0
+	tally[&"wave"] = wave
+
+## Une ligne par journée fermée. Ce qui y bouge d'une variante à l'autre est ce que la
+## variante change ; le reste est le même run.
+func _print_chronicle_day(tally: Dictionary, report: PhaseReport) -> void:
+	var closing: DayReport = report.day_report() if report != null else null
+	var upkeep := closing.upkeep() if closing != null else null
+	print("[chronique]  %4d  %6d  %6d  %7d  %7d  %5d (%d nour.)  %d/%d  %5d  %s" % [
+		closing.day() if closing != null else 0,
+		tally[&"resolutions"] - tally[&"printed_resolutions"],
+		tally[&"played"] - tally[&"printed_played"],
+		tally[&"dealt"] - tally[&"printed_dealt"],
+		tally[&"dropped"] - tally[&"printed_dropped"],
+		tally[&"harvest"] - tally[&"printed_harvest"],
+		tally[&"grown"] - tally[&"printed_grown"],
+		upkeep.consumed() if upkeep != null else 0,
+		upkeep.due() if upkeep != null else 0,
+		_state().ledger().total(),
+		tally[&"wave"],
+	])
+	tally[&"wave"] = ""
+	for field in [&"resolutions", &"played", &"dealt", &"dropped", &"harvest", &"grown"]:
+		tally[StringName("printed_%s" % field)] = tally[field]
+
+## La main, pool par pool, à l'instant. Sert de repère avant une frontière de phase.
+func _hand_by_pool() -> Dictionary:
+	var counts: Dictionary[StringName, int] = {}
+	var hand := _state().deck().hand()
+	for pool in CardData.POOLS:
+		counts[pool] = hand.count_in(pool)
+	return counts
+
+## Un équilibrage où l'on a remplacé les blocs que la variante nomme.
+##
+## Les blocs sont **remplacés** et jamais mutés : `duplicate()` est superficiel, donc
+## toucher au contenu d'un sous-bloc toucherait celui que `GameDatabase` sert à tout le
+## monde, et la variante suivante partirait d'un équilibrage déjà déformé.
+func _chronicle_balance(variant: Dictionary) -> BalanceData:
+	var balance := GameDatabase.get_balance().duplicate() as BalanceData
+	var run: StringName = variant[&"run"]
+	if run != SPARE_NONE:
+		balance.run = GameDatabase.get_resource(GameDatabase.CATEGORY_BALANCE, run) as RunBalance
+	var deck: StringName = variant[&"deck"]
+	if deck != SPARE_NONE:
+		balance.deck = GameDatabase.get_resource(GameDatabase.CATEGORY_BALANCE, deck) as DeckBalance
+	assert(balance.missing_fields().is_empty(),
+		"variante de chronique inexploitable : %s" % ", ".join(balance.missing_fields()))
+	return balance
+
+func _blank_tally(variant: Dictionary, balance: BalanceData) -> Dictionary:
+	var tally: Dictionary = {
+		&"label": variant[&"label"],
+		&"phases": balance.run.phases.size(),
+		&"resolving": balance.run.resolving_phases().size(),
+		&"wave": "",
+	}
+	for field in [&"upkeeps", &"resolutions", &"played", &"dealt", &"dropped", &"harvest",
+			&"grown", &"due", &"eaten", &"unfed", &"famine", &"fallen", &"plundered",
+			&"printed_resolutions", &"printed_played", &"printed_dealt",
+			&"printed_dropped", &"printed_harvest", &"printed_grown"]:
+		tally[field] = 0
+	return tally
+
+func _close_tally(tally: Dictionary) -> void:
+	var ending := _state().outcome()
+	tally[&"outcome"] = _outcome_word(ending) if ending != null else "inachevé"
+	tally[&"last_day"] = ending.day() if ending != null else 0
+	tally[&"score"] = ending.score() if ending != null else 0
+	tally[&"stock"] = _state().ledger().total()
+	tally[&"buildings"] = _state().city().to_snapshot().completed().size()
+	tally[&"workers"] = _state().roster().size()
+
+# --- Les quatre tables ----------------------------------------------------------------------
+
+func _print_chronicle_tables(tallies: Array[Dictionary]) -> void:
+	print("")
+	print("=".repeat(92))
+	_print_day_table(tallies)
+	_print_food_table(tallies)
+	_print_card_table(tallies)
+	_print_run_table(tallies)
+	_print_chronicle_verdict()
+
+## Ce que la forme de la journée fait, et ce qu'elle ne fait pas.
+func _print_day_table(tallies: Array[Dictionary]) -> void:
+	print("")
+	print("A — LA JOURNÉE")
+	print("   Doit montrer : un upkeep par journée, quel que soit le nombre de phases,")
+	print("   et autant de résolutions que la data en déclare. Si ces deux colonnes")
+	print("   cessent de se suivre, changer la forme d'une journée a changé ce qu'elle coûte.")
+	print("   %-28s %7s %7s %7s %9s %11s" % ["variante", "phases", "résol.",
+		"jours", "upkeeps", "résol./jour"])
+	for tally in tallies:
+		# Les deux colonnes viennent de **deux compteurs** : « jours » du cycle, par
+		# l'issue du run, « upkeeps » du nombre de `DayReport` reçus. Elles disaient toutes
+		# deux le second dans le premier jet, donc leur égalité ne prouvait rien — une
+		# colonne qui recopie sa voisine est le défaut que `F1` a nommé.
+		print("   %-28s %7d %7d %7d %9d %11.2f" % [tally[&"label"], tally[&"phases"],
+			tally[&"resolutions"], tally[&"last_day"], tally[&"upkeeps"],
+			float(tally[&"resolutions"]) / maxf(float(tally[&"last_day"]), 1.0)])
+
+## Le chiffre qui dit si la comparaison est honnête.
+func _print_food_table(tallies: Array[Dictionary]) -> void:
+	print("")
+	print("B — LA NOURRITURE")
+	print("   Doit montrer : si les quatre variantes se comparent entre elles, et à quel prix.")
+	print("   L'upkeep suit la journée, la récolte suit la phase qui résout : une variante qui")
+	print("   résoudrait moins produirait moins À COÛT CONSTANT, et sa « 1re famine » avancerait")
+	print("   sans que le modèle y soit pour rien. Les quatre résolvent deux fois par jour —")
+	print("   voir A —, donc ce qui les sépare ici ne vient que du report de main. La phase")
+	print("   du soir ne coûte rien, et c'est cette table qui le montre.")
+	print("   %-28s %8s %7s %7s %8s %11s" % ["variante", "récoltée", "due",
+		"mangée", "affamés", "1re famine"])
+	for tally in tallies:
+		print("   %-28s %8d %7d %7d %8d %11s" % [tally[&"label"], tally[&"grown"],
+			tally[&"due"], tally[&"eaten"], tally[&"unfed"],
+			"—" if tally[&"famine"] == 0 else "jour %d" % tally[&"famine"]])
+
+## Ce que le report fait, et ce qu'il coûte.
+func _print_card_table(tallies: Array[Dictionary]) -> void:
+	print("")
+	print("C — LES CARTES")
+	print("   Doit montrer : ce que le report de main change, et son prix. « Perdues » est")
+	print("   la question de DESIGN.md 3.5 — les cartes parties sans avoir été jouées — et")
+	print("   elle doit tomber à zéro dès qu'un pool reporte. « Servies » doit baisser")
+	print("   d'autant : une carte gardée est une carte non piochée, sinon le report est")
+	print("   gratuit et la main cesse d'être une contrainte.")
+	print("   %-28s %8s %8s %8s %11s" % ["variante", "servies", "jouées",
+		"perdues", "jouées/jour"])
+	for tally in tallies:
+		print("   %-28s %8d %8d %8d %11.2f" % [tally[&"label"], tally[&"dealt"],
+			tally[&"played"], tally[&"dropped"],
+			float(tally[&"played"]) / maxf(float(tally[&"last_day"]), 1.0)])
+
+## Ce que la variante vaut au bout.
+func _print_run_table(tallies: Array[Dictionary]) -> void:
+	print("")
+	print("D — LE RUN")
+	print("   Doit montrer : que chaque variante se joue jusqu'au bout, et ce qu'elle vaut.")
+	print("   Un « inachevé » dans la première colonne est un défaut de la chronique et non")
+	print("   du modèle : c'est un run qui n'a ni gagné, ni perdu, ni épuisé ses journées.")
+	print("   %-28s %10s %6s %7s %7s %7s %7s %7s" % ["variante", "issue", "jour",
+		"score", "réserve", "bât.", "ouvr.", "pillé"])
+	for tally in tallies:
+		print("   %-28s %10s %6d %7d %7d %7d %7d %7d" % [tally[&"label"],
+			tally[&"outcome"], tally[&"last_day"], tally[&"score"], tally[&"stock"],
+			tally[&"buildings"], tally[&"workers"], tally[&"plundered"]])
+
+## Ce que la chronique **ne** dit pas, et il faut que ce soit écrit sous les tables plutôt
+## que dans un commentaire : c'est là qu'on le lit.
+func _print_chronicle_verdict() -> void:
+	print("")
+	print("VERDICT")
+	print("   Ces quatre tables ne tranchent aucune des deux questions de I2b. Elles disent")
+	print("   ce qu'une variante fait aux chiffres ; ce que I2b demande est ce qu'elle fait")
+	print("   à la partie — si une phase de plus se joue ou s'endure, si une main qu'on garde")
+	print("   rend le tour plus riche ou plus mou. Aucune colonne ne répond à ça.")
+	print("   Ce qu'elles servent : savoir, avant d'y passer quinze journées, laquelle des")
+	print("   quatre part avec un handicap d'équilibrage plutôt qu'une différence de rythme.")
+	print("   Le scripteur joue une carte de chaque nature sur la première cible venue et")
+	print("   remplit au bouton Auto : il ne joue pas bien, il joue **pareil** quatre fois.")
+	print("=".repeat(92))
+
 # --- La capture --------------------------------------------------------------------------
 
 ## Capture d'écran pilotée par la ligne de commande, puis sortie :
@@ -1432,6 +1928,12 @@ func _capture_if_asked() -> void:
 		_scripted_skip_phases(DevShot.argument(DevShot.SHOT_PHASES_FLAG).to_int())
 		if not _state().awaits_a_battle() and not _state().cycle().is_over():
 			_scripted_open_phase()
+	# Après la suite de journées et avant tout le reste : relancer refait le run entier —
+	# relief compris —, donc appliquer un cran de HUD ou poser le soleil avant lui les
+	# poserait sur une partie qu'on jette. C'est aussi le seul passage automatique qui
+	# emprunte `_restart()`.
+	if DevShot.has_flag(DevShot.SHOT_RESTART_FLAG):
+		_restart()
 	_apply_shot_view()
 	# Le soleil se pose **d'un coup** pour une capture. Trois images de chauffe ne couvrent
 	# pas un glissement de neuf dixièmes de seconde : sans ça, toute capture montrerait un
@@ -1451,6 +1953,7 @@ func _capture_if_asked() -> void:
 		_state().ledger().total(), _state().ledger().capacity()])
 	print("[run_harness] %s" % _hover_line())
 	print("[run_harness] %s" % _fit_line())
+	print("[run_harness] %s" % _step_fit_line())
 	var error := get_viewport().get_texture().get_image().save_png(path)
 	print("[run_harness] capture vers %s : %s" % [path, error_string(error)])
 	get_tree().quit(OK if error == OK else FAILED)
@@ -1487,6 +1990,23 @@ func _fit_line() -> String:
 		else "%d px de dégagement" % (band - bottom)
 	return "colonne droite : bas du panneau y=%d, haut de la main y=%d, %s" % [
 		bottom, band, verdict]
+
+## La même mesure, couchée : le bouton de pas vit **dans** la bande de la main, à droite,
+## et la main est centrée — donc elle grandit vers lui à chaque carte de plus.
+##
+## Elle existe pour la raison que `P1b` a payée d'une heure passée à sonder des PNG : un
+## recouvrement se mesure en pixels de **mise en page**, que seules les vues connaissent,
+## et pas en pixels d'image, qui valent 1,667 fois moins en 1920×1080. La faire dire au
+## harnais coûte cinq lignes et la rend lisible sur toutes les captures suivantes.
+##
+## Le bord droit est demandé à la main et non déduit de sa taille : la vue est ancrée sur
+## toute la largeur de l'écran, donc son propre bord droit ne dit rien de ses cartes.
+func _step_fit_line() -> String:
+	var cards := _hand_view.right_edge()
+	var button := _step.global_position.x
+	var verdict := "recouvrement %d px" % (cards - button) if cards > button 		else "%d px de dégagement" % (button - cards)
+	return "bande basse : droite des cartes x=%d, gauche du bouton x=%d, %s" % [
+		cards, button, verdict]
 
 ## Applique le cran de HUD demandé par `--shot-view`, s'il l'est.
 ##

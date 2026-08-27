@@ -4,6 +4,503 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-27 — `P2b` : la journée se souvient d'elle-même, et le soir a quelque chose à lire
+
+**État : terminé**, et `P2` avec lui. Trois commits sur `feat/i2b-knobs`. Les trois commandes
+passent : boot sans erreur ni warning, tout `src/domain/` parse, **826 tests verts contre
+810**. Quatre captures.
+
+C'est le seul point de la famille `P2` qui touche le domaine, et il a fallu commencer par
+là : **rien ne se souvenait d'une journée.**
+
+### Le manque, et où il était
+
+Chaque `PhaseReport` était émis puis oublié, et `DayReport` ne porte que l'upkeep et la
+vague. Une journée n'existait donc nulle part entre ses phases : le joueur qui voulait
+savoir ce qu'elle avait rapporté n'avait qu'un compte rendu de phase, dont la moitié était
+déjà remplacée par la suivante.
+
+`RunState` retient désormais les rapports des phases **qui ont résolu**, une journée neuve
+les efface, et `RunOrchestrator.day_summary()` en compose un `DaySummary` avec ce que le
+village doit à manger. L'accumulation est dans le domaine et non dans une vue, par
+l'argument que `DESIGN.md` 2 donne depuis l'écriture du jalon : l'événement de 3.7 et les
+états d'ouvrier de `X6` voudront tous deux poser une ligne dans ce bilan, et un accumulateur
+d'adapter devrait réapprendre chaque nouvelle source.
+
+Trois précisions que l'écriture a demandées, et aucune n'était dans la ligne de `DESIGN.md`.
+
+**Seules les phases qui résolvent entrent.** Une phase qui ne résout pas n'a rien produit,
+donc rien à additionner — et la compter parmi les résolutions ferait mentir la seule colonne
+du bilan qui dise combien de fois la journée a travaillé. Le modèle retenu à `I2b` en a
+justement une par jour.
+
+**L'effacement se lit sur `advance()`.** Le cycle dit lui-même qu'un jour vient de s'ouvrir,
+ce qui évite à `RunState` de porter un souvenir de plus — comparer un numéro de jour d'avant
+à un numéro d'après aurait été exactement le genre d'état que `I2` a refusé pour la vague en
+attente.
+
+**La coupure de bataille tient.** Quand une vague attend, le cycle ne bouge pas, donc le
+bilan est encore là : on lit sa journée, on se bat, et c'est la bataille qui ouvre le
+lendemain — donc qui efface. Un cas de test l'épingle, parce que ça se lit mal.
+
+### Le refus qui porte le jalon
+
+**Le bilan ne compte aucun oisif**, et il n'a pas d'accesseur pour ça.
+
+Un oisif est un état de **phase**. Quelqu'un qui chôme le matin et travaille l'après-midi
+n'est pas un demi-oisif, et additionner deux ensembles de personnes rend un nombre qui ne
+désigne personne. Les postes tenus, eux, s'additionnent sans mentir : ce sont des
+**affectations** et non des gens, donc « la journée a fait travailler douze fois quelqu'un »
+veut dire quelque chose.
+
+C'est la même distinction que `I2b` avait tirée un cran plus bas — une phase qui ne résout
+pas ne compte aucun oisif, parce qu'un oisif est un reproche et qu'un reproche suppose qu'on
+pouvait faire autrement. Ici la raison change : ce n'est plus « on ne pouvait pas », c'est
+« ce n'est pas une quantité ».
+
+Un cas de test le vérifie, et c'est le seul du fichier qui vérifie une **absence** : tous les
+autres contrôlent une addition, ce qui se relit d'un coup d'œil, alors qu'un refus ne se
+relit nulle part. Sans lui, le premier écran qui réclamerait « et les oisifs ? » les
+obtiendrait.
+
+### Le chiffre qui doit être le même des deux côtés
+
+`ProductionResolver.upkeep_due()` devient publique, troisième fois après `staffing_refusal()`
+à `I1` et `family_of()` à `W2`, et toujours pour le même motif : une seconde question se pose
+sur la même règle. Le bilan se lit **avant** la fermeture, donc avant qu'on ait rien prélevé,
+et il doit pourtant annoncer ce qu'on doit.
+
+Les deux appelants passent par la même multiplication plutôt que de la recopier, et le cas de
+test qui compte croise les deux : **ce que le bilan annonce comme dû est exactement ce que la
+fermeture prend**. Le jour où ce qu'on doit dépendra d'autre chose que du nombre de présents
+— un blessé qui mange double, un absent d'expédition qui ne mange pas —, l'annonce et le
+prélèvement bougeront ensemble ou pas du tout.
+
+### Ce que la vue demande, et ce qu'elle ne calcule pas
+
+Elle n'additionne rien : le bilan arrive fait. Elle pose **deux questions** au domaine et
+dessine les réponses — la seconde étant celle qui compte le plus du soir. « La réserve
+paiera-t-elle l'upkeep ? » va au `Ledger`, et la ligne vire à l'orange quand non. Savoir
+qu'on va manquer **avant** de fermer est la seule chose de ce panneau sur laquelle on puisse
+encore agir ; après, c'est une famine constatée.
+
+Elle s'ouvre sur une **question au domaine** et jamais sur un nom de phase : *cette phase
+ferme-t-elle la journée sans rien autoriser ?* C'est ce qui garde la promesse d'échanger la
+journée par un `.tres` — le modèle à deux phases, dont la dernière se joue encore, n'ouvre
+pas de modale par-dessus les cartes. La touche `B` l'ouvre à tout moment, ce qui lui rend son
+accès dans ce modèle-là.
+
+### Les deux horloges, réparées par les deux bouts
+
+Le compte rendu de phase annonçait « Jour 3 · Soir » pendant que le bandeau annonçait
+« Jour 4 · Matin ». Son bandeau ne disait quelque chose qu'à la fin d'une journée — « fin de
+journée » — et restait **vide** le reste du temps, si bien que le titre se lisait comme
+l'état courant alors qu'il nomme la phase qui vient de finir.
+
+Le bilan prend en charge « où en est-on », et le panneau annonce désormais son propre temps —
+**passé** — à toutes les résolutions. Une ligne de code, et le malentendu tombe.
+
+### Le défaut trouvé en capture, et il est instructif
+
+Le bilan **s'ouvrait et se refermait dans la même fonction**. Le harnais le fermait après
+`RunManager.end_phase()`, ce qui semblait l'ordre naturel : on finit la phase, puis on range
+ce qu'on lisait. Or cette porte publie `phase_changed` **avant de rendre la main**, donc la
+phase suivante rouvrait le bilan à l'intérieur de cette ligne — et la ligne d'après le
+refermait aussitôt.
+
+Le symptôme est muet : rien ne plante, rien ne compile de travers, le soir s'affiche
+simplement sans son bilan. Seule une capture le montre. La règle en sort et vaut plus que le
+cas : **ce qu'on range avant un appel appartient à ce qui précède ; ce qu'on ouvre après
+appartient à ce qui suit.** Un bus de signaux rend l'ordre des lignes trompeur, parce qu'une
+partie de la suite s'exécute au milieu de l'appel.
+
+### Ce qui ne bouge pas
+
+**Aucun DTO de `contracts/` n'a été créé ni modifié**, le septième jalon d'affilée après
+`E2`, `W2`, `P1a`, `P1b`, `I2b` et `P2a`. `DaySummary` vit dans `domain/run/` par le critère
+habituel : aucun second système du domaine ne le franchit — il va du Cycle de jour aux
+adapters, et `DESIGN.md` 3.8 pose que ce système-ci est justement celui qui a le droit de
+connaître tous les autres.
+
+### Prochain jalon
+
+**`M1`**, le menu. C'est l'écran de fin de `P2a` qui le rend nécessaire : proposer de
+relancer désigne un endroit d'où l'on lance, et il n'y en a pas. C'est aussi le **premier
+jalon du projet qui demande une `.tscn` et la scène principale de `project.godot`**, donc le
+premier que je ne peux pas livrer seul — je décrirai l'arbre, tu le câbleras.
+
+Puis **`I3`**, avec la nourriture en tête et son premier chiffre : vingt-sept récoltées pour
+quatre-vingt-cinq dues sur quinze journées.
+
+`M2` — la persistance — attend toujours une mesure et non du temps : **combien de temps te
+prend un run joué à la main.**
+
+Et **l'arbitrage de `I2b` reste ouvert**. Il ne se referme qu'en jouant, et `P2` vient de
+rendre ces quinze journées nettement moins pénibles à mener — ce qui était tout son objet.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché. `M1` sera le premier à en
+demander.
+
+- **Le soir ouvre un bilan.** Ce que la journée a récolté, les paliers, les chantiers, ce
+  qu'il y a à nourrir ce soir — et la vague, quand il y en a une. Le bouton **Finir la
+  journée** referme le bilan et ferme la journée : c'est le même geste, pas deux.
+- **`B` ouvre le bilan à tout moment**, et le referme. Un clic à côté le referme aussi, pour
+  regarder le village avant de décider.
+- **La ligne « À nourrir ce soir » vire à l'orange** quand la réserve ne suivra pas. C'est la
+  seule chose du soir qu'on puisse encore corriger.
+- **Le compte rendu de phase dit « résolu »** à chaque résolution. Il parlait au présent
+  d'une phase passée, ce qui le mettait en contradiction avec le bandeau juste à gauche.
+- **La branche n'est pas fusionnée** : `feat/i2b-knobs`, onze commits — six pour `I2b`, un
+  pour `DESIGN.md`, deux pour `P2a`, trois pour `P2b`.
+
+---
+
+
+## 2026-08-27 — `P2a` : le pas se nomme, la fin se regarde, et trois défauts plus vieux que le jalon
+
+**État : terminé.** Deux commits sur `feat/i2b-knobs`, à la suite de `I2b`. Les trois
+commandes passent : boot sans erreur ni warning, tout `src/domain/` parse, **810 tests
+verts** — inchangés, le jalon ne touche pas au domaine. Cinq captures.
+
+Il vient de plusieurs runs complets joués à la main, comme `P1` avant lui, et il en livre
+les deux points qui ne demandent rien au domaine. `DESIGN.md` a été écrit d'abord, dans son
+propre commit : deux de ces points ouvrent des jalons, et le quatrième **rouvre une ligne
+du hors-périmètre**.
+
+### Ce que le bouton corrige, et ce que ce n'est pas
+
+`Entrée` faisait déjà cinq choses selon l'état du run — fonder, finir la phase, fermer la
+journée, tenir la ligne, et depuis ce jalon relancer. Le manque n'était donc pas un geste :
+c'est qu'elle les faisait **sans le dire**. La seule chose de l'écran qui annonçait lequel
+des cinq allait tomber était une ligne du pavé de texte, au milieu de l'aide au clavier,
+c'est-à-dire dans la zone qu'on cesse de lire au bout de deux minutes.
+
+Le bouton n'ajoute rien : il rend visible une dispatch que le harnais calculait déjà pour
+router `Entrée`. Les deux chemins la refont **dans le même ordre**, et il fallait le noter
+en toutes lettres — `StepButton.show_state()` et `_press_on()` doivent départager les cinq
+cas identiquement, sans quoi le bouton proposerait un pas que la touche ne ferait pas.
+
+**Aucun nom de phase n'y entre**, ce qui est la contrainte de `DESIGN.md` 2 depuis `I1` :
+les cinq libellés viennent de quatre questions au domaine. Une journée à une seule phase
+dirait « Finir la journée » du premier coup, ce qui est exact.
+
+Il vit **dans la bande de la main** et non dans la colonne de droite. Ce n'est pas une
+préférence : cette colonne a débordé trois fois — `W2`, `I2`, `P1a` —, et on ne lui confie
+pas le geste le plus fréquent du jeu. La marge se demande à `HandView`, qui a gagné un
+troisième accesseur de mesure après `band_height()` et `band_bottom()` ; et la capture
+imprime désormais une seconde ligne de mise en page, couchée cette fois — où finissent les
+cartes, où commence le bouton, lequel mord sur l'autre.
+
+**Il double le bouton de `BattlePanel`, et c'est délibéré.** Le doublon que ce projet
+refuse porte sur un *chiffre* affiché deux fois, qui finit par différer de lui-même ; ici
+il n'y a qu'un geste, offert à deux endroits — comme le chevron de repli et `F2`, ou Espace
+et le clic sur une fiche. Le panneau garde le sien parce qu'il montre ce qu'on affronte.
+
+### L'écran de fin, dont la place était gardée sans qu'on l'ait dit
+
+`EventBus` porte deux signaux distincts depuis `I2`, et le commentaire qui les sépare
+écrivait déjà la phrase : « l'un annonce qu'une partie est **jouée**, l'autre qu'elle est
+**rangée**. Un écran de fin vit entre les deux. » Il n'y avait qu'une vue à écrire, et elle
+écoute `run_finished` — écouter `run_ended` aurait fait apparaître le verdict au moment où
+le run disparaît.
+
+Le pavé de texte **perd** la cause et le détail du score au lieu de les doubler, quatrième
+fois après `E2`, `W2` et `P1b`. Ce que le bandeau garde est un mot et un total, ce qu'un
+bandeau sait porter.
+
+**Relancer prend le seed suivant.** Un tirage libre rendrait le harnais différent à chaque
+lancement, donc les captures incomparables d'une session à l'autre — et la chronique de
+`I2b` a précisément besoin que quatre runs partent du même endroit. `+ 1` est frais pour le
+joueur et reproductible pour nous ; l'écran l'affiche.
+
+`--shot-restart` naît de la porte habituelle, cinquième drapeau nu : relancer ne s'obtient
+que par un clic sur un écran de fin, donc aucune suite de journées ne le produit.
+`_restart()` reconstruit un run entier — relief compris — et aurait été le seul chemin de
+cette taille qu'aucune passe automatique n'emprunte jamais.
+
+### Trois défauts trouvés en regardant, et deux sont plus vieux que le jalon
+
+**Le pavé d'aide était double-interligné, et c'est moi qui l'avais cassé.** Mes scripts
+d'édition écrivaient les fichiers sans forcer `LF`, donc les convertissaient en **CRLF** —
+et Godot lit un `\r` isolé comme un saut de ligne de plus. Toute chaîne multi-ligne d'un
+script se dessinait donc avec une ligne vide entre chaque ligne.
+
+Ce qui rend le cas instructif est **où il n'apparaissait pas** : ni au boot, ni au parsing,
+ni aux 810 tests, et pas non plus dans le dépôt, que git normalise en `LF` au commit. Le
+défaut n'existait que dans la copie de travail, c'est-à-dire exactement dans ce qu'une
+capture montre. Les warnings `CRLF will be replaced by LF` de `git add` étaient le signal,
+et je les ai pris pour du bruit préexistant pendant tout `I2b`.
+
+**« Main vide » se dessinait une lettre par ligne**, à la verticale, sur l'écran de
+fondation — **depuis `I2`**. Un `Label` en autowrap déclare une largeur minimale minuscule ;
+seul enfant d'un conteneur qui distribue, il reçoit cette largeur-là et se coupe par
+caractère. C'est la règle que `P1a` avait tirée à moitié : elle disait « tout libellé qui
+porte un nombre passe en `AUTOWRAP_OFF` », alors que la cause n'a rien à voir avec les
+nombres. Et l'ironie est nette — c'était le seul texte de la seule image que
+`--shot-evenings 0` existe pour montrer.
+
+Le même libellé **mentait une fois sur deux** : il annonçait « Entrée termine la phase » sur
+un écran où Entrée pose le Cœur. Une main est vide dans deux situations, et la phrase
+n'était juste que dans la seconde. Elle ne nomme plus rien du tout : le bouton s'en charge,
+et il ne se trompe dans aucune des deux.
+
+**Le panneau d'affectation annonçait « cette phase ferme la journée » à un run terminé**,
+qui n'en a plus aucune. Même famille que ce que `I2b` venait de corriger sur la même vue, un
+cran plus loin, et trouvée de la même façon — en regardant l'écran d'un état que le jalon
+venait de rendre atteignable.
+
+### Ce que `DESIGN.md` a gagné avant le code
+
+Quatre points écrits, dont deux ne sont pas de ce jalon.
+
+- **2** gagne la seconde moitié du soir : on y **lit sa journée** avant de la fermer. Il
+  tombe à l'entrée du soir et non après, ce qui échange une nuance — l'upkeep est annoncé
+  comme *dû* et non comme mangé — contre deux choses qui valent mieux : aucun geste de plus,
+  puisque le bouton qui referme le bilan est celui qui ferme la journée, et un soir qui a
+  quelque chose à montrer. C'est `P2b`, et **quelqu'un devra se souvenir de la journée**, ce
+  que rien ne fait aujourd'hui.
+- **5** gagne l'écran de fin, fait ici.
+- **6** devient « autour du run » et gagne le **menu** — une `.tscn` et la scène principale
+  de `project.godot`, donc l'humain — et un `OUVERT` sur la **persistance**.
+- **7** perd sa ligne « pas de sauvegarde en cours de run », qui devient une question.
+
+Sur la persistance, l'apport du jour est un rappel plutôt qu'une réponse : **l'architecture
+paie déjà une sauvegarde bien moins chère qu'un instantané.** Un seed plus une liste de
+gestes rejoue un run à l'identique — promis depuis `I0`, vérifié par un cas de test depuis
+`I1`. Un journal de gestes coûte un fichier et zéro format par système ; sérialiser
+`RunState` demande à sept états d'en avoir un, plus une migration. Le défaut du rejeu est
+net et il est écrit : **toute sauvegarde meurt au prochain changement d'équilibrage**. Ce
+qui tranche est une mesure que personne n'a prise — combien de temps prend un run joué à la
+main —, et c'est `M2`.
+
+### Prochain jalon
+
+**`P2b`**, le bilan de journée, seul point de `P2` qui reste et le seul qui touche le
+domaine. Puis **`M1`**, le menu, que l'écran de fin rend nécessaire en proposant de
+relancer.
+
+Et **l'arbitrage de `I2b` reste ouvert** : il ne se referme qu'en jouant.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché — `M1` sera le premier
+jalon à en demander.
+
+- **Un bouton en bas à droite** dit le pas qui vient et le fait au clic. `Entrée` reste le
+  raccourci et fait exactement la même chose.
+- **Un run fini ouvre un écran**, avec le score et ses quatre termes. **Relancer** ouvre un
+  run neuf sur le seed suivant, affiché. Un clic à côté referme l'écran pour regarder le
+  village ; le bouton en bas à droite dit toujours « Relancer ».
+- **Le pavé de texte a maigri** : la cause et le détail du score sont dans l'écran de fin.
+- **Un drapeau de plus** : `--shot-restart`, nu, relance avant de capturer.
+- **La branche n'est pas fusionnée** : `feat/i2b-knobs`, huit commits — six pour `I2b`, deux
+  pour `P2a`.
+
+---
+
+
+## 2026-08-27 — `I2b` : les deux boutons posés, la journée gagne un soir, et ce qui reste est de jouer
+
+**État : partiel, et c'est sa forme normale.** Cinq commits sur `feat/i2b-knobs`. Les trois
+commandes passent : boot sans erreur ni warning, tout `src/domain/` parse, **810 tests verts
+contre 786**. Quatre captures et une chronique.
+
+Partiel parce que `I2b` est un **playtest**. Ce qu'un jalon peut livrer, ce sont les boutons
+et de quoi les comparer ; l'arbitrage des deux `OUVERT` se joue au clavier, quinze journées
+à la fois, et personne d'autre que toi ne peut le faire.
+
+### La promesse de `DESIGN.md` 8, vraie à moitié
+
+Le jalon était annoncé ainsi : « les deux se testent en échangeant un `.tres` », et « c'est
+la première fois du projet qu'un jalon ne demande pas d'écrire une ligne de GDScript ».
+
+**La structure de la journée l'était.** `PhaseDef` et `RunBalance` ont tenu leur promesse
+mot pour mot depuis `I1` : le cycle ne connaît aucun nom, `end_phase()` lit `resolves()` et
+`closes_the_day()`, et l'on peut écrire un troisième modèle sans toucher au code.
+
+**Le sort de la main ne l'était pas.** `RunOrchestrator.end_phase()` appelait
+`state.deck().discard_hand()` **sans condition**, et aucun champ de `DeckBalance` ne le
+réglait. Le domaine avait pourtant été écrit pour accueillir la réponse — `discard_hand()`
+se dit « une capacité, pas une politique », et `Deck.discard()` désigne l'endroit en toutes
+lettres — mais personne n'avait posé le bouton.
+
+C'est la quatrième correction de `DESIGN.md` par un jalon après `D2`, `W2` et `F1`, et ce
+qu'elle apprend n'est pas « on s'était trompé » mais **où** : la promesse portait sur deux
+questions, une seule avait sa prise, et rien ne les distinguait tant qu'on ne cherchait pas
+à tourner le bouton. Un jalon annoncé « sans code » mérite qu'on vérifie, **avant de le
+planifier**, que chacune de ses questions a vraiment la sienne.
+
+### Le troisième modèle de journée, et ce qu'il coûte
+
+Il vient de toi, en cours de session, et ce n'est aucun des deux que 2. mettait sur la
+table : deux phases symétriques qui posent, affectent et résolvent, puis **un soir** qui
+n'autorise rien, ne résout rien, et se contente de fermer la journée.
+
+Le domaine le supportait déjà, mot pour mot — `resolve()` porte depuis `I1` la phrase « une
+phase qui ne résout pas mais ferme la journée ne produit rien et prélève quand même », et
+`_scripted_day()` du harnais annonce « une journée de trois phases se joue sans qu'une ligne
+bouge ». **Une seule chose le refusait**, et au boot : `PhaseDef` rejetait une phase qui
+n'autorise rien et ne résout pas, au motif qu'elle n'est qu'un tour perdu.
+
+Le motif était bon et la conclusion fausse. Fermer une journée prélève l'upkeep et fait
+tomber la vague, ce qui n'est ni autoriser ni résoudre — et une `PhaseDef` ne sait pas
+qu'elle est la dernière. La règle est montée d'un cran, dans `RunBalance`, qui voit la
+liste : même partage que l'unicité de `id` et que `phases.none_resolves`. Le test à faire
+avant d'écrire un `missing_fields()` tient donc en une question — *cette `Resource` a-t-elle
+sous les yeux tout ce que la règle regarde ?*
+
+**Ce que le soir gagne** : ce que la journée coûte cesse d'être noyé dans une récolte, et la
+vague tombe dans un moment qui n'est que le sien. **Ce qu'il coûte** : un `Entrée` de plus
+par jour, et rien d'autre — la chronique le chiffre plus bas.
+
+Deux conséquences à connaître pour le lire, aucune n'était évidente d'avance. La main est
+tirée à la fin de la dernière phase qui **produit**, donc elle traverse le soir intacte : on
+regarde l'upkeep tomber en tenant déjà celle de demain matin. Et le soleil s'en accommode
+sans une ligne — `dev_world` prend la position de la phase dans sa journée en fraction,
+donc trois phases gagnent un midi là où deux ne montraient que les deux bords.
+
+### Le bouton de report, et pourquoi son milieu est refusé
+
+`DeckBalance.carry_over` dit **par pool** combien de cartes non jouées survivent à une phase
+qui résout, et `RunState.draw_phase()` **complète** la main au lieu d'en servir une neuve.
+
+C'est ce complément qui donne son prix au report : **une carte gardée est une carte de moins
+piochée**. Sans lui, garder sa main serait gratuit — cinq actions reportées *plus* cinq
+fraîches — et le pool cesserait d'être la contrainte que 3.5 en fait. Il rend du même coup
+inutile la « limite de jeu par tour » que ce document adjoignait à la main persistante : le
+plafond est la taille de la main elle-même.
+
+**Deux valeurs, et le milieu est refusé.** Garder deux cartes sur cinq demande de dire
+*lesquelles*, et la seule règle qui ne choisisse pas à la place du joueur est qu'il
+choisisse — donc une modale de fin de phase, donc un écran qui n'existe pas. Le résoudre par
+une règle d'ancienneté aurait **répondu à l'`OUVERT` par un arbitraire enfoui dans un
+résolveur**, ce que `P1b` a refusé au recensement des piles pour la même raison. Le refus
+vit dans `missing_fields()` : la cohérence devient structurelle au lieu d'être vérifiée,
+même geste que le bloc `production` nullable de `E1b`. Le jour où le geste existe, c'est ce
+contrôle-là qui se desserre et rien d'autre.
+
+Un entier plutôt qu'un booléen, alors que deux valeurs légales font un booléen : `hand_size`
+diffère d'un pool à l'autre — cinq actions, deux bâtiments —, donc « tout garder » n'est pas
+le même nombre partout, et l'écrire permet au contrôle de **croiser les deux champs**. Un
+booléen n'aurait rien eu à croiser.
+
+La quatrième piste de 3.5, « défausser contre une petite ressource », n'entre pas et ne
+pouvait pas : c'est une conversion qui touche la réserve **plus** un geste pour désigner
+quoi vendre. Ce n'est pas un bouton, c'est une mécanique.
+
+### Ce que la chronique a mesuré
+
+`--chronicle` rejoue le run entier sous les quatre croisements — deux modèles de journée ×
+deux sorts de la main —, sur le même relief et les mêmes gestes, et rend quatre tables.
+Chacune annonce ce qu'elle doit montrer ; le verdict dit ce qu'elle ne montrera jamais.
+
+**Le soir ne coûte rien.** Les tables A, B et D sont **identiques** entre deux et trois
+phases : trente résolutions, quinze upkeeps, même score, même réserve, même date de famine.
+C'était l'inquiétude d'entrée du jalon — l'upkeep suit la journée, la récolte suit la phase
+qui résout, donc un modèle qui résout moins produit moins à coût constant — et elle ne
+s'applique pas à ce modèle-ci, précisément parce que le soir ne résout pas. Le seul écart est
+de sept cartes servies sur tout un run, et il vient du dernier jour : à deux phases la vague
+s'arme sur la dernière phase qui produit, donc la pioche qu'elle diffère n'a jamais lieu.
+
+**Le report n'est pas gratuit, et le chiffre le dit.** Un run qui défausse voit **210 cartes**
+et en joue 167 ; un run qui garde en voit **153** et en joue 153. La pioche ne sert plus que
+ce qu'on a dépensé, exactement comme annoncé. Les quarante-trois cartes « perdues » — parties
+sans avoir été jouées — tombent à zéro, ce qui est la question de 3.5 réduite à une colonne.
+
+**La famine est un chiffre d'équilibrage, pas un modèle.** Elle tombe au **sixième jour dans
+les quatre variantes**, et l'ampleur est plus grande qu'« un peu juste » : vingt-sept
+nourritures récoltées pour quatre-vingt-cinq dues sur quinze journées. Le village mange un
+jour sur trois. C'est `I3`, et la chronique vient de lui donner son premier chiffre.
+
+**Ce que la chronique ne dit pas, et il faut le répéter.** Le run reporté finit mieux — 350
+contre 307, vingt-cinq bâtiments contre dix-neuf, trois survivants contre deux — et **ce n'est
+pas une preuve**. Le scripteur joue une carte de chaque nature sur la première cible venue
+et remplit au bouton Auto : il ne joue pas bien, il joue *pareil* quatre fois. Une main qu'on
+garde avantage mécaniquement un joueur qui ne choisit pas, puisqu'elle lui rend jouable ce
+qu'il aurait défaussé. Ce que ça vaut pour quelqu'un qui choisit est exactement la question
+qu'il faut jouer.
+
+### Les trois défauts trouvés en regardant, et aucun cherché par un test
+
+Le jalon en a trouvé un par capture et deux par relecture de table, ce qui est la répartition
+habituelle depuis `E2` — sauf que cette fois les deux derniers étaient dans l'instrument
+lui-même.
+
+**L'écran promettait un geste que le domaine refuse.** Dans le soir, la main s'affichait à
+pleine encre, numérotée, curseur de main compris, et le panneau d'affectation conseillait de
+« prendre une carte et cliquer une cible » — pendant que `play()` répondait `wrong_phase` à
+chaque clic. Ce n'est pas la faute d'architecture habituelle : la vue ne **jugeait** rien,
+elle ne **demandait** rien non plus. `HandView` interroge donc `DayCycle.permits()` comme
+elle interroge `Ledger.can_afford()`, et affaiblit la même encre — les deux disent « pas
+maintenant », et ce qui les sépare est une raison, donc une infobulle.
+
+**Le soir annonçait six oisifs** à qui venait de faire travailler ses six ouvriers tout
+l'après-midi. Vrai au mot près, faux à la lecture. Un oisif est un **reproche**, et un
+reproche suppose qu'on pouvait faire autrement ; dans une phase où personne ne peut être
+affecté, tout le roster est trivialement oisif. La réparation est du domaine et non de la
+vue : une phase qui ne résout pas n'en compte aucun.
+
+**Et la chronique s'est trompée deux fois avant d'avoir raison**, des deux façons que `F1` a
+nommées. Elle comptait une défausse et une pioche entières sur une phase qui ne résout pas et
+ne touche donc à rien — vingt et une cartes par journée pour une main de sept sur deux
+résolutions, parfaitement alignées et fausses de moitié. Et elle comptait les cartes **avant**
+la bataille, alors que c'est elle qui ouvre la phase suivante quand une vague attend : le
+modèle à deux phases annonçait sept cartes servies le jour d'une vague et quatorze les
+autres, ce qui n'était pas une différence de jeu mais un défaut de mesure. Une troisième du
+même sang : la table A imprimait le même accumulateur sous « jours » et sous « upkeeps »,
+donc leur égalité — qui est *l'énoncé le plus important du tableau* — était une tautologie.
+**Une colonne qui doit en corroborer une autre se prend ailleurs.**
+
+### Ce qui ne bouge pas
+
+**Aucun DTO de `contracts/` n'a été créé ni modifié**, le cinquième jalon d'affilée après
+`E2`, `W2`, `P1a` et `P1b`. Le sort de la main ne sort jamais du couple Deck+Run, et le soir
+ne franchit aucune frontière : `PhaseReport` le portait déjà.
+
+Le domaine gagne trois choses et pas une règle de jeu inventée : `Deck.discard_pool()`, dont
+`discard_hand()` devient la boucle — deux façons de vider une pile finiraient par différer,
+et celle des deux que le jeu n'emprunte plus est celle qui dérive ; une pioche qui complète ;
+et une porte qui lit `carry_over`.
+
+### Prochain jalon
+
+**Jouer.** C'est la moitié de `I2b` qu'aucun commit ne peut faire, et elle attend deux
+réponses : est-ce que le soir se joue ou s'endure, et est-ce qu'une main qu'on garde rend le
+tour plus riche ou plus mou. Les quatre variantes se montent en repointant une ligne de
+`balance.tres`.
+
+Puis **`I3`**, la nourriture en tête, avec son premier chiffre : vingt-sept récoltées pour
+quatre-vingt-cinq dues.
+
+De la famille `P` il ne reste que **`P1c`**, qui attend toujours une question de design et
+non du temps : comment désigner l'une des deux actions d'une même case.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché.
+
+- **La journée fait trois phases** : Matin, Après-midi, puis **Soir**. Le soir n'autorise
+  rien — `Entrée` le passe, et c'est là que l'upkeep tombe et que la vague arrive.
+- **Pour revenir au modèle à deux phases** : dans `data/balance/balance.tres`, faire pointer
+  `run` sur `run_balance_two_phases.tres` au lieu de `run_balance.tres`.
+- **Pour essayer la main persistante** : même fichier, faire pointer `deck` sur
+  `deck_balance_persistent.tres` au lieu de `deck_balance.tres`. La main survit alors d'une
+  phase à l'autre et la pioche complète — garder une carte, c'est en piocher une de moins.
+- **Un drapeau de plus, et le premier qui ne capture rien** : `--chronicle`, sans `--shot`,
+  rejoue le run sous les quatre variantes et imprime les tables. Il quitte tout seul.
+  ```
+  "$GODOT_BIN" --headless --path . -- --chronicle
+  ```
+- **Dans une phase qui ne pose rien**, la main est en encre faible et l'infobulle dit
+  pourquoi. Ce n'est pas la même pâleur que « réserve insuffisante », c'est la même encre
+  avec une autre raison.
+- **La branche n'est pas fusionnée** : `feat/i2b-knobs`, cinq commits.
+
+---
+
+
 ## 2026-08-27 — `P1b` : la colonne tient, les piles se lisent, la fiche raccourcit
 
 **État : terminé.** Quatre commits sur `feat/p1b-lists`. Les trois commandes passent : boot

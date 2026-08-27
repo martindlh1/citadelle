@@ -58,6 +58,14 @@ const BREACH_PER_CASUALTY := 4
 const UP := PlayedAction.DIRECTION_UP
 const DOWN := PlayedAction.DIRECTION_DOWN
 
+## Cartes tenues par pool. Le deck ordinaire de ce fichier y tient entier, exprès.
+const HAND_ACTIONS := 6
+const HAND_BUILDINGS := 4
+
+## Cartes possédées par pool dans le deck plus profond, celui de la section sur le report.
+const DEEP_ACTIONS := 12
+const DEEP_BUILDINGS := 8
+
 # --- Ce que la phase autorise ----------------------------------------------------------
 
 func test_playing_is_refused_in_a_phase_that_does_not_allow_it() -> void:
@@ -647,6 +655,259 @@ func _scripted(run_seed := SEED) -> RunState:
 	RunOrchestrator.end_phase(state)
 	return state
 
+# --- Le report de main --------------------------------------------------------------------
+
+## Le défaut livré, et le comportement de `I1` : la phase qui résout défausse toute la
+## main, et la suivante en reçoit une neuve. C'est l'épingle de non-régression du jalon —
+## `I2b` met un bouton en data, il ne change pas ce que `data/` porte.
+func test_a_pool_that_does_not_carry_discards_its_whole_hand() -> void:
+	var state := _open_carrying([])
+	assert_int(state.deck().discard_size(CardData.POOL_ACTION)).is_equal(0)
+	RunOrchestrator.end_phase(state)
+	assert_int(state.deck().discard_size(CardData.POOL_ACTION)).is_equal(HAND_ACTIONS)
+	assert_int(state.deck().hand().count_in(CardData.POOL_ACTION)).is_equal(HAND_ACTIONS)
+
+## Le revers, et le bouton lui-même : un pool qui reporte ne défausse rien, et garde ses
+## cartes **dans leur ordre**. C'est la seule des deux lectures de `DESIGN.md` 3.5 qui
+## demandait du code ; l'autre était déjà là.
+func test_a_pool_that_carries_discards_nothing() -> void:
+	var state := _open_carrying([CardData.POOL_ACTION, CardData.POOL_BUILDING])
+	var held := state.deck().hand().cards_in(CardData.POOL_ACTION)
+	RunOrchestrator.end_phase(state)
+	assert_int(state.deck().discard_size(CardData.POOL_ACTION)).is_equal(0)
+	assert_array(state.deck().hand().cards_in(CardData.POOL_ACTION)).is_equal(held)
+
+## Ce que le report **coûte**, et c'est ce qui le rend jouable sans la « limite de jeu par
+## tour » que 3.5 lui adjoignait : la pioche complète au lieu de servir une main neuve,
+## donc une carte gardée est une carte de moins piochée. Les cartes reportées gardent leur
+## place et la pioche n'en ajoute qu'une seule, celle de la carte jouée.
+func test_a_carried_hand_is_topped_up_and_keeps_its_cards_in_place() -> void:
+	var state := _open_carrying([CardData.POOL_ACTION])
+	var unplayed := state.deck().hand().cards_in(CardData.POOL_ACTION)
+	unplayed.remove_at(unplayed.find(ActionTargeting.CARD_HARVEST))
+	RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST)
+	RunOrchestrator.end_phase(state)
+	var after := state.deck().hand().cards_in(CardData.POOL_ACTION)
+	assert_int(after.size()).is_equal(HAND_ACTIONS)
+	assert_array(after.slice(0, unplayed.size())).is_equal(unplayed)
+
+## Le défaut que le premier soir ne montrerait pas. Si `draw_phase()` piochait au lieu de
+## compléter, la main d'un pool qui reporte grossirait d'une taille de main par phase — on
+## s'en apercevrait au troisième soir, avec dix-huit actions, et le pool aurait cessé
+## d'être la contrainte que 3.5 en fait.
+func test_a_carried_hand_never_exceeds_its_size() -> void:
+	var state := _open_carrying([CardData.POOL_ACTION, CardData.POOL_BUILDING])
+	for _step in 3:
+		RunOrchestrator.end_phase(state)
+		assert_int(state.deck().hand().count_in(CardData.POOL_ACTION)) \
+			.is_equal(HAND_ACTIONS)
+		assert_int(state.deck().hand().count_in(CardData.POOL_BUILDING)) \
+			.is_equal(HAND_BUILDINGS)
+
+## Le report est réglé **par pool**, ce qui est toute la raison d'être de
+## `Deck.discard_pool()`. 3.5 pose la question ainsi — « trois pioches, trois défausses,
+## trois tailles de main » —, donc garder ses bâtiments et défausser ses actions doit être
+## un réglage et non un cas particulier écrit quelque part.
+func test_a_carry_is_settled_pool_by_pool() -> void:
+	var state := _open_carrying([CardData.POOL_BUILDING])
+	var held := state.deck().hand().cards_in(CardData.POOL_BUILDING)
+	RunOrchestrator.end_phase(state)
+	assert_int(state.deck().discard_size(CardData.POOL_ACTION)).is_equal(HAND_ACTIONS)
+	assert_int(state.deck().discard_size(CardData.POOL_BUILDING)).is_equal(0)
+	assert_array(state.deck().hand().cards_in(CardData.POOL_BUILDING)).is_equal(held)
+
+## Une carte **jouée** part quand même. Les deux gestes ne sont pas le même : jouer
+## consomme, reporter garde ce qu'on n'a pas consommé — c'est la distinction que
+## `Deck.take_back()` porte déjà depuis `W2`, vue de l'autre bout. Sans ce cas, un report
+## qui reprendrait la main avant que les cartes jouées ne tombent rendrait le deck infini
+## sans qu'aucun compteur ne bouge.
+func test_a_played_card_is_gone_even_when_its_pool_carries() -> void:
+	var state := _open_carrying([CardData.POOL_ACTION])
+	var held := state.deck().hand().count_in(CardData.POOL_ACTION)
+	RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST)
+	assert_int(state.deck().hand().count_in(CardData.POOL_ACTION)).is_equal(held - 1)
+	assert_int(state.deck().discard_size(CardData.POOL_ACTION)).is_equal(1)
+	RunOrchestrator.end_phase(state)
+	assert_int(state.deck().total(CardData.POOL_ACTION)).is_equal(DEEP_ACTIONS)
+
+## Le déterminisme survit au report. `CLAUDE.md` promet depuis `I0` qu'un seed plus une
+## suite de gestes rejoue un run à l'identique, et une main qui traverse les phases est
+## exactement le genre d'état qui pourrait rompre ça sans que rien ne le montre avant
+## plusieurs journées.
+func test_the_same_seed_replays_a_run_whose_hand_carries() -> void:
+	var first := _carried_run()
+	var second := _carried_run()
+	assert_array(first.deck().hand().cards()).is_equal(second.deck().hand().cards())
+	assert_dict(first.ledger().amounts()).is_equal(second.ledger().amounts())
+	assert_int(first.cycle().day()).is_equal(3)
+
+# --- Le bilan de la journée ------------------------------------------------------------------
+
+## Le bilan additionne les deux phases, et il est lisible **pendant** le soir — c'est-à-dire
+## avant que la journée ne se ferme, ce que `DESIGN.md` 2 exige depuis `P2b` : « on y lit le
+## bilan de la journée avant de la fermer ».
+func test_the_day_summary_sums_the_phases_that_resolved() -> void:
+	var state := _open(SEED, _two_working_phases_and_a_close())
+	_harvest_a_phase(state, &"ana")
+	_harvest_a_phase(state, &"bo")
+	var summary := RunOrchestrator.day_summary(state)
+	assert_int(summary.day()).is_equal(1)
+	assert_int(summary.resolutions()).is_equal(2)
+	assert_int(summary.produced()[&"wood"]).is_equal(2)
+	assert_int(summary.manned()).is_equal(2)
+
+## **Le cas qui porte la paire.** Ce que le bilan annonce comme dû est **exactement** ce que
+## la fermeture prélève. Les deux viennent de `ProductionResolver.upkeep_due()`, et c'est
+## toute la raison de l'avoir rendue publique plutôt que de recopier la multiplication : un
+## chiffre annoncé qui ne serait pas celui qu'on prélève est le mensonge d'écran que ce
+## projet a déjà payé deux fois.
+func test_what_the_summary_owes_is_what_the_close_takes() -> void:
+	var state := _open(SEED, _two_working_phases_and_a_close())
+	RunOrchestrator.end_phase(state)
+	RunOrchestrator.end_phase(state)
+	var owed := RunOrchestrator.day_summary(state).upkeep_due()
+	var report := RunOrchestrator.end_phase(state)
+	assert_int(owed).is_equal(3)
+	assert_int(report.day_report().upkeep().due()).is_equal(owed)
+
+## Une phase qui ne résout pas n'entre pas dans le compte. La compter ferait dire à la
+## seule colonne qui mesure le travail d'une journée qu'elle a résolu trois fois là où le
+## `.tres` en déclare deux.
+func test_a_phase_that_resolves_nothing_is_not_a_resolution() -> void:
+	var state := _open(SEED, _two_working_phases_and_a_close())
+	for _step in 3:
+		RunOrchestrator.end_phase(state)
+	# La journée est fermée mais le cycle a déjà ouvert la suivante : c'est le bilan du
+	# jour 2 qu'on lit, vide. Celui du jour 1 comptait deux résolutions, ci-dessus.
+	assert_int(RunOrchestrator.day_summary(state).resolutions()).is_equal(0)
+
+## Une journée neuve oublie la précédente. Sans ça, le bilan grossirait tout le run et
+## annoncerait au quinzième jour ce que quinze journées ont rendu.
+func test_a_new_day_forgets_the_one_before() -> void:
+	var state := _open(SEED, _two_working_phases())
+	_harvest_a_phase(state, &"ana")
+	assert_int(RunOrchestrator.day_summary(state).produced()[&"wood"]).is_equal(1)
+	RunOrchestrator.end_phase(state)
+	assert_int(RunOrchestrator.day_summary(state).day()).is_equal(2)
+	assert_bool(RunOrchestrator.day_summary(state).is_empty()).is_true()
+
+## Une bataille ferme la journée en deux temps — l'upkeep d'un côté, la ligne de l'autre —
+## et c'est elle qui ouvre le lendemain. Le bilan doit donc s'effacer avec elle et pas
+## avant : le joueur lit sa journée, se bat, et se réveille sur une journée vide.
+func test_a_battle_carries_the_day_over_and_then_clears_it() -> void:
+	var state := _open_besieged(1, 1, _two_working_phases_and_a_close())
+	_harvest_a_phase(state, &"ana")
+	_harvest_a_phase(state, &"bo")
+	RunOrchestrator.end_phase(state)
+	# La journée est fermée et le cycle ne bouge plus : la vague le retient, et le bilan
+	# est encore là. C'est la coupure de `DESIGN.md` 3.8, vue depuis le bilan.
+	assert_bool(state.awaits_a_battle()).is_true()
+	assert_int(RunOrchestrator.day_summary(state).resolutions()).is_equal(2)
+	RunOrchestrator.fight(state)
+	assert_bool(RunOrchestrator.day_summary(state).is_empty()).is_true()
+
+## Une phase posée et affectée sur la forêt, puis résolue.
+func _harvest_a_phase(state: RunState, worker: StringName) -> void:
+	var action := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST).action()
+	RunOrchestrator.staff(state, worker, action.id())
+	RunOrchestrator.end_phase(state)
+
+# --- La journée qui se ferme sur une phase à part -------------------------------------------
+
+## Le modèle de journée retenu à `I2b` : deux phases qui posent, affectent et produisent,
+## puis un soir qui n'autorise rien et se contente de fermer. Deux récoltes, **un** upkeep,
+## et la fermeture sur une phase que `PhaseDef` refusait jusqu'à ce jalon.
+##
+## Ce que la troisième phase gagne à exister : ce que la journée coûte cesse d'être noyé
+## dans une récolte, et la vague tombe dans un moment qui n'est que le sien.
+func test_a_day_may_close_on_a_phase_that_allows_nothing() -> void:
+	var state := _open(SEED, _two_working_phases_and_a_close())
+	var first := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST).action()
+	RunOrchestrator.staff(state, &"ana", first.id())
+	var morning := RunOrchestrator.end_phase(state)
+	var second := RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST).action()
+	RunOrchestrator.staff(state, &"ana", second.id())
+	var afternoon := RunOrchestrator.end_phase(state)
+	var close := RunOrchestrator.end_phase(state)
+	assert_int(morning.production().produced()[&"wood"]).is_equal(1)
+	assert_int(afternoon.production().produced()[&"wood"]).is_equal(1)
+	assert_bool(afternoon.closes_the_day()).is_false()
+	assert_bool(close.closes_the_day()).is_true()
+	assert_dict(close.production().produced()).is_empty()
+	assert_int(close.day_report().upkeep().due()).is_equal(3)
+	assert_int(state.ledger().amount(&"food")).is_equal(OPENING_FOOD - 3)
+	assert_int(state.cycle().day()).is_equal(2)
+
+## Une phase qui ne résout pas ne compte **aucun** oisif, et ce n'est pas zéro par hasard.
+##
+## Un oisif est un reproche, et un reproche suppose qu'on pouvait faire autrement. Le soir
+## n'affecte personne, donc le roster entier y est trivialement oisif : sans ce cas, le
+## compte rendu annonçait « 6 oisifs » à qui venait de faire travailler ses six ouvriers
+## tout l'après-midi. Vrai au mot près, faux à la lecture — trouvé en capture, comme les
+## trois défauts d'écran de `I2`.
+func test_a_phase_that_resolves_nothing_counts_no_one_idle() -> void:
+	var state := _open(SEED, _two_working_phases_and_a_close())
+	RunOrchestrator.end_phase(state)
+	var afternoon := RunOrchestrator.end_phase(state)
+	var close := RunOrchestrator.end_phase(state)
+	assert_array(afternoon.idle()).has_size(3)
+	assert_array(close.idle()).is_empty()
+
+## La conséquence du modèle sur la main, et elle vaut d'être épinglée parce qu'elle se lit
+## mal : la main est tirée à la fin de la dernière phase qui **produit**, donc elle traverse
+## le soir sans que rien n'y touche. Le compte reste juste — une main par phase qui résout —
+## et le joueur regarde l'upkeep tomber en tenant déjà celle de demain matin, ce qui est une
+## information plutôt qu'un défaut.
+func test_a_closing_phase_neither_discards_nor_deals() -> void:
+	var state := _open(SEED, _two_working_phases_and_a_close())
+	RunOrchestrator.end_phase(state)
+	RunOrchestrator.end_phase(state)
+	var dealt := state.deck().hand().cards()
+	var discarded := state.deck().discard_size(CardData.POOL_ACTION)
+	RunOrchestrator.end_phase(state)
+	assert_int(state.cycle().day()).is_equal(2)
+	assert_int(state.cycle().phase_index()).is_equal(0)
+	assert_array(state.deck().hand().cards()).is_equal(dealt)
+	assert_int(state.deck().discard_size(CardData.POOL_ACTION)).is_equal(discarded)
+
+## Deux journées jouées sur une main qui reporte, une action par phase.
+func _carried_run() -> RunState:
+	var state := _open_carrying([CardData.POOL_ACTION, CardData.POOL_BUILDING])
+	for _step in 4:
+		RunOrchestrator.play(state, ActionTargeting.CARD_HARVEST, FOREST)
+		RunOrchestrator.end_phase(state)
+	return state
+
+## Un run dont le deck est plus profond que la main, pour la section ci-dessus et pour elle
+## seule.
+##
+## Le deck ordinaire de ce fichier tient **entier** dans la main, ce qui est exactement ce
+## qu'il faut pour jouer une carte nommée sans dépendre d'un mélange — et exactement ce
+## qu'il ne faut pas ici. La pioche étant vide, défausser puis repiocher remélange la
+## défausse et rend une main de la même taille : reporter ou non se ressemblerait à s'y
+## méprendre, et les cas ne prouveraient rien de ce qu'ils annoncent. Avec de quoi piocher,
+## la **défausse se compte**, et elle dit sans ambiguïté lequel des deux vient d'arriver.
+func _open_carrying(carried: Array) -> RunState:
+	var balance := _make_balance(_two_working_phases(), carried)
+	balance.deck = _deeper_deck(carried)
+	return RunState.open(SEED, _make_grid(), _make_roster(), _make_catalogue(),
+		_make_buildings(), balance)
+
+## Douze actions pour une main de six, huit bâtiments pour une main de quatre.
+##
+## Huit *Récolter* sur douze garantissent qu'une main de six en tienne au moins deux quel
+## que soit le mélange : les cas peuvent en jouer une sans tirer au sort, ce qui est la
+## discipline de tout ce fichier.
+func _deeper_deck(carried: Array) -> DeckBalance:
+	var deck := _deck(carried)
+	var copies: Dictionary[StringName, int] = {}
+	copies[ActionTargeting.CARD_HARVEST] = DEEP_ACTIONS - 4
+	copies[SiteResolver.CARD_BUILD] = 4
+	copies[CARD_HUT] = DEEP_BUILDINGS - 2
+	copies[CARD_STORE] = 2
+	deck.starting_deck = copies
+	return deck
+
 # --- La mise en place -----------------------------------------------------------------------
 
 func _resolve_an_empty_day(state: RunState) -> PhaseReport:
@@ -807,9 +1068,10 @@ func _wave(power: int) -> WaveDef:
 	wave.power = power
 	return wave
 
-func _open(run_seed := SEED, phases: Array[PhaseDef] = []) -> RunState:
+func _open(run_seed := SEED, phases: Array[PhaseDef] = [],
+		carried: Array = []) -> RunState:
 	return RunState.open(run_seed, _make_grid(), _make_roster(), _make_catalogue(),
-		_make_buildings(), _make_balance(phases))
+		_make_buildings(), _make_balance(phases, carried))
 
 ## La journée alternative : une seule phase qui pose, affecte et résout. Elle sert aux cas
 ## qui ont besoin des deux gestes d'un coup, et elle est aussi le rappel qu'une journée
@@ -827,6 +1089,18 @@ func _two_working_phases() -> Array[PhaseDef]:
 	var both: Array = [PhaseDef.ACTION_PLAY, PhaseDef.ACTION_ASSIGN]
 	var phases: Array[PhaseDef] = [
 		_phase(&"first", both, true), _phase(&"second", both, true)]
+	return phases
+
+## La journée retenue à `I2b` : deux phases qui posent, affectent et résolvent, puis une
+## troisième qui n'autorise rien, ne résout rien, et se contente de fermer la journée.
+##
+## `PhaseDef` refusait cette dernière jusqu'à ce jalon, au motif qu'elle serait un tour
+## perdu. Elle ne l'est pas : fermer une journée prélève l'upkeep et fait tomber la vague.
+func _two_working_phases_and_a_close() -> Array[PhaseDef]:
+	var both: Array = [PhaseDef.ACTION_PLAY, PhaseDef.ACTION_ASSIGN]
+	var phases: Array[PhaseDef] = [
+		_phase(&"first", both, true), _phase(&"second", both, true),
+		_phase(&"close", [], false)]
 	return phases
 
 func _make_grid() -> HeightGrid:
@@ -909,11 +1183,11 @@ func _building(id: StringName, wood: int, actions: int) -> BuildingData:
 	data.cost = cost
 	return data
 
-func _make_balance(phases: Array[PhaseDef]) -> BalanceData:
+func _make_balance(phases: Array[PhaseDef], carried: Array = []) -> BalanceData:
 	var balance := (load(BALANCE_PATH) as BalanceData).duplicate() as BalanceData
 	balance.economy = _economy()
 	balance.workforce = _workforce()
-	balance.deck = _deck()
+	balance.deck = _deck(carried)
 	balance.actions = _actions()
 	balance.run = _run(phases)
 	balance.combat = _combat()
@@ -955,7 +1229,12 @@ func _workforce() -> WorkforceBalance:
 
 ## Le deck entier tient dans la main : les cas jouent la carte qu'ils nomment sans
 ## dépendre de ce qu'un mélange a bien voulu servir.
-func _deck() -> DeckBalance:
+##
+## `carried` nomme les pools qui **reportent** leur main d'une phase à l'autre ; vide, la
+## journée défausse tout, ce qui est le comportement de `I1` et le défaut de `data/`. Un
+## pool qui reporte reporte exactement sa taille de main — le bloc d'équilibrage refuse
+## toute valeur intermédiaire, faute d'un écran qui saurait choisir laquelle on garde.
+func _deck(carried: Array = []) -> DeckBalance:
 	var deck := DeckBalance.new()
 	var copies: Dictionary[StringName, int] = {}
 	copies[ActionTargeting.CARD_HARVEST] = 2
@@ -966,10 +1245,14 @@ func _deck() -> DeckBalance:
 	copies[CARD_STORE] = 1
 	deck.starting_deck = copies
 	var sizes: Dictionary[StringName, int] = {}
-	sizes[CardData.POOL_ACTION] = 6
-	sizes[CardData.POOL_BUILDING] = 4
+	sizes[CardData.POOL_ACTION] = HAND_ACTIONS
+	sizes[CardData.POOL_BUILDING] = HAND_BUILDINGS
 	sizes[CardData.POOL_POWER] = 0
 	deck.hand_size = sizes
+	var keeps: Dictionary[StringName, int] = {}
+	for pool in CardData.POOLS:
+		keeps[pool] = int(sizes[pool]) if carried.has(pool) else 0
+	deck.carry_over = keeps
 	deck.draft_choices = 3
 	return deck
 

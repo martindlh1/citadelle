@@ -109,10 +109,27 @@ static func take_upkeep(labor: LaborForce, ledger: Ledger,
 	assert(balance.upkeep_per_worker > 0,
 		"upkeep par ouvrier non renseigné : %d" % balance.upkeep_per_worker)
 
-	var due := labor.size() * balance.upkeep_per_worker
+	var due := upkeep_due(labor, balance)
 	var consumed := ledger.take(balance.upkeep_resource, due)
 	return UpkeepReport.create(due, consumed,
 		_unfed(due - consumed, balance.upkeep_per_worker))
+
+## Ce que la journée va coûter à nourrir, sans rien prélever.
+##
+## **Publique depuis P2b**, et pour la raison exacte qui a rendu family_of() publique à W2
+## et staffing_refusal() publique à I1 : une seconde question se pose sur la même règle.
+## Le bilan de journée de DESIGN.md 2 se lit **avant** la fermeture, donc avant que
+## take_upkeep() n'ait rien pris, et il doit pourtant annoncer ce qu'on doit.
+##
+## Les deux appelants passent par ici plutôt que de recopier la multiplication : le jour où
+## ce que l'on doit dépendra d'autre chose que du nombre de présents — un blessé qui mange
+## double, un absent d'expédition qui ne mange pas —, l'annonce et le prélèvement bougeront
+## ensemble ou pas du tout. Un chiffre annoncé qui ne serait pas celui qu'on prélève est
+## exactement le genre d'écran que ce projet a déjà payé deux fois.
+static func upkeep_due(labor: LaborForce, balance: EconomyBalance) -> int:
+	assert(labor != null, "upkeep sans main-d'œuvre")
+	assert(balance != null, "upkeep sans équilibrage")
+	return labor.size() * balance.upkeep_per_worker
 
 ## Famille de compétence que cette action emploie, ou &"" si elle ne fait produire
 ## personne.
