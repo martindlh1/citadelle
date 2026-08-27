@@ -40,6 +40,16 @@ Deux conséquences que le modèle porte et qu'il faut connaître pour le lire. L
 
 Ce que `I2b` laisse ouvert n'est donc plus « lequel des deux modèles », mais « celui-ci tient-il quinze journées » : le modèle à deux phases reste dans `data/balance/` et se rebranche en repointant une ligne.
 
+#### Le soir est l'endroit où l'on lit sa journée
+
+*(Tranché après les premiers runs complets joués à la main.)* Le soir a une seconde moitié, et c'est elle qui le sort du statut de clic : **on y lit le bilan de la journée avant de la fermer.** Ce que les deux phases ont récolté, les paliers franchis, les chantiers achevés, et ce que l'upkeep va coûter.
+
+Il tombe **à l'entrée du soir** et non après, et le choix se paie en une nuance qu'il faut assumer : l'upkeep est prélevé à la fermeture, donc le bilan annonce ce qui est **dû** et non ce qui a été mangé. Les deux ne diffèrent qu'en famine, et la famine a déjà son alarme ailleurs. Ce qu'on achète en échange vaut mieux que cette nuance : aucun geste de plus dans la journée — le bouton qui referme le bilan **est** celui qui ferme la journée —, et une phase du soir qui a quelque chose à montrer plutôt qu'à attendre.
+
+Il remplace ce que le compte rendu de phase disait de travers, et c'est ce qui a fait remonter le sujet : un panneau titré « Jour 3 · Soir » sous un bandeau titré « Jour 4 · Matin » est **deux horloges qui se contredisent sur le même écran**, et la plus petite avait raison. Le compte rendu de phase reste — on veut voir ce qu'une résolution vient de rendre —, mais il cesse d'être ce qu'on lit pour savoir où l'on en est.
+
+**Quelqu'un doit donc se souvenir de la journée**, ce que rien ne fait aujourd'hui : chaque `PhaseReport` est émis puis oublié, et `DayReport` ne porte que l'upkeep et la vague. L'accumulation appartient au **domaine** et non à une vue, pour une raison qui n'est pas de principe : l'événement de 3.7 et les états d'ouvrier de `X6` voudront tous deux poser une ligne dans ce bilan, et un accumulateur d'adapter devrait réapprendre chaque nouvelle source. Le domaine, lui, la reçoit déjà.
+
 **Une journée compte donc deux sortes de résolution**, et c'est ce qui rend le modèle symétrique jouable sans le confondre avec son équilibrage :
 
 - une **phase** produit — ce que les actions posées rapportent, ce que les chantiers avancent, l'XP que ça vaut ;
@@ -334,7 +344,7 @@ C'est une flèche neuve dans l'architecture — jusqu'ici rien ne remontait de l
 
 **`OUVERT` — la nature d'une carte de bâtiment.** *(Posé après `I2`.)* Les actions tournent : jouées, défaussées, remélangées quand la pioche s'épuise. Un bâtiment devrait-il faire de même ? La piste est qu'il soit **à usage unique** — détruit quand il est posé, puisqu'on ne bâtit pas deux fois la même ferme au même endroit — ce qui rendrait le pool des bâtiments fini et donc précieux. Elle en appelle immédiatement une autre : **comment en gagne-t-on ?** Un choix parmi trois, à la façon d'un roguelite, après une vague ou dans un événement de 3.7. Les deux se tranchent ensemble ou pas du tout.
 
-**`OUVERT` — garder, redessiner, et ce qu'un départ offre.** *(Posé après `I2`.)* Trois questions voisines qui touchent toutes au même endroit du tour. Un moyen de **conserver** une carte d'une phase à l'autre — un pouvoir, une règle de héros de départ, une méta-progression de 6. Un principe de **redraw**, qui est la réponse classique à une main impayable. Et ce qu'un gouverneur de départ change au deck, que 6. annonce sans le décrire. Elles ne se posent qu'après l'`OUVERT` ci-dessous, dont elles sont des variantes : toutes répondent à « que fait-on d'une main qu'on ne peut pas jouer ».
+**`OUVERT` — garder, redessiner, et ce qu'un départ offre.** *(Posé après `I2`.)* Trois questions voisines qui touchent toutes au même endroit du tour. Un moyen de **conserver** une carte d'une phase à l'autre — un pouvoir, une règle de héros de départ, une méta-progression de 6.1. Un principe de **redraw**, qui est la réponse classique à une main impayable. Et ce qu'un gouverneur de départ change au deck, que 6.1 annonce sans le décrire. Elles ne se posent qu'après l'`OUVERT` ci-dessous, dont elles sont des variantes : toutes répondent à « que fait-on d'une main qu'on ne peut pas jouer ».
 
 **Les piles se consultent, et sans leur ordre.** *(Écrit à `P1b`.)* Une pioche et une défausse s'ouvrent à la touche `P`, par pool. Ce qu'elles montrent est un **recensement** — combien de *Récolter* restent — et jamais l'ordre du paquet, et le refus est une décision de design et non une commodité d'affichage : lire les trois prochaines cartes répondrait par accident à l'`OUVERT` ci-dessous, en faisant de « que fait-on d'une main qu'on ne peut pas jouer » un calcul au lieu d'un pari. Le domaine ne rend donc pas l'ordre, ce qui met la règle hors de portée d'une vue distraite plutôt que dans un commentaire — même geste que le bloc `production` nullable de 3.3.
 
@@ -556,11 +566,39 @@ Les quatre poids du score vivent dans `data/balance/`, et un poids nul y est un 
 
 **Et un run commence par la pose du Cœur**, au clic, ce que 2 annonce depuis le premier jour et que `I1` bouchonnait en le posant au centre. La main n'est tirée qu'à ce moment : une main tirée devant une carte nue serait une main qu'on ne peut pas jouer. Le balayage du centre survit comme **suggestion** — la règle automatique devient le bouton par défaut, ce que `F1` avait annoncé mot pour mot du déploiement.
 
+**Et un run se termine sur un écran, pas sur une ligne.** *(Tranché après les premiers runs complets.)* `I2` a livré le verdict dans le pavé de texte du harnais, à côté de l'aide au clavier : une partie de quinze journées s'achevait sur une phrase qu'on pouvait manquer. Une victoire montre le score et ses quatre termes, une défaite montre sa cause et le jour où elle est tombée, et les deux offrent de **relancer**.
+
+La place lui est gardée depuis `I2` sans qu'on l'ait dit ainsi : `EventBus` porte deux signaux distincts — l'un annonce qu'une partie est *jouée*, l'autre qu'elle est *rangée* — et le commentaire qui les sépare dit déjà « un écran de fin vit entre les deux ». Il n'y a qu'une vue à écrire.
+
+**Relancer prend le seed suivant**, et non un seed au hasard. Un tirage libre rendrait le harnais différent à chaque lancement, donc les captures incomparables d'une session à l'autre — ce que tout ce projet refuse depuis `I0`. Le seed est affiché, ce qui garde un run rejouable quand on veut le rejouer.
+
 ---
 
-## 6. Méta-progression *(après le MVP)*
+## 6. Autour du run
+
+### 6.1 Méta-progression *(après le MVP)*
 
 Déblocage de cartes dans les pools de draft, gouverneurs de départ avec deck et bonus modifiés, biomes aux paramètres de génération distincts, modificateurs de difficulté cumulatifs.
+
+### 6.2 Le menu
+
+*(Ouvert après les premiers runs complets.)* Un écran de fin qui propose de relancer suppose qu'il existe un endroit d'où l'on lance, et cet endroit n'existe pas : le jeu **est** un run, ouvert au démarrage par un harnais de dev. Il faut donc une coquille — écran titre, lancer un run, y revenir quand il est fini — et c'est le premier morceau du projet qui vive hors d'un run.
+
+Deux conséquences pratiques, et elles sortent toutes deux du périmètre de ce que Claude Code écrit seul. C'est une **`.tscn` sous `scenes/ui/`**, et c'est la **scène principale** de `project.godot` : les deux appartiennent à l'humain, dans l'éditeur. Et `RunManager` cesse d'avoir toujours un run — il le sait déjà, `is_running()` existe depuis `I0` et les vues le gardent, mais aucun écran n'a encore vécu dans ce trou.
+
+C'est aussi ce qui donnera une place à 6.1 : la méta-progression n'a nulle part où s'afficher tant qu'il n'y a pas d'entre-deux-runs.
+
+### 6.3 `OUVERT` — ce qu'on sauvegarde, et sous quelle forme
+
+*(Rouvert après les premiers runs complets. La ligne de 7 disait « pas de sauvegarde en cours de run », et c'est cette ligne qui est en question.)*
+
+Deux formes sont sur la table, et elles ne coûtent pas le même prix.
+
+**Un journal de gestes** — le seed, puis la suite des gestes joués. C'est la forme que **l'architecture paie déjà** : « un seed plus une liste d'actions rejoue un run à l'identique » est promis depuis `I0` et *vérifié par un cas de test* depuis `I1`. Un fichier, aucun format par système, et un effet de bord utile — un bug rapporté devient un fichier qu'on relance. Son défaut est net et il faut le dire : **toute sauvegarde meurt au prochain changement d'équilibrage ou de règle**, puisqu'elle rejoue au lieu de restituer. Elle sert à reprendre une partie ce soir, pas dans six mois.
+
+**Un instantané de `RunState`** — sérialiser le relief, la ville, la réserve, le roster, le deck, le plateau et le cycle. Robuste aux reprises longues, et c'est le seul avantage. Le prix est le plus gros chantier jamais ouvert sur ce projet : **chaque système du domaine gagne un format de sauvegarde et une migration à tenir**, alors que la règle de dépendance a justement été écrite pour qu'aucun d'eux n'ait à connaître le monde extérieur.
+
+Ce qui décide n'est pas écrit ici parce que personne ne l'a encore mesuré : **combien de temps prend un run joué à la main.** Quinze journées de trois phases tiennent-elles dans une session ? Si oui, la question ne se pose pas et 7 garde sa ligne. Sinon, le journal de gestes est la réponse par défaut, et il faudra dire ce qu'on fait du save-scumming — un roguelite qui se recharge devant une vague perd l'enjeu que la vague porte.
 
 ---
 
@@ -569,7 +607,7 @@ Déblocage de cartes dans les pools de draft, gouverneurs de départ avec deck e
 - Citoyens simulés individuellement dans le monde — le roster est une liste de fiches, pas des agents qui marchent
 - Routes, logistique, transport de ressources
 - Ponts, tunnels, superposition verticale — le relief reste une hauteur par cellule
-- Sauvegarde en cours de run — seule la méta persiste
+- ~~Sauvegarde en cours de run — seule la méta persiste~~ — **rouvert**, voir 6.3. La ligne tenait tant qu'un run était réputé court ; elle attend la seule mesure qui la tranche, la durée réelle d'une partie.
 - Son, art final, animations
 
 Les systèmes marqués **`HORS MVP`** — powers (3.5), artisanat (3.3), entraînement (3.4), expéditions (3.9) — ne sont pas hors périmètre : ils sont *différés*. La distinction compte, parce qu'ils ont le droit de contraindre l'abstraction d'aujourd'hui, alors que la liste ci-dessus n'en a aucun.
@@ -746,6 +784,39 @@ arbitrer un `.tres`.
     qui renverse une décision : il ne se traite qu'une fois choisi *comment* on désigne —
     un cycle au clic, un menu, ou une pile visible sur la case. La question précède le code.
 
+- **P2** — **Ce que plusieurs runs entiers ont réclamé.** Seconde passe de confort, ouverte
+  après `I2b` et sur le même argument que la première : le contenu vient d'une partie jouée,
+  pas d'une déduction. Découpée par ce que chaque point **touche**, comme `P1`.
+
+  - **P2a** — **Le geste qu'on répète, et l'écran qu'on ne voyait pas.** Aucun domaine, aucun
+    contrat.
+    - **Un bouton de fin de phase**, qui dit ce qu'il va faire : fonder, finir la phase,
+      fermer la journée, ou tenir la ligne. `Entrée` fait déjà ces quatre choses selon l'état
+      du run et le harnais calcule déjà laquelle — le bouton n'est que cette dispatch rendue
+      visible, et il pose la question au domaine plutôt que de nommer une phase. Il vit
+      **dans la rangée de la main** et non dans la colonne de droite, qui a débordé trois
+      fois — `W2`, `I2`, `P1a` — et à qui l'on ne confie pas le geste le plus fréquent du jeu.
+    - **Un écran de fin de run** *(cf. 5)*, victoire ou défaite, avec le score et ses quatre
+      termes, et de quoi relancer sur le seed suivant.
+  - **P2b** — **Le bilan de journée** *(cf. 2)*. Le seul point de la famille qui touche le
+    domaine : quelqu'un doit se souvenir de la journée, et ce quelqu'un n'existe pas. Il
+    répare du même coup les deux horloges qui se contredisaient — un compte rendu de phase
+    titré d'une phase passée, sous un bandeau titré de la phase courante.
+
+### Autour du run — `M`
+
+*(Ouvert après les premiers runs complets. C'est la première famille qui vive **hors** d'un
+run, ce qui est exactement pourquoi elle est à part.)*
+
+- **M1** — **Le menu** *(cf. 6.2)*. Écran titre, lancer un run, y revenir quand il est fini.
+  Il ne se livre pas comme les autres : c'est une `.tscn` sous `scenes/ui/` et la scène
+  principale de `project.godot`, donc **deux fichiers que l'humain seul écrit**. Claude Code
+  décrit l'arbre et s'arrête. `P2a` le précède parce qu'un écran de fin qui propose de
+  relancer est ce qui rend le menu nécessaire, et non l'inverse.
+- **M2** — **La persistance**, dont la forme est l'`OUVERT` de 6.3 et ne se tranche pas avant
+  qu'on ait mesuré la durée d'un run joué. Elle rouvre une ligne de 7, ce qui en fait le
+  premier jalon du projet à contredire le hors-périmètre plutôt qu'à le contourner.
+
   **Le sens d'un terrassement n'est dans aucun des trois**, et c'est une décision et non un
   oubli. Il était au périmètre de `P1a`, l'humain l'en a retiré, puis l'a retiré de `P1b`
   aussi : il dira quand le remettre. Le verbe, sa résolution et son ciblage restent écrits
@@ -773,7 +844,11 @@ arbitrer un `.tres`.
   Ce qu'il contraint en attendant, et c'est sa seule raison d'être écrit maintenant : **aucun rapport ne doit inventer sa propre conséquence.** Un système qui rencontre un état le **compte** et le rapporte ; il ne décide pas de ce qu'il fait. C'est ce que `UpkeepReport` fait déjà des non-nourris, et ce que `DamageReport` fait des pertes.
   *(Relevé après `F1`.)* Le format de combat de 3.6 le fait passer de confortable à **structurant**, et lui donne sa première forme concrète : les points de vie sont la ressource d'une manche, un ouvrier à zéro meurt, et ce qu'un **survivant** emporte est un effet progressif selon la part de vie perdue. Sans lui, un combat n'a que deux issues — rien, ou définitif —, et le joueur qui a bien joué ne sent rien du tout. C'est le premier état dont on connaisse déjà et la source et la graduation.
 
-**Ordre suivant** — **jouer**. `I2b` a livré les deux boutons et la journée qu'on veut ; ce qui reste de ce jalon ne s'écrit pas, il se joue, et personne d'autre que l'humain ne peut le faire. Puis **`I3`**, avec la nourriture en tête. Il reste de la famille `P` le seul **`P1c`**, qui attend une **question de design** et non du temps : comment désigner l'une des deux actions d'une case. Elle se pose avant le code, et elle se pose à l'humain.
+**Ordre suivant** — **`P2a`**, puis **`P2b`**. Plusieurs runs entiers ont été joués après `I2b`, et ils ont rendu une liste : elle est ci-dessus, et elle se périme comme celle de `P1` si on attend. Puis **`I3`**, avec la nourriture en tête et son premier chiffre.
+
+`M1` suit `P2a` de près, parce qu'un écran de fin qui propose de relancer désigne un endroit d'où l'on lance. `M2` attend une mesure et non du temps. Et il reste toujours **`P1c`**, qui attend une **question de design** : comment désigner l'une des deux actions d'une case.
+
+**L'arbitrage de `I2b` reste ouvert** et ne se referme qu'en jouant. `P2` ne le remplace pas — il rend les quinze journées moins pénibles à mener, ce qui est exactement le service que `P1` a rendu avant lui.
 
 *(Écrit avant `P1a`, et toujours vrai du reste de la famille.)* **`P1` peut s'intercaler à tout moment** : c'est le seul jalon dont le contenu vient d'une partie jouée plutôt que d'une déduction, donc le seul qui se périme si on attend. La boucle est jouable du début à la fin, donc la question n'est plus « qu'est-ce qui manque » mais « est-ce que ça se joue ».
 
