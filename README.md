@@ -81,6 +81,7 @@ obligatoire ; les autres sont optionnels :
 | `--shot-fold` | replie le panneau d'affectation sur sa barre de tête *(harnais Run)* |
 | `--shot-piles` | ouvre la vue des piles *(harnais Run et Cartes)* |
 | `--shot-view v` | cran d'affichage du HUD : `complet`, `essentiel`, `masque`, ou `aucun` *(harnais Run)* |
+| `--chronicle` | rejoue le run sous les quatre variantes d'équilibrage de `I2b` et imprime ce que ça donne, sans image *(harnais Run)* |
 
 `--shot-fold` et `--shot-piles` sont des drapeaux **nus**, sans valeur : on les pose ou on
 ne les pose pas. Ce sont les deux cas les plus nets de la phrase ci-dessous, parce que ni
@@ -89,6 +90,18 @@ suite de journées ne les produit. Sans eux, la seule façon de regarder un HUD 
 une pioche ouverte serait de modifier du code pour la regarder, ce qui revient à ne jamais
 la regarder. `--shot-fold` se cumule avec `--shot-view`, sauf avec `aucun`, qui emporte le
 HUD entier ; `--shot-piles` passe par-dessus tous les crans, étant une modale.
+
+`--chronicle` est le seul drapeau qui ne capture rien, et il se lance sans `--shot` :
+
+```bash
+"$GODOT_BIN" --headless --path . -- --chronicle
+```
+
+Il rejoue le run entier sous les quatre croisements de `I2b` — deux modèles de journée
+× deux sorts de la main non jouée —, sur le même relief et les mêmes gestes, puis imprime
+une chronique par variante et quatre tables de comparaison. **Chaque table annonce ce
+qu'elle doit montrer**, et le verdict de fin dit ce qu'elle ne montrera jamais : « est-ce
+une corvée » n'a pas de colonne. Il dégrossit un arbitrage, il ne le rend pas.
 
 `--shot-view` existe pour la raison qui a valu son drapeau à `--shot-evenings`, et que
 `I2` a reformulée en une phrase : **un écran qu'aucune capture ne peut atteindre est celui

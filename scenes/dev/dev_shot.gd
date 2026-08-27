@@ -74,6 +74,21 @@ const SHOT_PILES_FLAG := "--shot-piles"
 ## jamais rien.
 const SHOT_VIEW_FLAG := "--shot-view"
 
+## Rejoue le run entier sous chaque variante d'équilibrage et imprime ce que ça donne.
+##
+## Le seul drapeau de ce fichier qui ne capture pas une image, et il est ici quand même :
+## `DevShot` est l'unique endroit du projet qui lise la ligne de commande, et un second
+## lecteur serait un second endroit où l'on écrit `OS.get_cmdline_user_args()`.
+##
+## Il vient de `I2b`, qui demande d'arbitrer deux `.tres` en jouant quinze journées. Ce
+## qu'une partie jouée ne dit pas et qu'une table dit tout de suite : **si la comparaison
+## est honnête**. Un modèle de journée qui résout moitié moins produit moitié moins à coût
+## constant, et sans le chiffre on prendrait cet écart pour un ressenti.
+##
+## Il n'arbitre rien, et le rapport le dit en toutes lettres : « est-ce une corvée » n'est
+## pas mesurable. C'est un instrument de dégrossissage, pas un juge.
+const CHRONICLE_FLAG := "--chronicle"
+
 ## Images laissées passer avant de capturer. La première ne porte encore ni le tampon
 ## d'instances téléversé ni la lumière, et rendrait un cadre vide.
 const WARMUP_FRAMES := 3
