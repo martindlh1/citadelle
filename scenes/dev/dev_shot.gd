@@ -37,6 +37,17 @@ const SHOT_ROTATE_FLAG := "--shot-rotate"
 ## chemin de résolution d'un harnais ne serait jamais emprunté par un contrôle.
 const SHOT_EVENINGS_FLAG := "--shot-evenings"
 
+## Phases à franchir **en plus** des journées, avant de capturer. Lu par les harnais qui
+## connaissent une journée en phases.
+##
+## Il vient de `P1a`, et il vient de la phrase ci-dessous appliquée à elle-même : une
+## journée compte plusieurs phases, mais `--shot-evenings` en résout des journées entières,
+## donc une capture s'arrête toujours sur le **premier** créneau. Toutes les autres phases
+## étaient des écrans qu'aucune capture ne pouvait atteindre — ce qui n'a gêné personne
+## tant qu'une phase ressemblait à une autre, et qui est devenu un trou le jour où la phase
+## a eu une couleur à montrer.
+const SHOT_PHASES_FLAG := "--shot-phases"
+
 ## Cran d'affichage du HUD au moment de capturer. Lu par les harnais qui en ont un.
 ##
 ## Il existe pour la raison qui a valu son drapeau à `--shot-evenings`, et que `I2` a

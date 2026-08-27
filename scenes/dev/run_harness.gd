@@ -306,7 +306,7 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	_refresh_ghost()
 	_bar.show_ledger(_state().ledger(), _last_delta)
-	_crew.show_state(_state(), _held_worker)
+	_crew.show_state(_state(), _held_worker, RunManager.phase())
 	_label.text = _report()
 	_hover.text = _hover_line()
 
@@ -1326,6 +1326,7 @@ func _capture_if_asked() -> void:
 			_scripted_day()
 			if _state().awaits_a_battle() and index < days - 1:
 				_fight()
+		_scripted_skip_phases(DevShot.argument(DevShot.SHOT_PHASES_FLAG).to_int())
 		if not _state().awaits_a_battle() and not _state().cycle().is_over():
 			_scripted_open_phase()
 	_apply_shot_view()
@@ -1403,6 +1404,28 @@ func _scripted_day() -> void:
 		_end_phase()
 		if closed:
 			return
+
+## Franchit `count` phases de plus, pour que la capture s'arrête ailleurs qu'au premier
+## créneau d'une journée.
+##
+## `--shot-evenings` résout des **journées entières**, donc toute capture retombait sur la
+## même phase — la première. Les autres étaient des écrans inatteignables, ce qui est resté
+## sans conséquence tant qu'une phase ressemblait à sa voisine, et qui est devenu un trou à
+## `P1a` : le liseré de couleur du panneau d'affectation n'aurait jamais pu se regarder
+## qu'en une seule de ses teintes.
+##
+## Elle s'arrête d'elle-même sur un run fini ou une bataille en attente, plutôt que de
+## forcer : demander plus de phases qu'il n'en reste est une ligne de commande maladroite,
+## pas une erreur, et la capture doit rendre l'écran qu'elle a atteint.
+func _scripted_skip_phases(count: int) -> void:
+	for _index in count:
+		if _state().cycle().is_over() or _state().awaits_a_battle():
+			return
+		if _state().cycle().permits(PhaseDef.ACTION_PLAY):
+			_scripted_plays()
+		if _state().cycle().permits(PhaseDef.ACTION_ASSIGN):
+			_scripted_staffing()
+		_end_phase()
 
 ## Pose et affecte sans finir la phase : l'état sur lequel la capture s'arrête.
 ##

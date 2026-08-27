@@ -84,6 +84,25 @@ const PANEL_COLOR := Color(0.10, 0.11, 0.14, 0.94)
 const PANEL_RADIUS := 5
 const PANEL_MARGIN := 10
 
+## Épaisseur du liseré qui dit la phase, sur le bord haut du panneau.
+##
+## **C'est le « signe qui bascule » que `DESIGN.md` 8 réclame**, et il est ici plutôt
+## qu'ailleurs pour une raison qui tient : la phase décide de ce qu'on a le droit de faire,
+## et ce panneau est l'endroit où on le fait — son bouton **Auto** s'éteint déjà quand la
+## phase n'autorise pas d'affecter. Le liseré et le bouton disent donc la même chose, l'un
+## en couleur et l'autre en gris.
+##
+## Sur le bord **haut** seulement : un cadre complet entourerait des fiches d'ouvrier qui
+## portent déjà leurs propres couleurs, et ferait un second cadre là où la fiche tenue en a
+## un. Une barre au-dessus du titre ne recouvre rien et se voit du coin de l'œil.
+const PHASE_RULE := 3
+
+## Couleur du liseré hors phase — avant le premier jour, et une fois le run fini.
+##
+## Un gris franc et non la teinte de la dernière phase jouée : « il n'y a plus de phase »
+## est un état, et le peindre aux couleurs de celle qui vient de finir dirait le contraire.
+const NO_PHASE_COLOR := Color(0.32, 0.34, 0.40)
+
 const ROW_GAP := 3
 const CARD_GAP := 5
 const BLOCK_GAP := 6
@@ -117,6 +136,13 @@ const PROMOTED_MARK := "↑ "
 
 var _catalogue: CardCatalogue
 
+## Le fond du panneau, retenu pour que le liseré de phase se **repeigne sur place**.
+##
+## Une `StyleBoxFlat` neuve à chaque image serait une allocation par image pour une couleur
+## qui change deux fois par jour, et c'est exactement ce que `CLAUDE.md` refuse d'une vue
+## rafraîchie en continu.
+var _style: StyleBoxFlat
+
 var _counts: Label
 var _rows: VBoxContainer
 var _more: Label
@@ -149,7 +175,8 @@ static func create(catalogue: CardCatalogue) -> AssignmentPanel:
 	var panel := AssignmentPanel.new()
 	panel.name = "AssignmentPanel"
 	panel._catalogue = catalogue
-	panel.add_theme_stylebox_override("panel", _make_panel_style())
+	panel._style = _make_panel_style()
+	panel.add_theme_stylebox_override("panel", panel._style)
 	panel.mouse_filter = Control.MOUSE_FILTER_STOP
 
 	var column := VBoxContainer.new()
@@ -180,13 +207,25 @@ static func create(catalogue: CardCatalogue) -> AssignmentPanel:
 	panel.add_child(column)
 	return panel
 
-## Redessine le panneau. `held` est l'ouvrier sélectionné, ou &"" si aucun.
+## Redessine le panneau. `held` est l'ouvrier sélectionné, ou &"" si aucun ; `phase` est la
+## phase courante, ou null hors run.
 ##
 ## Mise à jour sur place, appelable à chaque image : la règle que `E2` a écrite dans
 ## `CLAUDE.md`. Les lignes d'action sont recyclées et masquées plutôt que détruites, et
 ## les fiches ne naissent qu'une fois par ouvrier.
-func show_state(state: RunState, held: StringName) -> void:
+##
+## La phase arrive en **argument** plutôt que d'être tirée du `RunState`, alors que tout le
+## reste en vient. La raison est le hors-run : « quelle phase ? » n'a de réponse qu'avant la
+## dernière journée, et `RunManager.phase()` porte déjà ce garde-fou. Le lui redemander ici
+## en ferait un second exemplaire, donc un endroit de plus où la fin d'un run pourrait se
+## lire autrement.
+func show_state(state: RunState, held: StringName, phase: PhaseDef) -> void:
 	assert(state != null, "panneau d'affectation sans run")
+	# Aucun nom de phase n'entre ici, et c'est tout l'objet : la vue lit une couleur en
+	# data, comme le renderer de terrain lit celle d'un `TerrainData`. Une table
+	# `&"morning" -> bleu` écrite dans cet adapter serait le nom en dur que `DESIGN.md` 2
+	# interdit, et elle rendrait fausse la promesse d'échanger la journée par un `.tres`.
+	_style.border_color = NO_PHASE_COLOR if phase == null else phase.color
 	var roster := state.roster()
 	var assign := state.to_assignment()
 	var places := Roster.capacity_for(state.city().to_snapshot(),
@@ -378,4 +417,6 @@ static func _make_panel_style() -> StyleBoxFlat:
 	style.bg_color = PANEL_COLOR
 	style.set_corner_radius_all(PANEL_RADIUS)
 	style.set_content_margin_all(PANEL_MARGIN)
+	style.border_width_top = PHASE_RULE
+	style.border_color = NO_PHASE_COLOR
 	return style

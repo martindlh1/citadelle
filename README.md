@@ -67,6 +67,7 @@ obligatoire ; les autres sont optionnels :
 | `--shot-turns n` | quarts de tour appliqués à la **caméra** |
 | `--shot-rotate n` | quarts de tour appliqués au **bâtiment** à poser *(harnais Construction)* |
 | `--shot-evenings n` | soirs résolus avant de capturer *(harnais Cartes)*, journées jouées *(harnais Run)*, scène à montrer *(harnais HUD)* |
+| `--shot-phases n` | phases franchies **en plus** des journées *(harnais Run)* |
 | `--shot-view v` | cran d'affichage du HUD : `complet`, `essentiel`, `masque`, ou `aucun` *(harnais Run)* |
 
 `--shot-view` existe pour la raison qui a valu son drapeau à `--shot-evenings`, et que
@@ -75,6 +76,13 @@ que personne ne regardera.** Replier le rapport et masquer le HUD sont deux gest
 changent que l'image, donc les deux seuls dont ni le parsing ni les tests ne diront jamais
 rien. `aucun` rend la carte entière sans rien dessus, ce qui est aussi la façon de
 regarder un village de quinze journées.
+
+`--shot-phases` vient de la même phrase, appliquée à la journée elle-même. `--shot-evenings`
+résout des **journées entières**, donc une capture s'arrêtait toujours sur le premier
+créneau : toutes les autres phases étaient inatteignables. Ça n'a gêné personne tant
+qu'une phase ressemblait à sa voisine, et c'est devenu un trou à `P1a`, quand une phase a
+eu une couleur à montrer. `--shot-evenings 3 --shot-phases 1` capture donc l'après-midi du
+quatrième jour.
 
 Sur le harnais **Run**, `--shot-evenings 0` est un cas à part : il capture l'écran de
 **fondation**, avant que le run n'ait commencé. C'est le seul état que les autres valeurs
