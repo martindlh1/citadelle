@@ -157,16 +157,38 @@ func take_back(card: StringName) -> bool:
 		return true
 	return false
 
+## Défausse la main de ce pool, et rend le nombre de cartes défaussées.
+##
+## La porte par laquelle passe le report de main de DESIGN.md 3.5, depuis I2b : les trois
+## pools se défaussent séparément, parce que la question « que fait-on d'une main qu'on ne
+## peut pas jouer » se pose par pool — trois pioches, trois défausses, trois tailles de
+## main, et donc trois réponses possibles. Garder ses bâtiments et défausser ses actions
+## est un réglage, pas un cas particulier à écrire.
+##
+## Une capacité, pas une politique, exactement comme discard_hand() ci-dessous : rien ici
+## ne dit qu'une phase se termine ainsi. Qui l'appelle, et pour quels pools, est ce que
+## DeckBalance.carry_over règle et que RunOrchestrator applique.
+func discard_pool(pool: StringName) -> int:
+	assert(CardData.is_known_pool(pool), "défausse d'un pool inconnu : %s" % pool)
+	if not _hand.has(pool):
+		return 0
+	var count: int = _hand[pool].size()
+	_discard[pool].append_array(_hand[pool])
+	_hand[pool] = _empty_pile()
+	return count
+
 ## Défausse toute la main, les trois pools, et rend le nombre de cartes défaussées.
 ##
 ## Une capacité, pas une politique : rien ici ne dit qu'une phase se termine ainsi. Qui
 ## l'appelle, et s'il l'appelle, est la question que DESIGN.md 3.5 garde ouverte.
+##
+## Elle passe par discard_pool() plutôt que de recopier sa boucle : deux façons de vider
+## une pile finiraient par différer l'une de l'autre, et celle des deux qui n'est plus
+## empruntée par le jeu serait celle qui dérive.
 func discard_hand() -> int:
 	var count := 0
 	for pool in CardData.POOLS:
-		count += _hand[pool].size()
-		_discard[pool].append_array(_hand[pool])
-		_hand[pool] = _empty_pile()
+		count += discard_pool(pool)
 	return count
 
 ## Ajoute un exemplaire de cette carte au deck. Elle entre par la **défausse**.

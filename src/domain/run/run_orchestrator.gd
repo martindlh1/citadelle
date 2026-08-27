@@ -399,8 +399,11 @@ static func close_the_day(state: RunState) -> DayReport:
 ## par phase qui résout**. Deux phases qui résolvent rendent donc deux mains par jour et
 ## deux récoltes — mais un seul upkeep, parce que manger suit la journée et non la phase.
 ##
-## Ce que ça décide du sort de la main non jouée — elle est défaussée — est l'état par
-## défaut de l'`OUVERT` de 3.5 et non une réponse. `I2b` le tranchera.
+## Ce que ça décide du sort de la main non jouée **est un réglage depuis `I2b`**, et non
+## plus une ligne d'ici. `DeckBalance.carry_over` dit par pool ce qui survit, cette porte
+## l'applique, et l'`OUVERT` de 3.5 se tourne en éditant un `.tres` — ce qu'il fallait
+## pour qu'une partie jouée l'arbitre au lieu d'une déduction. Le défaut livré reste la
+## défausse totale, qui est l'état de `I1` et non une réponse.
 ##
 ## **Elle cesse d'être atomique à `I2`**, et c'est le seul travail que la discussion sur le
 ## format de combat a ajouté au jalon. `DESIGN.md` 3.8 l'a écrit avant qu'on en ait besoin :
@@ -424,7 +427,7 @@ static func end_phase(state: RunState) -> PhaseReport:
 	if resolves:
 		state.board().clear()
 		state.clear_staffing()
-		state.deck().discard_hand()
+		_drop_what_is_not_carried(state)
 	if not state.awaits_a_battle():
 		_open_next_phase(state)
 	return report
@@ -533,6 +536,26 @@ static func _restore_capacity(state: RunState, balance: EconomyBalance) -> void:
 	state.ledger().set_capacity(
 		ProductionResolver.capacity_for(state.city().to_snapshot(), balance))
 
+## Défausse la main des pools qui ne reportent pas, et laisse les autres en place.
+##
+## L'application de `DeckBalance.carry_over`, et le seul endroit du projet qui la lise.
+## Elle est ici plutôt que dans le `Deck` par la même ligne que tout le reste de ce
+## fichier : le `Deck` offre `discard_pool()`, la journée décide de l'appeler. Un deck qui
+## connaîtrait sa propre politique de fin de phase saurait quelque chose de la journée.
+##
+## Un pool absent de la table vaut zéro, donc se défausse : c'est le comportement de `I1`,
+## et c'est la bonne dégradation — une table incomplète ne doit pas faire *garder* une main
+## par accident. Le boot refuse de toute façon une clé manquante dans `data/`.
+##
+## Un report **partiel** garderait tout plutôt que rien. Le cas n'existe pas — le bloc
+## d'équilibrage le refuse —, et s'il apparaissait par un fixture de test, garder est la
+## dégradation qui se voit, là où défausser se confondrait avec le défaut.
+static func _drop_what_is_not_carried(state: RunState) -> void:
+	var deck := state.balance().deck
+	for pool in CardData.POOLS:
+		if int(deck.carry_over.get(pool, 0)) <= 0:
+			state.deck().discard_pool(pool)
+
 ## Ouvre la phase suivante : avance le cycle, repioche si la précédente résolvait, et
 ## constate la victoire si le run vient d'épuiser ses journées.
 ##
@@ -545,6 +568,14 @@ static func _restore_capacity(state: RunState, balance: EconomyBalance) -> void:
 ## attend, le cycle pointe encore sur la phase qui vient de finir. C'est ce qui permet à
 ## `RunState` de ne porter qu'un seul champ pour l'attente — la vague — au lieu de traîner
 ## un souvenir de ce qu'il restait à faire.
+##
+## La conséquence à connaître pour lire une journée dont la **dernière phase ne résout
+## pas** — le modèle retenu à `I2b` : la main est tirée à la fin de la dernière phase qui
+## produit, et **traverse** la phase de fermeture sans que rien n'y touche. Le joueur
+## regarde donc l'upkeep tomber et la vague arriver en tenant déjà la main de demain
+## matin, ce qui est une information plutôt qu'un défaut. Le compte est juste dans tous les
+## cas : **une main par phase qui résout**, et le report de `carry_over` s'applique là où
+## la défausse a lieu, donc jamais sur une phase qui ne résout pas.
 static func _open_next_phase(state: RunState) -> void:
 	var draws := state.cycle().resolves()
 	state.cycle().advance()

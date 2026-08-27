@@ -192,16 +192,29 @@ func building(id: StringName) -> BuildingData:
 func labor() -> LaborForce:
 	return _roster.to_labor(_balance.workforce)
 
-## Pioche la main de la phase, dans les trois pools, aux tailles de `data/balance/`.
+## Complète la main de la phase, dans les trois pools, jusqu'aux tailles de
+## `data/balance/`.
 ##
 ## Le seul endroit où la politique de pioche est écrite. `D1` avait laissé ce moment
 ## dehors en toutes lettres — « le Deck offre les gestes, la journée choisit quand les
 ## faire » — et la journée, c'est ce dossier.
+##
+## **Elle complète depuis `I2b` au lieu de tirer une main neuve**, et c'est ce qui donne
+## son prix au report de `DeckBalance.carry_over` : une carte gardée est une carte de
+## moins piochée. Sans ça, garder sa main serait gratuit — on tiendrait cinq actions
+## reportées **plus** cinq fraîches, et le pool cesserait d'être la contrainte que
+## `DESIGN.md` 3.5 en fait. La « limite de jeu par tour » que 3.5 adjoignait à la main
+## persistante devient du même coup inutile : le plafond est la taille de main elle-même.
+##
+## À report nul la main est vide quand on arrive ici, donc `held` vaut zéro et le
+## comportement est exactement celui de `I1`.
 func draw_phase() -> void:
+	var hand := _deck.hand()
 	for pool in CardData.POOLS:
 		var size: int = _balance.deck.hand_size.get(pool, 0)
-		if size > 0:
-			_deck.draw(pool, size, _rng)
+		var held := hand.count_in(pool)
+		if size > held:
+			_deck.draw(pool, size - held, _rng)
 
 ## Envoie cet ouvrier sur cette action. Aucune règle n'est vérifiée ici : c'est
 ## `RunOrchestrator.staff()` qui pose les questions, comme `ActionBoard.post()` passe par
