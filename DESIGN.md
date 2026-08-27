@@ -508,7 +508,7 @@ Les places de roster de l'habitation y sont entrées à `W1`, ce qui a sorti ce 
 
 *Chasser* est la façon d'obtenir de la nourriture avant d'avoir une ferme : la version à cru d'un besoin qui devient ensuite un bâtiment. Un bâtiment de chasse pourra s'ajouter plus tard sans rien changer à la règle.
 
-***Terraformer* est sorti du deck de départ après `I2`**, et le verbe reste écrit. Ce n'est pas un renoncement : son **sens** — monter ou descendre — ne s'affiche nulle part. La touche le retourne bien, mais seulement carte en main, et ni la ligne de survol ni les cibles allumées ne disent lequel des deux on s'apprête à faire. Une carte qu'on oriente à l'aveugle est pire qu'une carte qu'on subit, ce qui est précisément l'inverse de ce que 3.5 cherchait en faisant du sens un choix de pose. Elle revient dans le deck le jour où l'écran montre où va la terre — `P1`.
+***Terraformer* est sorti du deck de départ après `I2`**, et le verbe reste écrit. Ce n'est pas un renoncement : son **sens** — monter ou descendre — ne s'affiche nulle part. La touche le retourne bien, mais seulement carte en main, et ni la ligne de survol ni les cibles allumées ne disent lequel des deux on s'apprête à faire. Une carte qu'on oriente à l'aveugle est pire qu'une carte qu'on subit, ce qui est précisément l'inverse de ce que 3.5 cherchait en faisant du sens un choix de pose. Elle revient dans le deck le jour où l'écran montre où va la terre — `P1b`, la passe de confort l'ayant explicitement écarté de son premier tiers.
 
 **`data/cards/` ne contient que les quatre premières.** *(Écrit à `D1`.)* La colonne MVP n'est pas indicative : les trois dernières n'ont ni résolution, ni bâtiment pour les débloquer, et les écrire aujourd'hui reviendrait à mettre dans le deck des cartes injouables pour plusieurs jalons. Elles entrent avec `X1`, `X2` et `X3`, en même temps que la colonne **Débloque** de 4.1.
 
@@ -624,31 +624,71 @@ mener bout à bout, et c'est une question qu'on ne peut poser qu'après avoir jo
 après `I2`, et avant que `I2b` demande à quelqu'un de jouer quinze journées d'affilée pour
 arbitrer un `.tres`.
 
-- **P1** — **La passe de confort.** Ce que la première partie complète a réclamé :
-  - **Affecter à la souris de bout en bout.** Sélectionner une fiche puis appuyer sur une
-    barre est un mélange de deux vocabulaires. Un glisser-déposer, ou un clic sur la fiche
-    puis un clic sur la case, mais pas les deux moitiés dans deux langues.
-  - **Le coût sur la carte elle-même**, et non seulement sur la ligne de survol quand on la
-    tient. Une main de sept cartes dont on ne connaît le prix qu'une par une se joue à
-    l'aveugle.
-  - **Distinguer les phases autrement qu'en toutes lettres.** Une lumière qui change, un
-    signe qui bascule — quelque chose qu'on lit sans lire. Attention : le libellé vient de
-    la `PhaseDef` et 2. interdit qu'un nom de phase entre dans le code, donc ce que la
-    vue commute doit venir de la data, comme la couleur d'un terrain.
-  - **Voir les piles.** Une pioche et une défausse consultables, plutôt que trois compteurs.
-    C'est aussi ce qui rendra jouable l'`OUVERT` de 3.5 sur les cartes non jouées : on ne
-    peut pas arbitrer ce qu'on ne voit pas.
-  - **Le sens d'un terrassement**, qui décide du retour de la carte dans le deck de départ
-    *(cf. 4.2)*.
-  - **La liste des actions posées, pour de bon** — une liste qui défile ou une place à elle,
-    plutôt qu'un plafond de lignes calibré à la main sur la hauteur du HUD.
-  - **Désigner l'une des deux actions d'une même case**, ce qui lèverait la contrainte
-    provisoire de 3.5.
+- **P1** — **La passe de confort.** Ce que la première partie complète a réclamé.
 
-  Les deux premiers gestes de la liste sont **déjà faits** : le clic droit sur une fiche
-  rappelle son ouvrier, et la ligne de survol a quitté le rapport pliable pour rester
-  visible pendant qu'on vise. Ils l'ont été parce qu'ils coûtaient une heure et que `I2b`
-  se joue avec.
+  La passe de confort s'est découpée en trois à son ouverture, et la découpe suit ce que
+  chaque point **touche** plutôt que sa taille : quatre d'entre eux ne sortent pas de
+  `src/adapters/`, deux demandent une vue neuve ou une place neuve, et le dernier rouvre une
+  règle du domaine et une ligne de ce document. Les mélanger aurait donné un jalon dont
+  aucune couche ne se serait vérifiée seule.
+
+  - **P1a** ✅ — **Les gestes et ce qu'on lit avant d'agir.** Trois points, aucun contrat
+    touché, aucune règle de domaine changée.
+    - **Affecter à la souris de bout en bout.** Sélectionner une fiche puis appuyer sur une
+      barre était un mélange de deux vocabulaires. C'est un clic sur la fiche puis un clic
+      sur son action, sur la carte comme dans la liste ; Espace survit en raccourci.
+    - **Le coût sur la carte elle-même**, un chiffre par ressource, de la couleur que la
+      jauge de réserve emploie déjà, et l'encre s'affaiblit quand `Ledger.can_afford()` dit
+      non. La vue ne juge pas : elle pose la question au domaine et dessine la réponse. Une
+      carte d'**action** n'en porte pas, et ce n'est pas un oubli — ce qu'elle dépense, ce
+      sont des ouvriers, et combien dépend de la cible, donc ce prix-là n'existe qu'en visant.
+    - **Distinguer les phases autrement qu'en toutes lettres.** Un liseré sur le bord haut du
+      panneau d'affectation, à la couleur de la phase courante. `PhaseDef` porte une `color`
+      sur le patron exact de `TerrainData` — pas de défaut, une sentinelle, un contrôle au
+      boot — et **aucun nom de phase n'est entré dans le code**, ce qui était la condition
+      posée ci-dessous.
+
+    Ce que le jalon a trouvé en regardant, et qu'aucun test ne cherchait : un coût de vingt
+    se dessinait « 2 » au-dessus de « 0 », lisible et faux ; et le chemin de capture jouait
+    ses cartes sans redessiner la main, si bien que **toutes les captures du projet depuis
+    `D2` montraient une main d'avant leurs propres poses**, en contradiction avec le compte
+    des piles deux panneaux plus loin. Rien sur une carte ne dépendait d'un état mutable
+    avant ce jalon, donc personne ne pouvait le voir.
+
+    Il a aussi buté sur un défaut qu'il ne répare pas et qui appartient à `P1b` : **le
+    panneau d'affectation déborde de sa colonne** et couvre le haut des cartes posées sous
+    lui — dix-huit pixels de bande au sixième jour d'un run de test, c'est-à-dire la ligne du
+    rang au clavier, déjà illisible là avant `P1a`. C'est la troisième fois qu'une colonne de
+    droite ne tient pas, après `W2` et `I2`, et la première où elle cache une information
+    plutôt que d'en tronquer une.
+
+    `--shot-phases` est né du même jalon, et de la phrase que ce projet s'applique depuis
+    `I2` : un écran qu'aucune capture ne peut atteindre est celui que personne ne regardera.
+    `--shot-evenings` résout des journées entières, donc toute capture s'arrêtait sur le
+    premier créneau ; les autres phases étaient inatteignables, ce qui n'a gêné personne tant
+    qu'une phase ressemblait à sa voisine.
+
+  - **P1b** — **Les listes qui cessent de mentir sur ce qu'elles cachent.** C'est le jalon
+    qui doit d'abord régler le débordement ci-dessus, parce que les deux points qui suivent
+    s'y heurtent avant d'exister.
+    - **La liste des actions posées, pour de bon** — une liste qui défile ou une place à elle,
+      plutôt qu'un plafond de lignes calibré à la main sur la hauteur du HUD.
+    - **Voir les piles.** Une pioche et une défausse consultables, plutôt que trois compteurs.
+      C'est aussi ce qui rendra jouable l'`OUVERT` de 3.5 sur les cartes non jouées : on ne
+      peut pas arbitrer ce qu'on ne voit pas.
+    - **Le sens d'un terrassement**, qui décide du retour de la carte dans le deck de départ
+      *(cf. 4.2)*. Il était au périmètre de `P1a` et en a été **retiré par l'humain** ; il
+      reste écrit ici, donc la promesse de 4.2 tient.
+
+  - **P1c** — **Désigner l'une des deux actions d'une même case**, ce qui lèverait la
+    contrainte provisoire de 3.5. Seul point de la famille qui touche le domaine, et le seul
+    qui renverse une décision : il ne se traite qu'une fois choisi *comment* on désigne —
+    un cycle au clic, un menu, ou une pile visible sur la case. La question précède le code.
+
+  Deux gestes de la liste d'origine étaient **déjà faits** avant l'ouverture de la
+  famille : le clic droit sur une fiche rappelle son ouvrier, et la ligne de survol a
+  quitté le rapport pliable pour rester visible pendant qu'on vise. Ils l'ont été parce
+  qu'ils coûtaient une heure et que `I2b` se joue avec.
 
 ### Différés — `X`
 
@@ -666,7 +706,9 @@ arbitrer un `.tres`.
   Ce qu'il contraint en attendant, et c'est sa seule raison d'être écrit maintenant : **aucun rapport ne doit inventer sa propre conséquence.** Un système qui rencontre un état le **compte** et le rapporte ; il ne décide pas de ce qu'il fait. C'est ce que `UpkeepReport` fait déjà des non-nourris, et ce que `DamageReport` fait des pertes.
   *(Relevé après `F1`.)* Le format de combat de 3.6 le fait passer de confortable à **structurant**, et lui donne sa première forme concrète : les points de vie sont la ressource d'une manche, un ouvrier à zéro meurt, et ce qu'un **survivant** emporte est un effet progressif selon la part de vie perdue. Sans lui, un combat n'a que deux issues — rien, ou définitif —, et le joueur qui a bien joué ne sent rien du tout. C'est le premier état dont on connaisse déjà et la source et la graduation.
 
-**Ordre suivant** — `I2b`, et **`P1` peut s'intercaler à tout moment** : c'est le seul jalon dont le contenu vient d'une partie jouée plutôt que d'une déduction, donc le seul qui se périme si on attend. La boucle est jouable du début à la fin, donc la question n'est plus « qu'est-ce qui manque » mais « est-ce que ça se joue ». Les deux arbitrages de ce jalon — la structure de la journée en 2, le sort de la main non jouée en 3.5 — se testent en échangeant un `.tres`, et c'est la première fois du projet qu'un jalon ne demande pas d'écrire une ligne de GDScript.
+**Ordre suivant** — `P1b` ou `I2b`. `P1a` est passé, ce qui change ce que cette ligne disait : les trois gestes qui rendaient une phase pénible à mener sont faits, donc `I2b` peut se jouer sans les attendre. Mais `P1b` porte désormais un **défaut trouvé en capture** — la colonne de droite qui déborde sur la main —, et un défaut qui cache une information pèse plus lourd qu'un confort qui manque.
+
+*(Écrit avant `P1a`, et toujours vrai du reste de la famille.)* **`P1` peut s'intercaler à tout moment** : c'est le seul jalon dont le contenu vient d'une partie jouée plutôt que d'une déduction, donc le seul qui se périme si on attend. La boucle est jouable du début à la fin, donc la question n'est plus « qu'est-ce qui manque » mais « est-ce que ça se joue ». Les deux arbitrages de ce jalon — la structure de la journée en 2, le sort de la main non jouée en 3.5 — se testent en échangeant un `.tres`, et c'est la première fois du projet qu'un jalon ne demande pas d'écrire une ligne de GDScript.
 
 `I3` suit avec les chiffres, et il en a désormais une liste précise plutôt qu'une intention : **la nourriture d'abord**, qui est le déséquilibre le plus visible d'un run entier — la famine tombe dès la cinquième journée et ne s'arrête plus —, puis le calendrier des vagues, le barème du score, et le `breach_per_casualty` que `F1` avait déjà signalé comme le plus fragile de ses cinq.
 
