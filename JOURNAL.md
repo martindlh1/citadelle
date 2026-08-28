@@ -4,6 +4,196 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-28 — `F2a` : le plateau existe, le relief joue, et les deux camps se ressemblent enfin
+
+**État : terminé**, et `F2` est découpé en deux — `F2b` reste entier. Quatre commits sur
+`feat/f2a-battle-board`, tirée de `master`. Les trois commandes passent : boot sans erreur
+ni warning, tout `src/domain/` parse, **918 tests verts contre 826**, 50 suites contre 46.
+Les neuf harnais ont été bootés un par un — un contrat a bougé.
+
+### Pourquoi le jalon a été coupé en deux
+
+Compté honnêtement, `F2` faisait vingt-cinq fichiers, une catégorie de `data/` de plus et
+une centaine de cas — plus gros que `I1` et que `F1`. La découpe suit ce que chaque moitié
+**touche**, comme `P1a`/`P1b` : `F2a` ne sort pas de `domain/combat/`, `src/schema/` et
+`data/`, à un contrat près ; `F2b` porte tout ce qui **décide**.
+
+Elle s'est trouvée justifiée pour une raison qu'on n'avait pas prévue : tu as rouvert le
+système d'intentions en cours de session. Écrire un plateau ne l'attend pas ; écrire une IA
+ne peut pas s'en passer. La coupure est tombée exactement sur cette ligne.
+
+### Les deux corrections qui viennent de toi
+
+**Les attaquants n'ont pas à être des généralités, et les défenseurs non plus.** Le plan
+proposait `fighter_hit_points`, `fighter_attack` et consorts dans `CombatBalance` — c'est-à-dire
+*un* soldat décliné en N exemplaires, pendant qu'`EnemyData` allait décrire des assaillants
+tous différents. Un camp spécifique contre un camp générique n'est pas un combat tactique,
+c'est une multiplication.
+
+`CombatStats` est né de là, et c'est le premier DTO de `contracts/` créé depuis `F1` : **la
+même forme pour les deux camps**. Un assaillant tient la sienne de son `EnemyData`, un
+ouvrier de la projection des Effectifs, et le plateau ne sait pas laquelle il lit. C'est ce
+qui permet au déplacement, à la portée et aux dégâts de s'écrire **une fois** — sans lui, les
+deux camps auraient eu deux chemins de code et deux occasions de diverger sur ce que
+« grimper » veut dire.
+
+`CombatUnit` cesse donc d'être un multiplicateur. Son docstring gardait la place depuis `F1`
+en toutes lettres — « ni PV, ni équipement, ni blessure… ce contrat lui laisse la place
+d'ajouter ce dont il aura besoin » — et `F1` avait raison d'attendre : il aurait deviné.
+
+Ce que ça a demandé de trancher, et ce n'était pas dans le plan : **ce qu'un palier de piste
+Combat achète.** La réponse retenue est *les dégâts, et rien d'autre*. Un entraînement fait
+frapper plus fort ; encaisser relève de l'équipement et de la constitution, donc de `X5` et
+de `X6`. Lui faire multiplier les deux rendrait un vétéran deux fois meilleur sur deux axes à
+la fois, ce qui est une courbe qu'on ne peut plus régler.
+
+Tous les ouvriers ont donc les mêmes points de vie aujourd'hui — et ce n'est **pas** une
+généralité de contrat, ce qui est toute la différence. Le chiffre voyage par unité, si bien
+que la piste que tu gardes ouverte — des paliers qui donnent des stats, des PV tirés à la
+création — ne changera que `Worker.to_combat_unit()`, un fichier, et le plateau ne s'en
+apercevra pas.
+
+**Il y a de l'aléatoire, et il est borné.** Chaque corps porte une fourchette de dégâts
+plutôt qu'un chiffre : un combat entièrement calculable se calcule au lieu de se jouer. Le
+tirage passe par le `RandomNumberGenerator` du run, jamais `randf()` — donc un seed plus une
+suite de gestes rejoue une bataille à l'identique, et le déterminisme promis depuis `I0`
+n'est pas entamé. Un cas de test le porte.
+
+Les **pourcentages** que tu mentionnais en plus — infliger un effet — appartiennent à `X6`, et
+`F2` n'en invente aucun : 3.6 est explicite, « il en inventerait quatre ». Le tirage aura sa
+place au moment de frapper ; rien ne l'occupe.
+
+### Les intentions, rouvertes, et ce que la session en retient
+
+Tu as mis le doigt sur la vraie difficulté, et elle est structurelle : sur une grille où les
+corps bloquent, le joueur agit **après** l'annonce, donc un trajet annoncé est soit
+conditionnel — et l'information cesse d'être complète, ce que 3.6 refuse en toutes lettres —
+soit rigide, et un ennemi enfermé cogne l'air.
+
+Trois sorties ont été pesées, dont « un pion fait une chose par tour », que tu as écartée
+parce qu'elle ralentit les combats. La direction retenue est plus vague, à la *Slay the
+Spire* : on sait de quelle **nature** sera le tour d'un ennemi, sans son trajet ni sa case.
+
+Ce que la conversation a fait apparaître et qui vaut d'être noté : **la difficulté ne venait
+pas du « bouger *et* frapper », elle venait du trajet annoncé.** En ne déclarant que la
+nature, l'IA se résout à l'exécution contre le plateau réel, et le blocage cesse d'être un
+cas à traiter — sans rien coûter au rythme. Le plateau a donc été écrit pour qu'un corps
+puisse se déplacer et frapper dans le même tour, ce qui est la lettre de 3.6.
+
+Reste à trancher, et c'est la première chose de `F2b` : si une attaque **à distance** annonce
+sa case. L'argument pour est qu'un tireur qui ne bouge pas a une visée que rien ne peut
+invalider sauf l'esquive, donc que c'est exactement là que la règle de 3.6 a un sens.
+
+### Ce que le relief fait, et l'asymétrie qui se discute
+
+Trois précisions que l'écriture a demandées. Le déplacement est **orthogonal** et la portée
+en **Manhattan** : mélanger deux métriques sur la même grille produit des distances qu'on ne
+peut pas lire à l'œil, et une case atteignable en deux pas qui serait « au contact » ferait
+mentir toute case allumée à l'écran. Un mur, un chantier et un corps **barrent de la même
+façon** — c'est la seule tactique que `F2a` livre.
+
+Et **descendre ne coûte que le pas**, quelle que soit la chute. Celle-là se discute, donc
+elle est dans `DESIGN.md` : elle fait d'une hauteur une position qu'on *tient* — longue à
+gagner, facile à quitter — plutôt qu'un mur qui enferme aussi celui qui est dessus. Un
+défenseur peut sauter d'un plateau pour rompre le contact, et l'assaillant devra remonter.
+
+La marche franchissable est **par corps** et non globale, ce qui laisse la place à un
+assaillant qui escalade là où les autres contournent — le Colosse de `data/enemies/` en
+franchit deux là où tout le monde en franchit un.
+
+### Ce que les tags de terrain ont évité
+
+`impassable_tags` vit dans `data/balance/` et non dans le code, parce que le domaine aurait
+sinon écrit `&"water"`. C'est le même geste que `combat_skill_family` à `F1`.
+
+Il est le seul champ neuf **réclamé non vide**, et la raison mérite d'être notée : Godot
+n'écrit pas un tableau vide dans un `.tres`, donc « oublié » et « délibérément vide » y sont
+indiscernables — c'est exactement le piège de `resolves`. L'issue de `PhaseDef`, faire monter
+la règle d'un cran, ne s'applique pas ici : aucun bloc au-dessus ne voit cette liste. Un
+combat où l'on marche sur l'eau n'est pas un modèle qu'on essaie, c'est un champ perdu.
+
+### Ce que le harnais a trouvé tout seul, et c'est le meilleur du jalon
+
+Deux défauts, tous deux au premier lancement, et **aucun n'était cherché**.
+
+**Le village se bâtissait contre le bord haut de la carte.** `_raise()` posait chaque
+bâtiment sur la première ancre acceptée en balayant depuis l'origine — le harnais Combat fait
+pareil et ne s'en aperçoit pas, parce qu'aucune de ses tables n'est géométrique. La lisière du
+bâti touchait donc le bord, et une vague qui arrive du nord n'avait **aucune** case où entrer.
+
+La table l'a dit en toutes lettres — « entrée de la vague : aucune » — sous un damier
+parfaitement aligné. C'est la variante *utile* du défaut que `F1` a décrit : elle n'a pas
+menti, elle a annoncé qu'elle n'avait rien à montrer. Et c'est le verdict en fin de fichier
+qui l'a rendue lisible, ce qui est précisément ce à quoi il sert.
+
+**Et à ces chiffres-là, une vague de quatre balaie trois défenseurs en deux manches sans
+perdre personne.** Le verdict demande à l'échange « d'entamer quelque chose sans tout finir » ;
+il finit tout, du mauvais côté. Le harnais **dit lui-même** le constat sous la table plutôt
+que de laisser un critère que sa propre table contredit — un verdict faux serait exactement
+le tableau aligné, plausible et faux que `CLAUDE.md` refuse depuis `F1`. C'est un chiffre pour
+`I3` et pas une règle.
+
+La table du blocage a gagné une seconde colonne prise sur le **voisinage** et non sur le
+parcours, par la règle de `I2b` : deux colonnes tirées du même compteur ne prouvent rien en
+se ressemblant. Elle lit treize cases contre une, et une sortie contre zéro — ce qui dit
+qu'on tient une porte, pas qu'un calcul a raté.
+
+### Deux pièges de test, tous deux silencieux
+
+**Un coup dans le vide réussit et rend zéro.** C'est la règle d'esquive qui fonctionne — et
+c'est ce qui a fait qu'un cas censé mesurer une fourchette de dégâts ne mesurait rien du tout,
+faute de cible sur la case visée. Le cas échouait, ce qui est la chance ; il aurait pu passer.
+
+**Et « un village à l'étroit rend moins de cases » a d'abord été écrit avec une carte
+étroite**, ce qui était faux : une bande de deux cases de large offre autant d'entrées qu'on
+veut dès qu'on s'éloigne. Ce qui manque à un village acculé est la **profondeur**, jamais la
+largeur. Le cas serait passé au vert pour la mauvaise raison.
+
+### Le piège GDScript, entré dans `CLAUDE.md`
+
+Un `enum` déclaré dans une classe doit être **qualifié** dans les signatures de cette classe :
+`static func create(side: Side)` compile, puis refuse ce que tout appelant lui passe, parce
+que GDScript traite le `Side` interne et le `Combatant.Side` du dehors comme deux types
+distincts. Attrapé par le parsing, invisible à la lecture.
+
+### Ce qui ne bouge pas
+
+`InstantCombatResolver` est **intact** : il fait encore tourner le jeu, et `F3` l'échangera.
+Le harnais `combat` de `F1` reste à côté du nouveau pour la même raison — il calibre le
+bouchon. Aucune ligne de `RunOrchestrator.fight()`, d'`EventBus` ou de `src/adapters/`.
+
+`DamageReport` n'a **pas** bougé non plus, alors que tu as validé qu'il le fasse : il perdra
+`assault`, `defense` et `breach()` et gagnera `swept()` à `F2b`, quand il y aura un rapport à
+produire. Un contrat qu'on casse avant d'avoir son nouveau producteur est un contrat cassé
+deux fois.
+
+### Prochain jalon
+
+**`F2b`**, et il commence par une question de design plutôt que par du code : le grain du
+vocabulaire d'intentions, et notamment si une attaque à distance annonce sa case.
+
+Puis **`M1`**, le menu, inchangé — c'est toujours l'écran de fin de `P2a` qui le rend
+nécessaire, et toujours le premier jalon qui demande une `.tscn` et la scène principale.
+
+Puis **`I3`**, qui a maintenant deux fronts au lieu d'un : la nourriture — vingt-sept
+récoltées pour quatre-vingt-cinq dues — et le combat, dont le harnais dit déjà que la vague
+est trop dure de beaucoup.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché.
+
+- **`HARNESS` vaut `&"battle"`** — le nouveau harnais, un rapport texte avec un damier.
+  `&"combat"` rend les tables du bouchon, `&"run"` rend le jeu.
+- **Le damier se lit ainsi** : un chiffre est la hauteur du relief, `#` un bâtiment, `+` un
+  chantier, `~` de l'eau, `^` du rocher ; une majuscule est un ouvrier engagé, une minuscule
+  un assaillant. La seconde carte remplace le décor par le **coût** pour aller sur chaque case.
+- **`data/enemies/` est neuf** — trois assaillants, un au contact, un lourd qui grimpe, un à
+  distance. Leurs chiffres sont des placeholders assumés.
+- **La branche n'est pas fusionnée** : `feat/f2a-battle-board`, quatre commits.
+
+---
+
 ## 2026-08-27 — `P2b` : la journée se souvient d'elle-même, et le soir a quelque chose à lire
 
 **État : terminé**, et `P2` avec lui. Trois commits sur `feat/i2b-knobs`. Les trois commandes

@@ -250,6 +250,12 @@ Le contrat, lui, ne change pas d'un mot : `LaborForce` et `CombatForce` restent 
 
 *(Écrit à `F1`.)* La `CombatForce` existe, et elle est le **miroir strict** de la `LaborForce` : tout le roster présent, sans distinction. Ce n'est pas un doublon, c'est la même symétrie qu'entre les deux — l'Économie reçoit tout le monde et n'en emploie que ce que l'`Assignment` place, le Combat reçoit tout le monde et n'en engage que ce que le déploiement de 3.6 tient. Le filtre appartient au consommateur, jamais à la projection. Une unité y porte **un** multiplicateur et non un par famille, ce qui est le seul écart réel entre les deux contrats et vient de ce que le Combat est une famille et le travail plusieurs.
 
+*(Corrigé à `F2a`, à la demande de l'humain.)* Une unité y porte désormais **un rang et des chiffres**, et la distinction vaut d'être lue une fois. Le rang est le multiplicateur ci-dessus : il dit à quel point cet ouvrier est aguerri, et c'est par lui qu'un déploiement classe. Les chiffres — points de vie, fourchette de dégâts, portée, déplacement, marche franchissable — sont ce que le plateau consomme. Un contrat qui n'aurait porté que le rang aurait obligé le plateau à multiplier lui-même, donc à rouvrir chaque fois qu'un chiffre change de source.
+
+**Ce que la piste Combat achète est donc écrit, et c'est peu :** elle multiplie les **dégâts**, plancher et plafond ensemble, et rien d'autre. Un entraînement fait frapper plus fort ; encaisser relève de l'équipement et de la constitution, donc de `X5` et de `X6`. Lui faire multiplier les deux rendrait un vétéran deux fois meilleur sur deux axes à la fois, ce qui est une courbe qu'on ne peut plus régler.
+
+Tous les ouvriers ont donc aujourd'hui les mêmes points de vie, et ce n'est **pas** une généralité de contrat : le chiffre voyage par unité, si bien que le jour où un palier en donnera — ou bien où l'on voudra les tirer à la création, ce qui est la piste que l'humain garde ouverte — seule la projection change, et le plateau ne s'en aperçoit pas.
+
 #### Les ouvriers sont l'énergie, et ils sont nominatifs
 
 Il n'y a **qu'un seul budget d'ouvriers**, et il joue le rôle de l'énergie d'un deckbuilder : les cartes disent ce qu'on peut faire, les ouvriers disent combien on peut en faire. Deux contraintes qui se croisent, et non deux ressources qui se doublent.
@@ -372,6 +378,14 @@ Des deux alternatives qui restent, **« défausser contre une petite ressource �
 
 **Les ennemis annoncent leur tour entier.** Chaque ennemi affiche, pendant le tour du joueur, **où il ira et quelle case il frappera** — pas seulement son action, mais sa planification complète. Une intention qui ne dirait que « il attaquera » laisserait une incertitude qui viderait la promesse : l'information doit être complète, sinon le tour du joueur n'est plus un puzzle mais un pari.
 
+**`OUVERT` — ce paragraphe est rouvert, et c'est la seule chose que `F2a` n'ait pas pu écrire.** *(Rouvert par l'humain à `F2a`.)* Annoncer un **trajet** sur une grille où les corps bloquent ne tient pas : le joueur agit après l'annonce, donc le plan est ou bien conditionnel — et l'information cesse d'être complète, ce que le paragraphe ci-dessus refuse en toutes lettres — ou bien rigide, et un ennemi enfermé cogne l'air.
+
+Trois sorties ont été pesées. N'annoncer que la **case frappée** ; annoncer les deux et exécuter le plan tel quel ; ou qu'un pion fasse **une** chose par tour, se déplacer **ou** frapper, ce qui dissout la question mais rend les combats plus lents — c'est l'objection qui l'a écartée.
+
+La direction retenue est plus **vague**, à la *Slay the Spire* : on sait de quelle **nature** sera le tour d'un ennemi — au contact, à distance, et plus tard un renfort ou un état — sans connaître ni son trajet ni sa case. La difficulté disparaît alors sans rien coûter au rythme, parce qu'elle ne venait pas du « bouger *et* frapper » mais du trajet annoncé : l'IA se résout à l'exécution contre le plateau réel, et le blocage cesse d'être un cas à traiter.
+
+Ce qui reste à trancher est le grain de ce vocabulaire, et notamment si une attaque **à distance** annonce sa case. L'argument pour est qu'un tireur qui ne se déplace pas a une visée que rien ne peut invalider sauf l'esquive, qui est précisément la règle ci-dessous ; l'argument contre est qu'un vocabulaire à géométrie variable se lit moins bien. `F2b` le tranchera avant d'écrire l'IA.
+
 **Une intention frappe la case, pas la cible.** Esquiver l'annule — l'attaque s'exécute dans le vide. C'est ce qui fait du déplacement la décision centrale plutôt qu'un préambule à l'attaque. Conséquence gardée volontairement ouverte : si un **autre** corps se trouve sur la case au moment de l'exécution, il prend le coup, ennemi compris. Les effets de poussée qui feraient de cette règle un vrai puzzle de manipulation ne sont pas au périmètre de `F2` — mais la règle est écrite dans ce sens dès maintenant, pour n'avoir pas à la retourner le jour où ils arriveront.
 
 **Ils visent les ouvriers à portée, les bâtiments sinon.** Une seule ligne d'IA, et c'est elle qui empêche la stratégie dominante la plus bête du format : sur une carte de 32×32 très majoritairement vide, fuir en rond serait autrement gratuit. Ici fuir est un **troc** — on garde ses gens, ils mangent les murs —, et c'est exactement ce que le rapport de sortie sait déjà dire.
@@ -384,6 +398,12 @@ Des deux alternatives qui restent, **« défausser contre une petite ressource �
 
 **Le relief joue, et c'est la première chose qui l'emploie autrement que comme contrainte de pose.** Monter coûte, une marche trop haute bloque. Le terrassement de 3.1 devient donc un geste militaire autant qu'économique.
 
+*(Écrit à `F2a`.)* Trois précisions que l'écriture a demandées, et la troisième se discute. Le déplacement est **orthogonal** et la portée se compte en **Manhattan** : mélanger deux métriques sur la même grille produit des distances qu'on ne peut pas lire à l'œil, et une case atteignable en deux pas qui serait « au contact » ferait mentir toute case allumée à l'écran. Un mur, un chantier et un corps **barrent de la même façon** — ce qui fait du blocage de passage la seule tactique que `F2a` livre. Et **descendre ne coûte que le pas**, quelle que soit la chute : une hauteur devient une position qu'on *tient*, longue à gagner et facile à quitter, plutôt qu'un mur qui enferme aussi celui qui est dessus. La marche franchissable est **par corps** et non globale, ce qui laisse la place à un assaillant qui escalade là où les autres contournent.
+
+**Il y a de l'aléatoire dans un échange, et il est borné.** *(Tranché par l'humain à `F2a`.)* Chaque corps porte une **fourchette** de dégâts plutôt qu'un chiffre : un combat entièrement calculable se calcule au lieu de se jouer. Le tirage passe par le `RandomNumberGenerator` du run, donc un seed plus une suite de gestes rejoue une bataille à l'identique — le déterminisme promis depuis `I0` n'est pas entamé. Les **pourcentages** qui infligeraient un effet appartiennent en revanche à `X6`, et `F2` n'en invente aucun : le tirage aura sa place au moment de frapper, mais rien ne l'occupera avant.
+
+**Les deux camps portent le même genre de fiche.** Un assaillant tient la sienne de son `EnemyData`, un ouvrier engagé de la projection des Effectifs, et le plateau ne sait pas laquelle il lit. C'est ce qui permet au déplacement, à la portée et aux dégâts de s'écrire une fois — et ce qui corrige un défaut que `F1` portait sans le voir, où un camp était décrit un par un pendant que l'autre était un réglage unique décliné en N exemplaires.
+
 #### Ce qu'une manche gagne, et ce qu'elle coûte
 
 **Une vague est une razzia, pas un duel.** Tenir N tours suffit à ce qu'elle reparte ; **battre tous les ennemis** donne un bonus par-dessus. Il n'y a donc pas de victoire ni de défaite au combat, seulement une facture — ce qu'ils ont cassé et emporté entre-temps. La défaite d'un **run** reste celle de 5. : le Cœur détruit ou le roster vide.
@@ -395,6 +415,10 @@ C'est aussi ce qui rend la borne de tours honnête. Sans elle, une manche s'éti
 #### Ce que `F2` livre, et ce qu'il ne livre pas
 
 Deux verbes : **se déplacer** et **attaquer**. Plus les intentions, le relief dans le déplacement, les bâtiments qui bloquent et qui tombent, et la borne de tours.
+
+*(Découpé à `F2a`, et la découpe suit ce que chaque moitié touche — comme `P1`.)* **`F2a`** livre le plateau, les deux verbes, le relief dans le déplacement, ce qui barre, ce qui tombe, et l'endroit où une vague entre. Il ne sort pas de `domain/combat/`, de `src/schema/` et de `data/`, à un contrat près. **`F2b`** livre ce qui **décide** : les intentions, l'IA qui les choisit, la borne de tours, le départ de la vague, le pillage, et le `DamageReport` au bout.
+
+La coupure n'est pas arbitraire : tout ce que `F2b` porte suppose de savoir ce qu'un ennemi annonce, et c'est justement la question que le paragraphe des intentions vient de rouvrir. Écrire un plateau ne l'attend pas ; écrire une IA ne peut pas s'en passer.
 
 **Les capacités spéciales n'y sont pas**, et c'est la seule chose que ce document retient volontairement d'un format qu'il vient d'accepter. Un système de capacités générique — ciblage, effets, coûts — est un jeu entier, et il tuerait `F2` avant qu'on sache si le format tient. Elles ont déjà leur place : `X5` demande depuis `W1` « ce qu'un palier de niveau d'ouvrier offre », et la réponse est là. **Une capacité est ce qu'un palier de piste Combat débloque** — ce qui enracine le combat dans le roster nominatif au lieu d'en faire un jeu d'échecs greffé, et donne enfin une raison d'être à *S'entraîner* (`X3`).
 
@@ -429,6 +453,12 @@ Deux conséquences que le contrat porte déjà. Seuls les **engagés** meurent e
 Une seule de ses règles mérite d'être ici plutôt que dans le code, parce qu'elle se discute : **une brèche casse d'abord ce qui la retenait**, puis ce qui cède le plus vite. Défense décroissante, puis points de vie croissants. Elle a deux vertus — la palissade sert vraiment à quelque chose, et le Cœur se retrouve en dernier sans qu'une ligne de code n'écrive son nom, puisqu'il est le plus solide du tableau de 4.1. Elle ignore délibérément l'ordre de pose : deux villes identiques bâties dans un ordre différent doivent perdre la même chose, ce que 3.3 exige déjà de l'écrêtage.
 
 **`OUVERT`** — ce qui reste après la discussion qui a suivi `F1`, et c'est nettement moins qu'avant : **la nature des vagues** — qui vient, combien, avec quelles portées —, **la borne de tours** d'une manche, et **le bonus** que vaut un nettoyage complet. Les trois sont des chiffres et du contenu, donc `I3` et `F2` ; aucun ne remet en cause le format.
+
+*(Précisé à `F2a`.)* La **nature des vagues** a désormais une forme sans avoir de réponse : un `EnemyData` par type dans `data/enemies/`, qui porte des points de vie, une fourchette de dégâts, une portée, un déplacement et une marche franchissable — donc trois assaillants qui ne se jouent pas pareil se règlent sans une ligne de GDScript. Les chiffres qui y sont sont des placeholders, et le harnais Bataille dit déjà qu'ils sont trop durs : **une vague de quatre balaie trois défenseurs en deux manches sans perdre personne.** C'est `I3`.
+
+Le **bonus d'un nettoyage** garde son sort de `F2` : le rapport le **constatera** sans décider de ce qu'il vaut, par la règle que `X6` pose — un système qui rencontre un fait le compte, il n'invente pas sa conséquence. Ce qu'il paie est `I3`.
+
+La **borne de tours** reste entière, et le harnais dit ce qu'il faut savoir pour la choisir : à ces chiffres-là il n'y aurait rien à borner, puisque tout est fini avant. Elle se règlera devant une ligne qui tient.
 
 Le format, la vue, le degré de contrôle du joueur, la direction des vagues et le rôle du relief **ne sont plus ouverts** : ils sont ci-dessus.
 
@@ -652,8 +682,12 @@ Le développement est par système, pas linéaire. Chaque système avance dans s
   Le jalon a **ajouté une règle de design** plutôt que d'en appliquer une : le **déploiement capé** ci-dessus en 3.6, qui vient de l'humain comme le second axe de progression à `W1`. C'est lui qui fait exister au combat la tension du pitch, et il sort la caserne de sa coquille avant l'action qu'elle débloquera à `X3`.
   Il **touche trois DTO de `contracts/`** — deux neufs, plus `WorkLine` qui gagne un `NO_CELL` parce qu'on ne défend pas le village *en* une case. Et il **retire** une ligne de `CLAUDE.md` : `WaveDef` n'est pas un contrat mais une `Resource`, comme `PhaseDef`. Une blessure est sortie du `DamageReport` pour `X6`, ce qui est la troisième correction de `DESIGN.md` par un jalon après `D2` et `W2`.
   Ce qu'il ne fait pas, et c'est écrit dans son harnais : rien ne déclenche une vague. La fréquence est l'`OUVERT` de 2, la défaite est en 5, et les deux sont `I2`.
-- **F2** — Prototype du vrai combat, sur snapshots fabriqués. **Le format n'est plus à définir** : tactique au tour par tour sur la grille du village, intentions ennemies complètes, deux verbes — se déplacer, attaquer. Voir 3.6, écrit en discussion après `F1`.
-  Il livre un **plateau mutable** dans `domain/combat/` et des fonctions pures qui appliquent un geste à la fois, et non un résolveur : c'est là que la promesse de « l'échange en une ligne » est tombée, et 3.6 dit pourquoi. Il ne livre **ni capacités** — `X5` — **ni états** — `X6`.
+- **F2** — Prototype du vrai combat, sur snapshots fabriqués. **Le format n'est plus à définir** : tactique au tour par tour sur la grille du village, deux verbes — se déplacer, attaquer. Voir 3.6, écrit en discussion après `F1`.
+  Il livre un **plateau mutable** dans `domain/combat/` et des fonctions pures qui appliquent un geste à la fois, et non un résolveur : c'est là que la promesse de « l'échange en une ligne » est tombée, et 3.6 dit pourquoi. Il ne livre **ni capacités** — `X5` — **ni états** — `X6`. Découpé en deux, par ce que chaque moitié touche.
+  - **F2a** ✅ — **Le plateau, les deux verbes, et le terrain sous eux.** `CombatBoard`, `Combatant`, `CombatMovement`, `BattleGround`, `MoveResult` et `StrikeResult` sous `domain/combat/` ; `EnemyData` dans `src/schema/` et `data/enemies/` ; `CombatBalance` triple de taille avec le profil d'un ouvrier engagé et les réglages du plateau. Le relief joue enfin — monter coûte, une marche trop haute bloque, descendre est gratuit —, un corps barre comme un mur, un bâtiment tombe et cesse de barrer, et la vague entre à la lisière du bâti.
+    Il **touche un DTO de `contracts/`**, le premier depuis `I2` : `CombatStats` est neuf et `CombatUnit` cesse d'être un multiplicateur pour porter des chiffres. C'est l'humain qui l'a demandé, et la raison est celle d'un défaut plutôt que d'un manque — `CombatBalance` décrivait *un* défenseur décliné en N exemplaires pendant qu'`EnemyData` allait décrire des assaillants tous différents. Le docstring de `CombatUnit` gardait la place depuis `F1` en toutes lettres.
+    L'**aléatoire** entre par la même porte et vient du même endroit : une fourchette de dégâts par corps, tirée sur le générateur du run. Le harnais `battle` rend un damier en texte — la vue est `F3` — et il a trouvé ses deux premiers défauts tout seul *(cf. `JOURNAL.md`)*.
+  - **F2b** — **Ce que les assaillants décident.** Les intentions, l'IA, la borne de tours, le départ de la vague, le pillage, et le `DamageReport` au bout — c'est là que `assault`, `defense` et `breach` quittent ce contrat, 3.6 les ayant annoncés jetables. Il commence par trancher le grain du vocabulaire d'intentions, que 3.6 vient de rouvrir.
 - **F3** — Vue de combat intégrée, et la fin de journée qui cesse d'être atomique *(cf. 3.8)*. L'applicateur de `RunOrchestrator.fight()` ne bouge pas ; c'est le producteur qui change de nature.
 
 ### Intégration — `I`
@@ -870,7 +904,7 @@ run, ce qui est exactement pourquoi elle est à part.)*
   Ce qu'il contraint en attendant, et c'est sa seule raison d'être écrit maintenant : **aucun rapport ne doit inventer sa propre conséquence.** Un système qui rencontre un état le **compte** et le rapporte ; il ne décide pas de ce qu'il fait. C'est ce que `UpkeepReport` fait déjà des non-nourris, et ce que `DamageReport` fait des pertes.
   *(Relevé après `F1`.)* Le format de combat de 3.6 le fait passer de confortable à **structurant**, et lui donne sa première forme concrète : les points de vie sont la ressource d'une manche, un ouvrier à zéro meurt, et ce qu'un **survivant** emporte est un effet progressif selon la part de vie perdue. Sans lui, un combat n'a que deux issues — rien, ou définitif —, et le joueur qui a bien joué ne sent rien du tout. C'est le premier état dont on connaisse déjà et la source et la graduation.
 
-**Ordre suivant** — **`M1`**, le menu, que l'écran de fin de `P2a` rend nécessaire en proposant de relancer. Puis **`I3`**, avec la nourriture en tête et son premier chiffre. Plusieurs runs entiers ont été joués après `I2b`, et ils ont rendu une liste : elle est ci-dessus, et elle se périme comme celle de `P1` si on attend. Puis **`I3`**, avec la nourriture en tête et son premier chiffre.
+**Ordre suivant** — **`F2b`**, qui reprend là où `F2a` s'arrête et commence par trancher le grain des intentions *(cf. 3.6)*. Puis **`M1`**, le menu, que l'écran de fin de `P2a` rend nécessaire en proposant de relancer. Puis **`I3`**, avec la nourriture en tête et son premier chiffre — et maintenant le combat à côté, dont le harnais Bataille dit déjà que la vague est trop dure de beaucoup.
 
 `M2` attend une mesure et non du temps — la durée d'un run joué à la main. Et il reste toujours **`P1c`**, qui attend une **question de design** : comment désigner l'une des deux actions d'une case.
 

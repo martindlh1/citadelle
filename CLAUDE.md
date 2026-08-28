@@ -73,6 +73,7 @@ Les DTO échangés entre systèmes. C'est le seul endroit où deux systèmes se 
 | `Assignment` | Effectifs | Économie, Combat |
 | `LaborForce` | Effectifs | Économie |
 | `CombatForce` | Effectifs | Combat |
+| `CombatStats` | Effectifs, `src/schema/` | Combat |
 | `ProductionReport` | Économie | Effectifs (XP), adapters |
 | `DamageReport` | Combat | Ville, Effectifs, Économie, adapters |
 
@@ -132,7 +133,7 @@ systèmes ; aucun ne le connaît en retour.
 res://
 ├── addons/gdunit4/
 ├── data/                       # contenu, .tres uniquement
-│   ├── buildings/  cards/  terrain/  waves/  events/
+│   ├── buildings/  cards/  terrain/  waves/  enemies/  events/
 │   └── balance/                # tous les chiffres réglables, un seul endroit
 ├── src/
 │   ├── domain/
@@ -142,7 +143,7 @@ res://
 │   │   ├── economy/            # Ledger, ProductionResolver
 │   │   ├── workforce/          # Worker, Roster, SkillTrack, Assignment
 │   │   ├── deck/               # Deck, Hand, DraftPool
-│   │   ├── combat/             # CombatResolver (interchangeable)
+│   │   ├── combat/             # CombatBoard, Combatant, CombatMovement
 │   │   └── run/                # RunState, DayCycle, RunOrchestrator
 │   ├── schema/                 # définitions des Resource (BuildingData…)
 │   ├── adapters/
@@ -556,6 +557,11 @@ Tous les nombres réglables vivent dans `data/balance/*.tres`. Modifier un équi
 - Aucun nombre magique dans `domain/` : constante nommée ou champ de `Resource`
 - Préconditions par `assert()`. Les erreurs récupérables retournent un DTO `{ ok: bool, reason: StringName }`, pas un `push_error`
 - Ne jamais trier un `Array[StringName]` avec `sort()` : comparer deux `StringName` compare leurs pointeurs internes, pas leur texte. L'ordre obtenu est arbitraire, stable le temps d'une session et différent à la suivante — un piège direct pour le déterminisme. Trier par `sort_custom` sur `String(...)`.
+- **Un `enum` déclaré dans une classe doit être qualifié dans les signatures de cette classe.**
+  `static func create(side: Side)` compile, et refuse ensuite ce qu'un appelant lui passe :
+  GDScript traite le `Side` interne et le `Combatant.Side` du dehors comme deux types
+  distincts. Écrire `side: Combatant.Side` jusque dans le fichier qui déclare l'enum.
+  Constaté à `F2a`, attrapé par le parsing et invisible à la lecture.
 - **Un `Array[T]` ne s'additionne pas à un tableau littéral non typé**, et le `as Array[T]` ne rattrape rien : `VILLAGE + [&"x"] as Array[StringName]` compile et casse à l'exécution. Passer par `duplicate()` puis `append()`. Constaté à `F1`, dans un harnais — donc hors de toute suite de tests, et invisible au parsing.
 
 ---
