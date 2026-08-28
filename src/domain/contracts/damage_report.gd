@@ -52,7 +52,7 @@ var _destroyed: Array[Vector2i] = []
 ## Ancres des seuls chantiers tombés, dans le même ordre.
 var _interrupted: Array[Vector2i] = []
 
-## Ouvriers que la vague a emportés, dans l'ordre du déploiement.
+## Ouvriers que la vague a emportés, dans l'ordre où ils sont tombés.
 var _lost: Array[StringName] = []
 
 ## Unités de réserve que la vague emporte.
@@ -154,7 +154,12 @@ func destroyed() -> Array[Vector2i]:
 func interrupted() -> Array[Vector2i]:
 	return _interrupted.duplicate()
 
-## Ouvriers que la vague a emportés, dans l'ordre du déploiement. Copie.
+## Ouvriers que la vague a emportés, dans l'ordre où ils sont tombés. Copie.
+##
+## L'ordre est celui de la **chute** depuis que le plateau produit ce rapport, et non
+## celui du déploiement comme le rendait le bouchon. Rien n'en dépend — un mort est un
+## mort, et l'orchestrateur les retire sans les lire dans l'ordre —, mais qui est tombé
+## en premier se raconte, et c'est une information que l'autre ordre effaçait.
 func lost() -> Array[StringName]:
 	return _lost.duplicate()
 

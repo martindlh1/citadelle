@@ -29,8 +29,13 @@ const VILLAGE: Array[StringName] = [
 	&"lumberjack_hut", &"farm", &"palisade", &"palisade", &"warehouse",
 ]
 
-## Vague de mesure : trois types du catalogue, pour que le champ ne montre pas un seul profil.
-const WAVE: Array[StringName] = [&"raider", &"raider", &"brute", &"archer"]
+## Vague de mesure, prise dans `data/waves/`.
+##
+## Elle était codée en dur jusqu'à `F2b` : une liste d'identifiants d'assaillants, écrite
+## dans le harnais. Une `WaveDef` dit désormais qui vient **et** combien de manches il faut
+## tenir, et un harnais qui composerait la sienne mesurerait autre chose que ce que le jeu
+## enverra.
+const WAVE := &"raid"
 
 ## Côté par lequel la vague arrive. Un argument tant que `F3b` n'aura pas dit d'où il vient.
 const FROM_SIDE := Vector2i(0, -1)
@@ -64,6 +69,7 @@ const PANEL_MARGIN := 14
 const REPORT_MARGIN := 16.0
 const REPORT_FONT_SIZE := 13
 
+var _wave: WaveDef
 var _combat: CombatBalance
 var _workforce: WorkforceBalance
 var _grid: HeightGrid
@@ -114,6 +120,7 @@ var _strike_count := 0
 
 func _ready() -> void:
 	var balance := GameDatabase.get_balance()
+	_wave = GameDatabase.get_wave(WAVE)
 	_combat = balance.combat
 	_workforce = balance.workforce
 	_metrics = TerrainMetrics.from_balance(balance.terrain)
@@ -333,7 +340,7 @@ func _report_blocking() -> void:
 	var step := _toward(who.cell(), wall.cell())
 	if not blocked.can_stand(step):
 		return
-	blocked.send(&"blocker", GameDatabase.get_enemy(WAVE[0]), step)
+	blocked.send(&"blocker", GameDatabase.get_enemy(_wave.roster[0]), step)
 	_lines.append("Ce qu'un corps interposé retire — un assaillant posé en %s" % step)
 	_lines.append("  %-28s %6s %8s" % ["plateau", "cases", "sorties"])
 	_lines.append("  %-28s %6d %8d" % ["dégagé", _board.reachable(who.id()).size(),
@@ -438,7 +445,7 @@ func _open_board() -> CombatBoard:
 	var force := _state.roster().to_combat(_combat.combat_skill_family, _workforce, _combat)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = SEED
-	var board := CombatBoard.open(_state.terrain(), city, _combat, rng)
+	var board := CombatBoard.open(_state.terrain(), city, _combat, rng, _wave.rounds)
 	_tints.clear()
 	_names.clear()
 	var line := InstantCombatResolver.deploy(force,
@@ -448,10 +455,11 @@ func _open_board() -> CombatBoard:
 		board.deploy(force.unit(line[rank]), posts[rank])
 		_tints[line[rank]] = BodyRenderer.FRIEND_COLOR
 		_names[line[rank]] = _state.roster().worker(line[rank]).given_name()
-	var gates := BattleGround.entry_cells(board, FROM_SIDE, WAVE.size())
-	for rank in mini(WAVE.size(), gates.size()):
-		var enemy := GameDatabase.get_enemy(WAVE[rank])
-		var id := StringName("%s_%d" % [WAVE[rank], rank])
+	var roster := _wave.roster
+	var gates := BattleGround.entry_cells(board, FROM_SIDE, roster.size())
+	for rank in mini(roster.size(), gates.size()):
+		var enemy := GameDatabase.get_enemy(roster[rank])
+		var id := StringName("%s_%d" % [roster[rank], rank])
 		board.send(id, enemy, gates[rank])
 		_tints[id] = enemy.color
 		_names[id] = "%s %d" % [enemy.label, rank + 1]

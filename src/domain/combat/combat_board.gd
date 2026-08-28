@@ -21,9 +21,14 @@ extends RefCounted
 ## seedé au harnais et aux tests. Un seed plus une suite de gestes rejoue donc une bataille
 ## à l'identique, ce que le déterminisme du projet exige depuis `I0`.
 ##
-## Ce qu'il **ne fait pas**, et c'est `F2b` : les intentions ennemies, l'IA qui les décide,
-## la borne de tours, le départ de la vague et le rapport. Ce qu'il ne fera **jamais** :
-## des capacités — `X5` — et des états — `X6`.
+## **Ce que `F2b` y a ajouté**, et la distinction vaut d'être lue une fois : il porte
+## désormais les intentions, la borne de tours, le butin emporté et le `DamageReport` au
+## bout — mais il ne **décide** de rien. Ce que la vague annonce et ce qu'elle joue vivent
+## dans `WaveAI`, qui est un décideur ; ce fichier reste un plateau. Le partage a une raison
+## pratique autant que doctrinale : le harnais joue les deux camps à la main depuis `F3a`,
+## et un plateau qui réannoncerait tout seul le lui interdirait.
+##
+## Ce qu'il ne fera **jamais** : des capacités — `X5` — et des états — `X6`.
 
 ## Le tour en cours appartient à ce camp.
 var _side: Combatant.Side = Combatant.Side.FRIEND
@@ -38,6 +43,13 @@ var _rng: RandomNumberGenerator
 
 ## Corps, dans l'ordre où ils sont entrés sur le plateau. Les tombés y restent.
 var _bodies: Array[Combatant] = []
+
+## Combien d'assaillants sont entrés, tombés compris.
+##
+## Compté plutôt que redérivé, parce que la question qu'il sert à poser porte sur les
+## **tombés** : « la vague a-t-elle été balayée » se distingue de « personne n'est venu »
+## par ce seul chiffre, et `standing()` ne sait rien dire de ce qui n'a jamais existé.
+var _sent: int = 0
 
 ## Identifiant -> corps.
 var _by_id: Dictionary[StringName, Combatant] = {}
@@ -55,6 +67,37 @@ var _wrecked: Array[Vector2i] = []
 ## Ouvriers tombés, dans l'ordre où ils sont tombés.
 var _fallen: Array[StringName] = []
 
+## Manches à tenir pour que la vague reparte.
+##
+## Elle vient de la `WaveDef` et arrive ici en **chiffre nu** : un siège s'installe là où une
+## escarmouche passe, mais le plateau n'a aucune raison de lire une `WaveDef` — il y verrait
+## `power`, qui est le champ du bouchon.
+var _rounds: int
+
+## Identifiant d'assaillant -> ce qu'il annonce pour son tour.
+##
+## Écrite par `announce()` et par personne d'autre. Le plateau la **tient** sans la
+## **produire**, ce qui est exactement ce qui laisse jouer la vague à la main.
+var _intents: Dictionary[StringName, CombatIntent] = {}
+
+## Identifiant d'assaillant -> ce qu'il emporte par manche passée dans l'enceinte.
+##
+## Relevée à l'entrée sur l'`EnemyData`, parce que le butin n'a pas sa place dans
+## `CombatStats` : ce DTO est « ce qu'un corps vaut sur le plateau », et il est **le même
+## pour les deux camps**. Y mettre un champ qu'un ouvrier porterait toujours à zéro l'aurait
+## rendu asymétrique pour rien.
+var _booty: Dictionary[StringName, int] = {}
+
+## Unités de réserve emportées depuis l'ouverture.
+var _plunder: int = 0
+
+## Le rectangle du bâti tel qu'il était à l'ouverture.
+##
+## **Figé, et c'est une décision.** Le recalculer à chaque manche ferait rétrécir l'enceinte
+## à mesure qu'on rase ses murs, donc rapporterait *moins* à une vague qui casse *plus*. Le
+## village qu'on pille est celui qu'on a trouvé en arrivant.
+var _enclosure: Rect2i
+
 ## Plateau vide, prêt à recevoir des corps.
 ##
 ## Il s'ouvre nu et se remplit par `deploy()` et `send()` plutôt que de tout recevoir d'un
@@ -63,16 +106,20 @@ var _fallen: Array[StringName] = []
 ## complète à l'ouverture obligerait l'écran de `F3` à la constituer avant de pouvoir
 ## montrer quoi que ce soit.
 static func open(terrain: TerrainQuery, city: CitySnapshot, balance: CombatBalance,
-		rng: RandomNumberGenerator) -> CombatBoard:
+		rng: RandomNumberGenerator, rounds: int) -> CombatBoard:
 	assert(terrain != null, "plateau sans relief")
 	assert(city != null, "plateau sans ville")
 	assert(balance != null, "plateau sans équilibrage")
 	assert(rng != null, "plateau sans générateur — voir CLAUDE.md, déterminisme")
+	assert(rounds > 0, "bataille de %d manche(s)" % rounds)
 	var board := CombatBoard.new()
 	board._terrain = terrain
 	board._city = city
 	board._balance = balance
 	board._rng = rng
+	board._rounds = rounds
+	if city.count() > 0:
+		board._enclosure = BattleGround.built_area(city)
 	return board
 
 # --- mise en place ---------------------------------------------------------------------
@@ -105,6 +152,7 @@ func send(id: StringName, enemy: EnemyData, cell: Vector2i) -> void:
 	assert(enemy != null, "entrée d'un assaillant nul")
 	assert(can_stand(cell), "assaillant posé sur une case occupée ou barrée : %s" % cell)
 	_enter(Combatant.create(id, Combatant.Side.FOE, cell, enemy.to_stats()))
+	_booty[id] = enemy.plunder
 
 # --- lecture ---------------------------------------------------------------------------
 
@@ -126,6 +174,48 @@ func balance() -> CombatBalance:
 ## Manche en cours, à partir de 1.
 func round_number() -> int:
 	return _round
+
+## Manches à tenir pour que la vague reparte.
+func rounds() -> int:
+	return _rounds
+
+## La bataille est-elle finie ?
+##
+## Deux fins, une seule porte. `DESIGN.md` 3.6 : « Une vague est une razzia, pas un duel.
+## Tenir N tours suffit à ce qu'elle reparte ; battre tous les ennemis donne un bonus
+## par-dessus. » Il n'y a donc **ni victoire ni défaite** — la vague repart dans les deux
+## cas, et ce qui les sépare est ce qu'elle emporte en chemin.
+##
+## Un village vidé de ses défenseurs ne met pas fin à la bataille : les manches restantes se
+## jouent sans lui, et c'est ce qui rend la fuite coûteuse. C'est la seule conséquence de
+## cette porte qui se discute, et elle est du bon côté — une razzia qui s'arrêterait faute
+## d'adversaire récompenserait le fait de ne plus en avoir.
+func is_over() -> bool:
+	return _round > _rounds or (_sent > 0 and standing(Combatant.Side.FOE).is_empty())
+
+## Tous les assaillants sont-ils tombés ?
+##
+## Le nettoyage complet de `DESIGN.md` 3.6, celui qui « donne un bonus par-dessus ». Ce que
+## ce bonus vaut n'est pas ici et n'est nulle part : le rapport le constate, et `I3` le
+## paiera.
+##
+## Il exige qu'une vague soit **venue**. Un plateau où personne n'est entré n'a balayé
+## personne, et le rendre vrai par vacuité ferait passer une bataille qui n'a pas eu lieu
+## pour une victoire nette.
+func swept() -> bool:
+	return _sent > 0 and standing(Combatant.Side.FOE).is_empty()
+
+## Le rectangle du bâti tel qu'il était à l'ouverture. Vide si le village l'était.
+##
+## C'est l'enceinte que le pillage compte : un assaillant qui y passe une manche emporte ce
+## que son `EnemyData` dit. Un rectangle et non les seules cases bâties — ce qu'on défend
+## est un village, et les trous entre les maisons en font partie.
+func enclosure() -> Rect2i:
+	return _enclosure
+
+## Unités de réserve que la vague a emportées depuis l'ouverture.
+func plunder() -> int:
+	return _plunder
 
 ## Camp dont c'est le tour.
 func side() -> Combatant.Side:
@@ -268,6 +358,38 @@ func interrupted() -> Array[Vector2i]:
 func fallen() -> Array[StringName]:
 	return _fallen.duplicate()
 
+# --- ce que la vague annonce ------------------------------------------------------------
+
+## Enregistre ce que chaque assaillant annonce pour son tour.
+##
+## Le plateau **tient** les intentions sans les **produire** : `WaveAI` décide, ce fichier
+## se souvient, et l'écran lit. Trois rôles, trois endroits. C'est ce qui permet au harnais
+## de jouer la vague à la main sans que rien ne réannonce derrière lui, et c'est aussi ce
+## qui garde un plateau testable sans IA.
+##
+## Elle **remplace** la table précédente plutôt que de la compléter : une annonce vaut pour
+## un tour, et un reliquat de la manche d'avant serait une case allumée que plus personne ne
+## frappera.
+func announce(table: Dictionary[StringName, CombatIntent]) -> void:
+	_intents.clear()
+	for id in table:
+		assert(has_body(id), "annonce d'un corps inconnu du plateau : %s" % id)
+		_intents[id] = table[id]
+
+## Ce que chaque corps annonce. Copie.
+func intents() -> Dictionary[StringName, CombatIntent]:
+	return _intents.duplicate()
+
+## Ce que ce corps annonce.
+##
+## Un corps qui n'a rien annoncé **avance**, et ce n'est pas un cas d'erreur : c'est ce que
+## fait un renfort qui vient d'entrer après le tour d'annonce. Le jour où `X6` en fera
+## arriver, il n'y aura rien à écrire ici.
+func intent_of(id: StringName) -> CombatIntent:
+	if not _intents.has(id):
+		return CombatIntent.advance()
+	return _intents[id]
+
 # --- les deux verbes -------------------------------------------------------------------
 
 ## Déplace ce corps sur cette case.
@@ -339,7 +461,15 @@ func strike(id: StringName, cell: Vector2i) -> StrikeResult:
 ##
 ## Le camp qui prend la main retrouve ses gestes. Rafraîchir à l'entrée plutôt qu'à la
 ## sortie évite de rendre son tour à quelqu'un qui n'a pas encore joué le sien.
+##
+## **Le butin se compte à la fermeture du tour de la vague**, donc ici et pas ailleurs.
+## `DESIGN.md` 3.6 parle de ce qu'ils ont « emporté **entre-temps** » : le pillage court
+## pendant la bataille et non à son départ, ce qui fait payer les deux bonnes façons de
+## jouer — les abattre vite, ou les tenir dehors. Une vague bloquée à la lisière repart les
+## mains vides sans qu'une règle ait à le dire.
 func end_turn() -> void:
+	if _side == Combatant.Side.FOE:
+		_loot()
 	_side = (Combatant.Side.FOE if _side == Combatant.Side.FRIEND
 		else Combatant.Side.FRIEND)
 	if _side == Combatant.Side.FRIEND:
@@ -349,6 +479,50 @@ func end_turn() -> void:
 			continue
 		piece.refresh()
 
+# --- ce que la bataille a coûté ---------------------------------------------------------
+
+## Le rapport de cette bataille.
+##
+## **C'est le producteur que `DESIGN.md` 3.6 réclame depuis `F1`**, et il n'a rien à
+## calculer : tout ce qu'il rend, le plateau le tient déjà. Un résolveur rend un rapport ;
+## un combat tactique attend le joueur pendant des dizaines de gestes, puis rend le même
+## rapport. C'est toute la correction que le document a faite après `F1`, et elle se lit
+## ici — l'applicateur de `RunOrchestrator.fight()` ne changera pas d'une ligne à `F3b`.
+##
+## Il se demande à tout moment et rend l'état courant, comme `RunOrchestrator.day_summary()`
+## rend un bilan vide le matin. Une bataille qu'on interrogerait à la deuxième manche
+## répondrait ce qu'elle a coûté jusque-là, ce qui est la bonne réponse et non un cas
+## particulier.
+##
+## Les **pertes** y sont dans l'ordre de la chute et non du déploiement, à l'inverse du
+## bouchon : ici les morts tombent un à un, et qui est tombé en premier se raconte.
+func to_report() -> DamageReport:
+	return DamageReport.create(damage_taken(), wrecked(), interrupted(), fallen(),
+		_plunder, _work_lines(), swept())
+
+## Le journal de ceux qui ont tenu la ligne.
+##
+## Tous les engagés, tombés compris : un mort a tenu la ligne, et `DamageReport.fighters()`
+## en dépend. Des `WorkLine` sans cellule — on ne défend pas le village *en* une case —, et
+## la famille vient de `data/balance/` comme depuis `F1`.
+func _work_lines() -> Array[WorkLine]:
+	var work: Array[WorkLine] = []
+	for piece in _bodies:
+		if not piece.is_friend():
+			continue
+		work.append(WorkLine.create(piece.id(), WorkLine.NO_CELL,
+			_balance.combat_skill_family))
+	return work
+
+## Ce que les assaillants encore debout dans l'enceinte emportent, cette manche-ci.
+func _loot() -> void:
+	if not _enclosure.has_area():
+		return
+	for piece in standing(Combatant.Side.FOE):
+		if not _enclosure.has_point(piece.cell()):
+			continue
+		_plunder += _booty.get(piece.id(), 0)
+
 # --- privé -----------------------------------------------------------------------------
 
 ## Pose un corps sur le plateau.
@@ -356,6 +530,8 @@ func _enter(piece: Combatant) -> void:
 	assert(not _by_id.has(piece.id()), "deux corps nommés %s" % piece.id())
 	_bodies.append(piece)
 	_by_id[piece.id()] = piece
+	if not piece.is_friend():
+		_sent += 1
 
 ## Ce qu'un coup de ce corps porte, cette fois-ci.
 ##
