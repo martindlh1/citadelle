@@ -136,15 +136,15 @@ func test_the_line_total_is_floored() -> void:
 func test_a_held_wave_costs_nothing() -> void:
 	var report := _resolve(PLAIN_DEFENSE)
 	assert_bool(report.is_held()).is_true()
-	assert_bool(report.is_empty()).is_true()
-	assert_int(report.breach()).is_equal(0)
 	assert_array(report.destroyed()).is_empty()
 	assert_int(report.plunder()).is_equal(0)
+	assert_bool(report.swept()).is_false()
 
 ## Une défense supérieure ne rend pas la brèche négative : on ne gagne rien à surdéfendre,
 ## on ne perd rien non plus.
 func test_an_overwhelming_defense_leaves_no_negative_breach() -> void:
-	assert_int(_resolve(1).breach()).is_equal(0)
+	assert_int(_breach_of(1)).is_equal(0)
+	assert_bool(_resolve(1).is_held()).is_true()
 
 ## La ligne est payée même quand elle n'a pas saigné. L'inverse rendrait une bonne défense
 ## punitive à la progression, ce qui serait exactement le contraire de ce qu'on veut
@@ -155,8 +155,13 @@ func test_a_held_wave_still_pays_the_line() -> void:
 # --- Ce que la brèche casse -----------------------------------------------------------
 
 ## La brèche est la puissance moins la défense, et tout le reste en découle.
+##
+## Elle se demande au résolveur depuis F2b et non plus au rapport : DESIGN.md 3.6 la
+## donnait pour jetable, et elle est partie du contrat avec `assault` et `defense`. Ce
+## que le rapport dit désormais est un fait — ce qui est cassé —, jamais l'intermédiaire
+## qui l'a produit.
 func test_the_breach_is_the_power_minus_the_defense() -> void:
-	assert_int(_resolve(PLAIN_DEFENSE + 3).breach()).is_equal(3)
+	assert_int(_breach_of(PLAIN_DEFENSE + 3)).is_equal(3)
 
 ## **Ce qui la retenait casse d'abord.** C'est la règle de `DESIGN.md` 3.6, et c'est elle
 ## qui fait qu'une palissade sert à quelque chose : sans elle, cinq bois n'achèteraient
@@ -348,6 +353,10 @@ func _resolve(power: int) -> DamageReport:
 
 func _defense_of(force: CombatForce) -> int:
 	return InstantCombatResolver.defense_of(_city, force, _balance)
+
+## Ce que le village de référence laisse passer d'une vague de cette puissance.
+func _breach_of(power: int) -> int:
+	return InstantCombatResolver.breach_of(_city, _plain_force(), _wave(power), _balance)
 
 func _wave(power: int) -> WaveDef:
 	var wave := WaveDef.new()

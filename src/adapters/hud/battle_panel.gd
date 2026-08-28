@@ -58,11 +58,15 @@ const ROW_FONT_SIZE := 12
 
 const KEY_ASSAULT := "Puissance"
 const KEY_LINE := "La ligne"
-const KEY_BREACH := "Brèche"
+const KEY_SWEPT := "L'assaut"
 const KEY_WALLS := "Les murs"
 const KEY_FALLEN := "Pertes"
 const KEY_PLUNDER := "Pillé"
 const KEY_XP := "Progression"
+
+## Ce que vaut un balayage complet reste à I3 ; le rapport le constate, l'écran le
+## dit, et ni l'un ni l'autre ne le paie.
+const TEXT_SWEPT := "balayé jusqu'au dernier"
 
 const BADGE_WAITING := "en approche"
 const BADGE_HELD := "contenue"
@@ -148,10 +152,8 @@ func show_report(report: BattleReport, wave_label: String, day: int,
 	_badge.text = BADGE_HELD if report.is_held() else ""
 	_badge.add_theme_color_override("font_color", HELD_COLOR)
 	_clear_rows()
-	_add_row(KEY_ASSAULT, "%d contre %d de défense"
-		% [damage.assault(), damage.defense()], VALUE_COLOR)
-	if not report.is_held():
-		_add_row(KEY_BREACH, str(damage.breach()), WARN_COLOR)
+	if damage.swept():
+		_add_row(KEY_SWEPT, TEXT_SWEPT, HELD_COLOR)
 	if not damage.damaged().is_empty():
 		_add_row(KEY_WALLS, _walls_text(damage), WARN_COLOR)
 	if not names.is_empty():

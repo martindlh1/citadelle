@@ -210,10 +210,11 @@ func _report_chronicle(balance: BalanceData) -> void:
 	for index in CHRONICLE_WAVES:
 		var wave := _waves[mini(index, _waves.size() - 1)]
 		var defense := _defense_of(state)
+		var breach := _breach_of(state, wave)
 		state.arm_wave(wave)
 		var report := RunOrchestrator.fight(state)
 		_lines.append("  %-*s %5d %5d %6d  %s" % [NAME_WIDTH, wave.label, defense,
-			report.damage().breach(), report.total_plundered(), _aftermath(state, report)])
+			breach, report.total_plundered(), _aftermath(state, report)])
 	_lines.append("")
 
 ## Ce que la vague a laissé debout, et ce qu'elle a emporté.
@@ -370,6 +371,16 @@ func _raise(state: RunState, data: BuildingData) -> void:
 func _defense_of(state: RunState) -> int:
 	return InstantCombatResolver.defense_of(state.city().to_snapshot(),
 		state.roster().to_combat(_combat.combat_skill_family, _workforce, _combat), _combat)
+
+## Ce que cette vague passerait à ce village, **avant** de la faire tomber.
+##
+## Elle se demande au bouchon depuis F2b : la brèche a quitté le DamageReport, où elle
+## décrivait l'arithmétique de ce résolveur et non un fait du combat. Elle se prend donc
+## ici et **avant** l'assaut, la ville d'après n'étant plus celle que la vague a trouvée.
+func _breach_of(state: RunState, wave: WaveDef) -> int:
+	return InstantCombatResolver.breach_of(state.city().to_snapshot(),
+		state.roster().to_combat(_combat.combat_skill_family, _workforce, _combat), wave,
+		_combat)
 
 ## Les prénoms de ces ouvriers, tant que le roster les connaît encore. Un mort vient d'en
 ## sortir : c'est son identifiant qui reste, et c'est suffisant pour le nommer.
