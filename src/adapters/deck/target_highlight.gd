@@ -1,6 +1,7 @@
 class_name TargetHighlight
 extends MultiMeshInstance3D
-## Les cellules où la carte tenue en main peut se jouer, marquées d'une dalle.
+## Un jeu de cellules marquées d'une dalle : les cibles d'une carte, ou ce qu'un corps
+## peut atteindre en combat.
 ##
 ## Vue pure. Elle ne décide RIEN : on lui donne une liste de cellules déjà validées et
 ## elle les marque. C'est la même discipline que PlacementGhost, qui reçoit un
@@ -31,14 +32,22 @@ const LIFT_RATIO := 0.006
 const TARGET_COLOR := Color(0.40, 0.90, 0.95, 0.30)
 
 var _metrics: TerrainMetrics
+var _tint := TARGET_COLOR
 
 ## Surbrillance prête à être ajoutée à l'arbre, invisible tant qu'aucune carte n'est
 ## tenue.
-static func create(metrics: TerrainMetrics) -> TargetHighlight:
+##
+## La **teinte est un argument** depuis `F3a`, et c'est la seule chose que ce fichier ait
+## gagnée en changeant de métier. Le combat en pose deux d'un coup — où l'on peut aller, ce
+## qu'on peut frapper — et deux voiles de la même couleur seraient un seul voile. Rien
+## d'autre ne bouge : la vue reçoit toujours une liste de cellules déjà validées et se
+## contente de les marquer.
+static func create(metrics: TerrainMetrics, tint := TARGET_COLOR) -> TargetHighlight:
 	assert(metrics != null, "surbrillance de cibles sans métrique")
 	var highlight := TargetHighlight.new()
 	highlight.name = "TargetHighlight"
 	highlight._metrics = metrics
+	highlight._tint = tint
 	highlight.material_override = _make_material()
 	highlight.multimesh = _make_multimesh()
 	# Un voile de cibles qui projetterait une ombre dessinerait un damier sombre à côté
@@ -66,7 +75,7 @@ func show_targets(cells: Array[Vector2i], heights: PackedInt32Array) -> void:
 		base.y += thickness * 0.5 + LIFT_RATIO * tile
 		multimesh.set_instance_transform(index,
 			Transform3D(Basis.IDENTITY.scaled(Vector3(tile, thickness, tile)), base))
-		multimesh.set_instance_color(index, TARGET_COLOR)
+		multimesh.set_instance_color(index, _tint)
 	visible = true
 
 ## Retire toutes les marques. Aucune carte n'est tenue, ou aucune cible n'existe.
