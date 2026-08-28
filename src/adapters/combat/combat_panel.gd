@@ -17,6 +17,12 @@ extends PanelContainer
 ## interrogeant le roster réussit pour tout le monde sauf pour ceux dont il est justement
 ## question. Un assaillant n'a d'ailleurs de nom dans aucun roster.
 ##
+## **Elle dit ce que la vague annonce, et elle le demande.** `CombatIntent` existe depuis
+## `F2b` ; « que va-t-il faire ? » est donc une question du domaine, exactement comme
+## « jusqu'où puis-je frapper » l'était à `F3a`. Un panneau qui déduirait l'intention d'une
+## portée finirait par annoncer autre chose que ce qui tombera — c'est le défaut qu'`E2` et
+## `W2` n'arrêtent pas d'épingler.
+##
 ## Elle garde les **tombés** en liste, alors que la carte ne montre plus leur pion. Le partage
 ## est celui qu'`I2` a payé cher : la carte montre l'état, le panneau raconte. Un mort qui
 ## disparaîtrait des deux endroits laisserait le joueur compter ses gens pour comprendre ce
@@ -28,6 +34,21 @@ signal body_picked(body: StringName)
 
 ## Bouton de fin de tour.
 signal turn_ended()
+
+## Ce qu'un assaillant annonce, en un mot.
+##
+## Deux mots pour deux entrées de vocabulaire, et il n'y en aura jamais beaucoup plus : 3.6
+## annonce un renfort et un état pour `X5` et `X6`, pas une grammaire.
+const INTENT_STRIKE := "frappe"
+const INTENT_ADVANCE := "avance"
+
+## Ce que le bandeau dit quand la vague est repartie.
+##
+## Deux fins et deux phrases : `DESIGN.md` 3.6 pose qu'il n'y a ni victoire ni défaite, mais
+## tenir une vague et la détruire restent deux réussites différentes, et la seconde vaudra un
+## bonus à `I3`.
+const TITLE_SWEPT := "Vague balayée"
+const TITLE_LEFT := "La vague repart"
 
 const PANEL_WIDTH := 260.0
 const MARGIN := 10
@@ -44,7 +65,14 @@ const SPENT_COLOR := Color(0.55, 0.57, 0.62)
 ## Encre d'un corps tombé.
 const FALLEN_COLOR := Color(0.44, 0.40, 0.42)
 
+## Ce que le village perd. Même teinte que l'écrêtage et la famine sur les autres vues.
+const WARN_COLOR := Color(0.95, 0.62, 0.35)
+
+## Ce qui tient. Le bandeau la prend quand la vague est repartie.
+const HELD_COLOR := Color(0.55, 0.80, 0.60)
+
 var _title: Label
+var _bill: Label
 var _rows: VBoxContainer
 var _end_turn: Button
 var _cards: Array[Button] = []
@@ -76,6 +104,10 @@ static func create() -> CombatPanel:
 	panel._title = _make_text("", TITLE_SIZE, Color.WHITE)
 	column.add_child(panel._title)
 
+	panel._bill = _make_text("", ROW_SIZE, WARN_COLOR)
+	panel._bill.visible = false
+	column.add_child(panel._bill)
+
 	panel._rows = VBoxContainer.new()
 	column.add_child(panel._rows)
 
@@ -95,10 +127,17 @@ func show_board(board: CombatBoard, held: StringName,
 		names: Dictionary[StringName, String]) -> void:
 	assert(board != null, "panneau de combat sans plateau")
 	var playing := board.side()
-	_title.text = "Manche %d · %s" % [board.round_number(),
-		"Ouvriers" if playing == Combatant.Side.FRIEND else "Vague"]
-	_title.add_theme_color_override("font_color",
-		BodyRenderer.FRIEND_COLOR if playing == Combatant.Side.FRIEND else FOE_COLOR)
+	var over := board.is_over()
+	if over:
+		_title.text = TITLE_SWEPT if board.swept() else TITLE_LEFT
+	else:
+		_title.text = "Manche %d · %s" % [board.round_number(),
+			"Ouvriers" if playing == Combatant.Side.FRIEND else "Vague"]
+	_title.add_theme_color_override("font_color", HELD_COLOR if over
+		else BodyRenderer.FRIEND_COLOR if playing == Combatant.Side.FRIEND else FOE_COLOR)
+	_bill.text = "%d de réserve emportée" % board.plunder()
+	_bill.visible = board.plunder() > 0
+	_end_turn.disabled = over
 
 	var bodies := board.bodies()
 	_ids.clear()
@@ -106,7 +145,8 @@ func show_board(board: CombatBoard, held: StringName,
 		_ids.append(bodies[index].id())
 		_card(index).visible = true
 		_fill_card(_card(index), bodies[index], playing, held,
-			names.get(bodies[index].id(), String(bodies[index].id())))
+			names.get(bodies[index].id(), String(bodies[index].id())),
+			board.intent_of(bodies[index].id()), over)
 	for spare in range(bodies.size(), _cards.size()):
 		_cards[spare].visible = false
 
@@ -116,21 +156,31 @@ func show_board(board: CombatBoard, held: StringName,
 ## un corps **tombé**, un corps du camp qui **ne joue pas**, et un corps qui a déjà tout
 ## dépensé. Le troisième est le seul sur lequel le joueur puisse encore agir — en le laissant
 ## tranquille — donc c'est le seul qui doit se distinguer d'un coup d'œil.
+##
+## Une fiche d'assaillant montre son **annonce** pendant le tour du joueur, et ses gestes
+## restants pendant le sien. Une vague repartie n'annonce plus rien et n'a plus de geste :
+## la colonne se vide, comme celle d'un tombé. C'est le partage juste : ce qu'un corps a encore à dépenser
+## n'intéresse que celui qui le joue, et ce qu'il s'apprête à faire n'intéresse que l'autre.
 func _fill_card(card: Button, body: Combatant, playing: Combatant.Side,
-		held: StringName, shown: String) -> void:
+		held: StringName, shown: String, intent: CombatIntent, over: bool) -> void:
 	var gestures := PackedStringArray()
 	if not body.has_moved():
 		gestures.append("pas")
 	if not body.has_struck():
 		gestures.append("coup")
+	var doing := " ".join(gestures)
+	if not body.is_friend() and playing == Combatant.Side.FRIEND:
+		doing = INTENT_STRIKE if intent.is_bound() else INTENT_ADVANCE
 	card.text = "%s %-10s %2d PV  %s" % [
 		"▸" if body.id() == held else "·",
 		("† " + shown) if body.is_down() else shown,
 		body.hit_points(),
-		"" if body.is_down() else " ".join(gestures)]
-	card.tooltip_text = "%s — %d/%d PV, portée %d, %d de déplacement, marche de %d" % [
+		"" if body.is_down() or over else doing]
+	card.tooltip_text = "%s — %d/%d PV, portée %d, %d de déplacement, marche de %d%s" % [
 		shown, body.hit_points(), body.stats().hit_points(), body.stats().reach(),
-		body.stats().move(), body.stats().climb()]
+		body.stats().move(), body.stats().climb(),
+		"" if not intent.is_bound() or body.is_friend()
+			else "\nil frappera %s" % intent.cell()]
 	card.disabled = body.is_down() or body.side() != playing
 	var ink := FALLEN_COLOR if body.is_down() \
 		else SPENT_COLOR if body.side() != playing \

@@ -105,6 +105,15 @@ const SHOT_SELECT_FLAG := "--shot-select"
 ## n'a pas d'IA — c'est un état qui ne s'obtient que par un geste, comme le repli.
 const SHOT_FOES_FLAG := "--shot-foes"
 
+## Manches que l'IA de la vague joue avant de capturer. Argument entier.
+##
+## `--shot-foes` passe la main au camp d'en face **sans le faire jouer** : c'est l'état
+## d'un tour qu'on mène soi-même, et `F2b` le garde atteignable parce qu'on peut encore
+## jouer les deux camps. Celui-ci laisse l'IA agir, ce qui est l'autre valeur du même
+## interrupteur — `CLAUDE.md` demande depuis `P1a` qu'un drapeau atteigne **chacune** des
+## valeurs d'un état sur lequel une vue commute.
+const SHOT_ROUNDS_FLAG := "--shot-rounds"
+
 ## Rejoue le run entier sous chaque variante d'équilibrage et imprime ce que ça donne.
 ##
 ## Le seul drapeau de ce fichier qui ne capture pas une image, et il est ici quand même :

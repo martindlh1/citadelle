@@ -83,8 +83,14 @@ obligatoire ; les autres sont optionnels :
 | `--shot-view v` | cran d'affichage du HUD : `complet`, `essentiel`, `masque`, ou `aucun` *(harnais Run)* |
 | `--shot-restart` | relance un run neuf, sur le seed suivant, avant de capturer *(harnais Run)* |
 | `--shot-select n` | sélectionne le corps de ce rang sur le champ de bataille *(harnais Bataille)* |
-| `--shot-foes` | passe la main à la vague avant de capturer *(harnais Bataille)* |
+| `--shot-foes` | passe la main à la vague et la rend au joueur *(harnais Bataille)* |
+| `--shot-rounds n` | laisse l'IA de la vague jouer ce nombre de manches *(harnais Bataille)* |
 | `--chronicle` | rejoue le run sous les quatre variantes d'équilibrage de `I2b` et imprime ce que ça donne, sans image *(harnais Run)* |
+
+**`--shot-foes` et `--shot-rounds` sont les deux valeurs du même interrupteur.** Depuis
+`F2b` l'IA tient la vague par défaut : `--shot-rounds` la laisse jouer, `--shot-foes`
+lui reprend la main pour capturer un tour qu'on mène soi-même. Une vue qui commute sur
+un état doit avoir un drapeau par valeur, sinon l'une des deux n'est jamais regardée.
 
 `--shot-fold`, `--shot-piles`, `--shot-restart` et `--shot-foes` sont des drapeaux **nus**, sans valeur :
 on les pose ou on ne les pose pas. Ce sont les deux cas les plus nets de la phrase ci-dessous, parce que ni

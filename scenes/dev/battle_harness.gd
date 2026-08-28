@@ -1,10 +1,12 @@
 extends Node
 ## Harnais de dev du système Combat — jalon `F3a` : la bataille, jouée à la souris.
 ##
-## **On y joue les deux camps.** Il n'y a pas encore d'IA — c'est `F2b` —, et c'est
-## précisément ce qui rend ce harnais utile : jouer la vague à la main est la seule façon de
-## sentir le format avant que quelqu'un décide à sa place, et ce sera le banc d'essai de
-## l'IA le jour où elle existera. On pourra rejouer le même plateau des deux façons.
+## **La vague se joue toute seule, et on peut lui reprendre la main.** `F3a` livrait un
+## plateau où l'on jouait les deux camps faute d'IA ; `F2b` en a une, et elle tient la barre
+## par défaut. La touche `A` la rend au joueur, ce qui n'est pas une commodité : c'est le
+## banc d'essai que `F3a` annonçait en passant devant ce jalon — **le même plateau se rejoue
+## des deux façons**, et c'est la seule manière de savoir si ce que l'IA décide ressemble à
+## ce qu'on ferait.
 ##
 ## Il remplace le damier ASCII de `F2a`, qui a servi à ce pour quoi il était fait — trouver
 ## deux défauts en une soirée — et que la vue rend illisible par comparaison. Le pavé de
@@ -60,8 +62,24 @@ const STRIKE_COLOR := Color(0.95, 0.30, 0.24, 0.55)
 ## Décollement du voile rouge au-dessus du bleu, en fractions de tuile.
 const STRIKE_LIFT := 0.012
 
+## Teinte des cases que la vague a annoncées.
+##
+## Ambre, et ni le bleu de « où je peux aller » ni le rouge de « ce que je peux frapper » —
+## parce que ce n'est ni l'un ni l'autre : c'est ce qui va m'arriver si je reste là. Trois
+## voiles, trois questions, trois couleurs.
+const INTENT_COLOR := Color(0.98, 0.70, 0.20, 0.52)
+
+## Décollement du voile ambre au-dessus des deux autres, en fractions de tuile.
+##
+## Deux crans plutôt qu'un : les trois voiles se disputeraient sinon le même Y sur les cases
+## à la fois atteignables, frappables et menacées — c'est-à-dire les voisines d'un contact,
+## donc exactement celles qui décident. `F3a` a payé ce défaut une fois pour deux couches.
+const INTENT_LIFT := 0.024
+
 const HELP_KEY := KEY_H
 const NEW_BATTLE_KEY := KEY_N
+## Rend la vague au joueur, ou la rend à l'IA.
+const AUTO_WAVE_KEY := KEY_A
 ## Cases de dégagement autour du champ de bataille au cadrage.
 const FRAME := 2
 
@@ -81,6 +99,7 @@ var _bodies: BodyRenderer
 var _buildings: BuildingRenderer
 var _reach: TargetHighlight
 var _strike: TargetHighlight
+var _intent: TargetHighlight
 var _panel: CombatPanel
 var _report: Label
 
@@ -98,6 +117,12 @@ var _names: Dictionary[StringName, String] = {}
 
 ## Cases de la carte triées par distance au Cœur, calculées une fois.
 var _spiral: Array[Vector2i] = []
+
+## L'IA tient-elle la vague ?
+##
+## Un état d'affichage au sens de `CLAUDE.md` — il ne change rien à ce que le plateau sait,
+## seulement qui décide pour un camp —, donc il vit ici et pas dans une vue.
+var _wave_is_auto := true
 
 var _lines := PackedStringArray()
 
@@ -117,6 +142,7 @@ var _help_open := false
 ## lignes le rendent dans le bon repère, et il sort désormais sur **toutes** les captures.
 var _reach_count := 0
 var _strike_count := 0
+var _intent_count := 0
 
 func _ready() -> void:
 	var balance := GameDatabase.get_balance()
@@ -143,6 +169,10 @@ func _ready() -> void:
 	# donc les seules qui comptent. Trouvé en capture : le rouge y disparaissait par plaques.
 	_strike.position.y = _metrics.tile_size() * STRIKE_LIFT
 	add_child(_strike)
+	_intent = TargetHighlight.create(_metrics, INTENT_COLOR)
+	_intent.name = "IntentHighlight"
+	_intent.position.y = _metrics.tile_size() * INTENT_LIFT
+	add_child(_intent)
 	_bodies = BodyRenderer.create(_metrics)
 	add_child(_bodies)
 
@@ -192,6 +222,9 @@ func _handle_key(key: InputEventKey) -> void:
 			_board = _open_board()
 			_held = &""
 			_refresh()
+		AUTO_WAVE_KEY:
+			_wave_is_auto = not _wave_is_auto
+			_refresh()
 		KEY_ENTER, KEY_KP_ENTER:
 			_end_turn()
 		_:
@@ -224,9 +257,19 @@ func _on_body_picked(body: StringName) -> void:
 	_held = &"" if body == _held else body
 	_refresh()
 
+## Finit le tour, et laisse l'IA mener celui de la vague si elle en a la charge.
+##
+## Elle passe par `WaveAI.take_turn()` et jamais par les trois appels qu'elle enchaîne :
+## c'est l'argument que `W2` a employé pour faire passer l'auto-affectation scriptée par
+## `RunManager.auto_staff()`, et que `P1a` a payé pour ne pas l'avoir suivi.
 func _end_turn() -> void:
+	if _board.is_over():
+		return
 	_board.end_turn()
 	_held = &""
+	if _wave_is_auto and _board.side() == Combatant.Side.FOE:
+		for blow in WaveAI.take_turn(_board):
+			print("[battle] %s" % _tell(blow))
 	_refresh()
 
 ## Redessine tout ce qui dépend du plateau.
@@ -247,6 +290,7 @@ func _refresh() -> void:
 		var piece := _board.body(_held)
 		_show(_reach, [] if piece.has_moved() else _board.reachable(_held).keys())
 		_show(_strike, [] if piece.has_struck() else _board.strikeable(_held))
+	_show(_intent, _announced_of(_board))
 	_panel.show_board(_board, _held, _names)
 
 ## Allume ces cases sur cette couche, chacune à la hauteur de son relief.
@@ -257,8 +301,10 @@ func _refresh() -> void:
 func _show(layer: TargetHighlight, cells: Array) -> void:
 	if layer == _reach:
 		_reach_count = cells.size()
-	else:
+	elif layer == _strike:
 		_strike_count = cells.size()
+	else:
+		_intent_count = cells.size()
 	var targets: Array[Vector2i] = []
 	var heights := PackedInt32Array()
 	for cell in cells:
@@ -297,6 +343,7 @@ func _build_report() -> void:
 	_keys.append("Clic gauche : prendre un corps, ou l'emmener sur une case bleue")
 	_keys.append("Clic droit  : frapper une case rouge, quoi qu'il y ait dessus")
 	_keys.append("Entrée : finir le tour   N : nouvelle bataille   H : les chiffres")
+	_keys.append("A : rendre la vague à l'IA ou la reprendre en main")
 	_keys.append("Q/E : pivoter   molette : zoom   clic milieu : déplacer   R : recadrer")
 	_lines.append("Citadelle — harnais Bataille (F3a)")
 	_lines.append("")
@@ -322,7 +369,169 @@ func _build_report() -> void:
 			enemy.climb])
 	_lines.append("")
 	_report_blocking()
+	_report_dodging()
+	_report_chronicle()
 	_report_verdict()
+
+## Ce qu'esquiver retire à la vague.
+##
+## **La seule table qui mesure la décision de ce jalon**, et elle la mesure des deux côtés :
+## on rejoue la même manche, mêmes corps et même seed, une fois avec des défenseurs immobiles
+## et une fois avec des défenseurs qui quittent la case annoncée. Si les deux lignes se
+## ressemblent, l'annonce n'engage pas, et toute la règle est décorative.
+##
+## Les trois colonnes ne sortent pas du même compteur, par la règle de `I2b` : les dégâts se
+## prennent sur les points de vie des ouvriers, les coups sur ce que l'IA rend, les coups à
+## vide sur la nature de chacun. Deux colonnes qui se corroborent doivent venir d'ailleurs.
+func _report_dodging() -> void:
+	var contact := _most_committed_round()
+	_lines.append("Ce qu'esquiver retire à la vague — manche %d, mêmes corps, même seed"
+		% contact)
+	_lines.append("  %-24s %8s %8s %8s" % ["défenseurs", "dégâts", "coups", "à vide"])
+	_lines.append("  %-24s %8d %8d %8d" % _one_round(contact, false))
+	_lines.append("  %-24s %8d %8d %8d" % _one_round(contact, true))
+	_lines.append("")
+	_lines.append("  Une annonce engage : le coup part sur la case, pas sur la cible. La")
+	_lines.append("  ligne du bas doit donc coûter moins que celle du haut pour autant de")
+	_lines.append("  coups portés, et la différence doit se retrouver en « à vide ».")
+	_lines.append("")
+
+## Ce qu'une vague fait seule, manche par manche, contre un village qui ne bouge pas.
+##
+## Elle répond à trois questions qu'aucune image ne pose. **Le vocabulaire est-il exercé ?**
+## Si « annoncent » reste à zéro, personne ne désigne jamais de case et la moitié du jalon
+## est invisible. **Le pillage court-il ?** Il doit être nul tant qu'ils sont dehors et monter
+## dès qu'ils entrent. **La borne mord-elle ?** Une razzia qui a tout fini avant la dernière
+## manche n'a rien à borner — ce que `F2a` disait déjà de ces chiffres-là.
+##
+## Les colonnes d'annonce se lisent **à l'entrée** de la manche, qui est le moment où le
+## joueur les verrait ; le pillage et les debout de la ligne « fin » se lisent après la
+## dernière. Mélanger les deux moments sur une même ligne ferait dire à la table ce qu'elle
+## ne mesure pas.
+func _report_chronicle() -> void:
+	var board := _open_board()
+	_lines.append("Ce qu'une vague fait seule, manche par manche — %s, %d manche(s) à tenir"
+		% [_wave.label, _wave.rounds])
+	_lines.append("  %6s %10s %9s %10s %6s %7s" % ["manche", "annoncent", "avancent",
+		"dans murs", "pillé", "debout"])
+	while not board.is_over():
+		_lines.append("  %6d %10d %9d %10d %6d %7d" % [board.round_number(),
+			_bound_count(board), _loose_count(board), _inside_count(board),
+			board.plunder(), board.standing(Combatant.Side.FRIEND).size()])
+		board.end_turn()
+		WaveAI.take_turn(board)
+	_lines.append("  %6s %10s %9s %10d %6d %7d" % ["fin", "—", "—", _inside_count(board),
+		board.plunder(), board.standing(Combatant.Side.FRIEND).size()])
+	_lines.append("")
+	var report := board.to_report()
+	_lines.append("  Au bout : %s — %d bâtiment(s) frappé(s) dont %d tombé(s), %d mort(s)."
+		% ["balayée" if report.swept() else "repartie", report.damaged().size(),
+			report.destroyed().size(), report.lost().size()])
+	_lines.append("")
+
+## La manche où la vague annonce le plus de cases.
+##
+## Prise plutôt que fixée à la première, et c'est la leçon de `CLAUDE.md` sur les mesures qui
+## empruntent un raccourci : la vague entre à trois cases de la lisière, donc **personne n'a
+## encore de cible à la manche 1**. Y mesurer l'esquive mesurerait l'approche, et rendrait un
+## chiffre juste sur la mauvaise manche — ce qui est une table qui ment sans se tromper.
+##
+## Elle rejoue la bataille entière pour la trouver. C'est trois plateaux de plus au boot, et
+## le prix est invisible ; le prix de l'autre erreur ne l'est pas.
+func _most_committed_round() -> int:
+	var board := _open_board()
+	var best := 1
+	var most := -1
+	while not board.is_over():
+		if _bound_count(board) > most:
+			most = _bound_count(board)
+			best = board.round_number()
+		board.end_turn()
+		WaveAI.take_turn(board)
+	return best
+
+## Cette manche-là jouée sur un plateau neuf, les défenseurs esquivant l'annonce ou non.
+##
+## Les manches d'avant se rejouent à l'identique des deux côtés — l'IA est déterministe et le
+## seed est le même —, si bien que les deux lignes partent du **même** plateau sans qu'on ait
+## eu à le cloner.
+##
+## Rend la ligne de table : ce qu'ils étaient, les dégâts encaissés, les coups portés, ceux
+## qui sont partis dans le vide.
+func _one_round(until: int, dodging: bool) -> Array:
+	var board := _open_board()
+	while board.round_number() < until and not board.is_over():
+		board.end_turn()
+		WaveAI.take_turn(board)
+	var before := _friendly_hit_points(board)
+	if dodging:
+		_dodge_all(board)
+	board.end_turn()
+	var blows := WaveAI.play(board)
+	var voids := 0
+	for blow in blows:
+		if blow.hit() == StrikeResult.Hit.NOTHING:
+			voids += 1
+	return ["qui quittent la case" if dodging else "immobiles",
+		before - _friendly_hit_points(board), blows.size(), voids]
+
+## Fait quitter à chaque défenseur menacé la case qu'on vient d'annoncer contre lui.
+##
+## Elle prend la **première** case libre et non menacée qu'il peut atteindre : ce n'est pas
+## un bon coup, c'est une esquive minimale, et c'est exactement ce qu'on veut mesurer — le
+## gain d'un simple pas de côté, sans qu'aucune ruse ne s'y ajoute.
+func _dodge_all(board: CombatBoard) -> void:
+	var announced := _announced_of(board)
+	for piece in board.standing(Combatant.Side.FRIEND):
+		if not announced.has(piece.cell()):
+			continue
+		for cell in board.reachable(piece.id()):
+			if cell == piece.cell() or announced.has(cell):
+				continue
+			board.move(piece.id(), cell)
+			break
+
+## Les cases que la vague a annoncées, sur ce plateau.
+func _announced_of(board: CombatBoard) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	var table := board.intents()
+	for id in table:
+		var intent: CombatIntent = table[id]
+		if intent.is_bound():
+			cells.append(intent.cell())
+	return cells
+
+## Combien d'assaillants annoncent une case.
+func _bound_count(board: CombatBoard) -> int:
+	var bound := 0
+	for piece in board.standing(Combatant.Side.FOE):
+		if board.intent_of(piece.id()).is_bound():
+			bound += 1
+	return bound
+
+## Combien se contentent d'avancer.
+func _loose_count(board: CombatBoard) -> int:
+	return board.standing(Combatant.Side.FOE).size() - _bound_count(board)
+
+## Combien sont dans l'enceinte, donc en train de piller.
+func _inside_count(board: CombatBoard) -> int:
+	var inside := 0
+	for piece in board.standing(Combatant.Side.FOE):
+		if board.enclosure().has_point(piece.cell()):
+			inside += 1
+	return inside
+
+## Ce qui reste de points de vie au camp des ouvriers, tombés compris.
+##
+## Tombés compris, sans quoi la mesure **s'améliorerait** en perdant quelqu'un : un mort
+## quitte `standing()`, donc ses points de vie manquants aussi.
+func _friendly_hit_points(board: CombatBoard) -> int:
+	var left := 0
+	for piece in board.bodies():
+		if piece.is_friend():
+			left += piece.hit_points()
+	return left
+
 
 ## Ce qu'un corps interposé retire.
 ##
@@ -362,11 +571,17 @@ func _report_verdict() -> void:
 	_lines.append("  — un voile s'éteint quand son geste est dépensé, sinon l'écran promet")
 	_lines.append("    un second coup qui n'arrivera pas ;")
 	_lines.append("  — les deux camps se distinguent par la forme et pas seulement par la")
-	_lines.append("    teinte, sinon un pion à l'ombre devient indéchiffrable.")
+	_lines.append("    teinte, sinon un pion à l'ombre devient indéchiffrable ;")
+	_lines.append("  — un voile ambre marque ce que la vague a annoncé, et il doit se lire")
+	_lines.append("    par-dessus les deux autres : c'est la seule information qui coûte un")
+	_lines.append("    tour si on la manque ;")
+	_lines.append("  — les fiches d'en face disent « frappe » ou « avance » pendant notre")
+	_lines.append("    tour, et leurs gestes restants pendant le leur.")
 	_lines.append("")
-	_lines.append("Ce que F3a ne dit pas : ce que les assaillants décident (F2b), quand la")
-	_lines.append("vague repart (F2b), ni comment une bataille s'ouvre depuis une journée")
-	_lines.append("qui se ferme (F3b). Ici on joue les deux camps à la main, exprès.")
+	_lines.append("Ce que F2b ne dit pas : comment une bataille s'ouvre depuis une journée qui")
+	_lines.append("se ferme, ni ce qu'elle coûte au village — c'est F3b, qui branchera le")
+	_lines.append("DamageReport que ce plateau sait désormais rendre. Le bonus d'un balayage")
+	_lines.append("est constaté et pas payé : c'est I3, comme les chiffres de data/enemies/.")
 
 # --- capture ----------------------------------------------------------------------------
 
@@ -380,7 +595,11 @@ func _capture_if_asked() -> void:
 	var path := DevShot.path()
 	if path.is_empty():
 		return
+	var rounds := DevShot.argument(DevShot.SHOT_ROUNDS_FLAG).to_int()
+	for _turn in rounds:
+		_end_turn()
 	if DevShot.has_flag(DevShot.SHOT_FOES_FLAG):
+		_wave_is_auto = false
 		_end_turn()
 	var rank := DevShot.argument(DevShot.SHOT_SELECT_FLAG)
 	if not rank.is_empty():
@@ -402,8 +621,11 @@ func _capture_if_asked() -> void:
 		% [_board.round_number(),
 			"ouvriers" if _board.side() == Combatant.Side.FRIEND else "vague",
 			_held if not _held.is_empty() else "aucun"])
-	print("[battle_harness] voiles : %d case(s) atteignable(s), %d frappable(s)"
-		% [_reach_count, _strike_count])
+	print("[battle_harness] voiles : %d atteignable(s), %d frappable(s), %d annoncée(s)"
+		% [_reach_count, _strike_count, _intent_count])
+	print("[battle_harness] vague %s, %d pillé, %s"
+		% ["à l'IA" if _wave_is_auto else "à la main", _board.plunder(),
+			"repartie" if _board.is_over() else "en cours"])
 	print("[battle_harness] panneau en %s, %.0f x %.0f"
 		% [_panel.global_position, _panel.size.x, _panel.size.y])
 	var error := get_viewport().get_texture().get_image().save_png(path)
@@ -463,6 +685,9 @@ func _open_board() -> CombatBoard:
 		board.send(id, enemy, gates[rank])
 		_tints[id] = enemy.color
 		_names[id] = "%s %d" % [enemy.label, rank + 1]
+	# Sans cette ligne le premier tour du joueur se jouerait devant des assaillants muets :
+	# `take_turn()` ne réannonce que pour les manches suivantes.
+	WaveAI.declare(board)
 	return board
 
 ## Ouvre un vrai run, le fonde, et lui bâtit un village autour du Cœur.
