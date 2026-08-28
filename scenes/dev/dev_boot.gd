@@ -13,7 +13,7 @@ extends Node
 const REPORT_MARGIN := 16.0
 
 ## Harnais à lancer. Vide = aucun, on affiche le rapport de boot.
-const HARNESS := &"run"
+const HARNESS := &"battle"
 
 ## Identifiant de harnais -> script à instancier.
 const HARNESS_SCRIPTS: Dictionary[StringName, String] = {
@@ -25,6 +25,7 @@ const HARNESS_SCRIPTS: Dictionary[StringName, String] = {
 	&"run": "res://scenes/dev/run_harness.gd",
 	&"hud": "res://scenes/dev/hud_harness.gd",
 	&"combat": "res://scenes/dev/combat_harness.gd",
+	&"battle": "res://scenes/dev/battle_harness.gd",
 }
 
 ## Bascule plein écran / fenêtré, pour **tous** les harnais à la fois.
