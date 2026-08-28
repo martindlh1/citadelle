@@ -4,6 +4,141 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-28 — `F3a` : la bataille se regarde, et quatre défauts que seule l'image montre
+
+**État : terminé.** Trois commits sur `feat/f3a-battle-view`, tirée de `feat/f2a-battle-board`
+— la branche porte donc les deux jalons, comme `feat/i2b-knobs` en portait trois. Les trois
+commandes passent : boot sans erreur ni warning, tout `src/domain/` parse, **925 tests verts
+contre 918**. Les neuf harnais bootés un par un. Cinq captures.
+
+### Pourquoi un bout de `F3` est passé devant `F2b`
+
+C'est venu de toi, et l'argument tenait en une phrase : *« le rendu texte ne m'est pas aussi
+facile à lire »*. Le calendrier d'origine faisait écrire l'IA contre un damier ASCII, puis la
+vue après — c'est-à-dire décider du format en le lisant dans un terminal.
+
+Ce que la conversation a fait apparaître en plus, et qui rend l'ordre meilleur qu'il n'y
+paraissait : **sans IA, une vue laisse jouer les deux camps.** On sent donc le format en
+entier — déplacement, relief, blocage, la règle « on frappe la case » — sans qu'aucune ligne
+d'IA existe. Et `F2b` remplacera ton contrôle du camp d'en face par une IA, donc le **même
+plateau se rejouera des deux façons**. C'est le meilleur banc d'essai possible pour la
+question d'intentions qui reste ouverte.
+
+C'est la seconde fois qu'un ordre de jalons change en cours de route, après `E1b` passé avant
+`W1`, et la raison est de la même famille : **on ne fait pas de contenu dans un instrument
+qu'on ne sait pas lire.**
+
+### Ce qu'il a fallu écrire, et c'est peu
+
+`DevWorld` donnait déjà le ciel, le soleil, la caméra, le relief et le survol.
+`TargetHighlight` posait déjà un voile sur un jeu de cellules — il lui manquait une teinte en
+argument, une ligne. `BuildingRenderer` dessinait déjà la ville — il lui manquait une liste
+d'ancres à sauter, six lignes. `CellCursor` désignait déjà une case.
+
+Deux vues sont neuves : les pions, et un panneau. Le panneau est **la sœur d'`AssignmentPanel`
+jusque dans le geste** — on clique une fiche, puis on clique la carte —, ce que `P1a` a posé
+comme le vocabulaire du jeu et qu'il n'y avait aucune raison de rompre parce qu'on se bat.
+
+Trois choses ont débordé d'`adapters/`, et toutes les trois étaient prévues au plan sauf la
+troisième.
+
+**`CombatBoard.strikeable()`**, parce qu'une vue ne juge rien. Allumer les cases à portée
+*est* la question « jusqu'où puis-je frapper », et un écran qui recopierait `can_reach()`
+finirait par allumer autre chose que ce que `strike()` accepte. Elle rend **toutes** les cases
+à portée, vides comprises : filtrer sur ce qui s'y trouve ferait d'une case qui s'éteint une
+information que le joueur n'a pas à recevoir avant d'avoir frappé.
+
+**Deux refus qu'un écran rend nécessaires**, et ils sont le meilleur de la couche domaine.
+On ne frappe pas sa propre case — la portée inclut la distance zéro, donc un clic mal placé
+blesserait le sien. Et on ne dépense pas son pas pour rester où l'on est — `reachable()` rend
+toujours la case de départ à zéro, parce que c'est une vérité sur les distances, mais le geste
+brûlerait le déplacement du tour pour rien.
+
+Les deux sont dans le **domaine** et non dans la vue, par la règle qu'`E2` et `W2` n'arrêtent
+pas de prouver : une règle que deux écrans doivent se rappeler est une règle qu'un troisième
+oubliera. Et ni l'un ni l'autre n'aurait été cherché par un test : ce sont des pièges que
+l'existence d'un curseur crée, pas des règles qu'un domaine viole.
+
+**La couleur d'un `EnemyData`** est entrée, et son docstring l'annonçait mot pour mot : « elle
+arrivera avec le renderer qui la lit ». Il ne reste dehors que le butin, qui attend `F2b`.
+
+### Les quatre défauts que la capture a trouvés
+
+Aucun n'était cherché, aucun n'aurait été vu autrement. `src/adapters/` n'est pas testé et les
+trois commandes ne regardent pas l'écran : la capture **est** le contrôle du jalon.
+
+**La caméra cadrait les 32×32.** `DevWorld` cadre la grille entière, ce qui est juste pour les
+harnais qui la regardent toute — et illisible ici : une bataille tient dans une dizaine de
+cases, donc les pions faisaient trois pixels. Elle cadre le bâti plus la marge d'entrée, de
+sorte que la vague soit dans l'image dès la première frame.
+
+**Le rapport couvrait les deux tiers du champ.** Un jalon d'écran qui cache ce qu'il vient de
+rendre visible est un contresens. Seules les commandes restent affichées ; les tables partent
+sur la sortie standard et reviennent sous `H`.
+
+**Les assaillants étaient des cônes, et `TerrainDecorRenderer` dessine les forêts en cônes
+sombres.** Un pillard ne différait donc d'un arbre que par sa teinte — exactement ce que le
+docstring du renderer refuse trois paragraphes plus haut. Les rochers étant des dômes, les
+deux primitives libres de `T3` étaient prises ; un **tronc de cône** se glisse entre les deux
+et garde ses flancs courbes.
+
+**Et le voile rouge disparaissait pour un corps-à-corps.** Celui-là est le plus instructif,
+parce qu'il a failli me faire chercher au mauvais endroit. Le compteur ajouté à la capture a
+répondu « 13 cases atteignables, 4 frappables » — donc le domaine et le câblage étaient
+justes, et le défaut était une **opacité**. À 0,34 le voile tenait pour un archer, dont la
+portée couvre vingt-quatre cases, et s'effaçait pour les quatre d'un corps-à-corps : il
+disparaissait précisément dans le cas le plus fréquent.
+
+C'est la leçon de `P1b` telle quelle : **sonder un PNG rend un doute, faire dire le chiffre au
+harnais rend un nombre.** Les deux compteurs sortent désormais sur toutes les captures.
+
+Un cinquième défaut a été corrigé sans jamais être vu, parce qu'il se déduisait : les deux
+voiles étaient coplanaires, donc se disputaient le même Y sur toutes les cases à la fois
+atteignables et frappables — c'est-à-dire les voisines, donc les seules qui comptent.
+
+### Ce que je n'ai pas fait
+
+Aucune intention affichée : `F2b` n'a pas décidé de leur forme. Aucune IA. Aucun branchement
+sur le run — la bataille ne se déclenche pas à la fermeture d'une journée et ne rend aucun
+`DamageReport`, c'est `F3b`. Aucun cadrage sur le côté attaqué au-delà du recadrage sur le
+bâti. Et **aucun test d'adapter**, `CLAUDE.md` posant que `src/adapters/` n'est pas testé —
+les sept cas de plus couvrent les trois ajouts au domaine.
+
+`DamageReport` n'a toujours pas bougé, pour la raison écrite à `F2a` : il perdra `assault`,
+`defense` et `breach()` quand il y aura un producteur pour le remplir.
+
+### Un piège d'outil qui m'a coûté trois allers-retours
+
+Les backslashes d'un heredoc `<<'PY'` perdent un niveau d'échappement avant d'arriver à
+Python, y compris avec un délimiteur cité. Une continuation de ligne GDScript et un `"\n"`
+littéral n'ont donc jamais pu être trouvés dans un fichier où ils étaient pourtant. La
+parade est d'écrire le script de patch dans un fichier plutôt que de le passer en heredoc.
+
+### Prochain jalon
+
+**`F2b`** — les intentions, l'IA, la borne de tours, le pillage, le `DamageReport`. Il commence
+par ta question et non par du code : le grain du vocabulaire d'intentions, et notamment si une
+attaque à distance annonce sa case.
+
+Puis **`F3b`**, l'intégration, qui n'attend que ce rapport. Puis **`M1`**, puis **`I3`**.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien.** Aucune `.tscn` ni `project.godot` touché — les vues se bâtissent en code.
+
+- **`HARNESS` vaut `&"battle"`.** Clic gauche : prendre un corps, ou l'emmener sur une case
+  bleue. Clic droit : frapper une case rouge. `Entrée` finit le tour, `N` relance une bataille
+  neuve, `H` montre les chiffres. La caméra garde ses touches : `Q`/`E` pivotent, `R` recadre.
+- **Tu joues les deux camps**, exprès. Finis le tour et la vague devient jouable.
+- **Deux drapeaux de capture neufs** : `--shot-select n` prend le corps de ce rang,
+  `--shot-foes` passe la main à la vague. Documentés au README.
+- **Les chiffres sont des placeholders** et le harnais le dit : quatre assaillants balaient
+  trois défenseurs. C'est `I3`.
+- **La branche n'est pas fusionnée** : `feat/f3a-battle-view`, huit commits en tout — cinq
+  pour `F2a`, trois pour `F3a`.
+
+---
+
 ## 2026-08-28 — `F2a` : le plateau existe, le relief joue, et les deux camps se ressemblent enfin
 
 **État : terminé**, et `F2` est découpé en deux — `F2b` reste entier. Quatre commits sur
