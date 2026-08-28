@@ -12,3 +12,4 @@ damage_max = 3
 reach = 3
 move = 3
 climb = 1
+color = Color(0.85, 0.55, 0.25, 1)

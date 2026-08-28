@@ -198,6 +198,32 @@ func reachable(id: StringName) -> Dictionary[Vector2i, int]:
 	return CombatMovement.reachable(_terrain, obstacles(), piece.cell(), piece.stats(),
 		_balance)
 
+## Les cases que ce corps peut frapper d'où il se tient.
+## Précondition : `has_body(id)`.
+##
+## **Toutes les cases à portée, y compris les vides.** Un coup vise une case et non une
+## cible, donc la portée est une vérité géométrique et pas une liste de proies : filtrer sur
+## ce qui s'y trouve ferait de l'esquive de 3.6 une case qui s'éteint, c'est-à-dire une
+## information que le joueur n'a pas à recevoir avant d'avoir frappé.
+##
+## Sa propre case en est **retirée**, pour la raison écrite sur `StrikeResult.SELF`.
+##
+## Elle existe parce qu'une vue ne juge rien : allumer les cases à portée est exactement la
+## question « jusqu'où puis-je frapper », et un écran qui recopierait `can_reach()` finirait
+## par allumer autre chose que ce que `strike()` accepte.
+func strikeable(id: StringName) -> Array[Vector2i]:
+	var piece := body(id)
+	var reach := piece.stats().reach()
+	var cells: Array[Vector2i] = []
+	for offset in range(-reach, reach + 1):
+		var span := reach - absi(offset)
+		for side in range(-span, span + 1):
+			var cell := piece.cell() + Vector2i(offset, side)
+			if cell == piece.cell() or not _terrain.in_bounds(cell):
+				continue
+			cells.append(cell)
+	return cells
+
 ## Ce bâtiment est-il tombé pendant cette bataille ?
 func is_wrecked(anchor: Vector2i) -> bool:
 	if not _taken.has(anchor):
@@ -259,6 +285,8 @@ func move(id: StringName, to: Vector2i) -> MoveResult:
 		return MoveResult.refused(MoveResult.WRONG_SIDE)
 	if piece.has_moved():
 		return MoveResult.refused(MoveResult.ALREADY_MOVED)
+	if to == piece.cell():
+		return MoveResult.refused(MoveResult.NO_MOVE)
 	var within := reachable(id)
 	if not within.has(to):
 		return MoveResult.refused(MoveResult.OUT_OF_REACH)
@@ -288,6 +316,8 @@ func strike(id: StringName, cell: Vector2i) -> StrikeResult:
 		return StrikeResult.refused(StrikeResult.ALREADY_STRUCK)
 	if not _terrain.in_bounds(cell):
 		return StrikeResult.refused(StrikeResult.OFF_MAP)
+	if cell == piece.cell():
+		return StrikeResult.refused(StrikeResult.SELF)
 	if not piece.stats().can_reach(piece.cell(), cell):
 		return StrikeResult.refused(StrikeResult.OUT_OF_RANGE)
 

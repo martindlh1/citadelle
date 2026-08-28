@@ -147,6 +147,66 @@ func test_striking_leaves_the_move_intact() -> void:
 	_board.strike(&"ana", ANA + Vector2i(0, 1))
 	assert_bool(_board.move(&"ana", ANA + Vector2i(0, -2)).is_ok()).is_true()
 
+## **Un corps ne frappe pas sa propre case.** La règle de 3.6 dit qu'un coup frappe une
+## case et que ce qui s'y trouve encaisse ; elle ne dit rien du frappeur, parce que la
+## question ne se posait pas avant qu'un curseur se promene sur la carte. La portée inclut
+## la distance zéro, donc sans ce refus un clic mal placé blesserait le sien.
+func test_a_body_does_not_strike_its_own_cell() -> void:
+	var hit := _board.strike(&"ana", ANA)
+	assert_bool(hit.is_ok()).is_false()
+	assert_str(hit.reason()).is_equal(StrikeResult.SELF)
+	assert_int(_board.body(&"ana").hit_points()).is_equal(10)
+	assert_bool(_board.body(&"ana").has_struck()).is_false()
+
+## **Et il ne dépense pas son pas pour ne pas bouger.** `reachable()` rend toujours la case
+## de départ à zéro — c'est une vérité sur les distances —, mais le **geste** brûlerait le
+## déplacement du tour pour rien.
+func test_a_body_does_not_spend_its_step_standing_still() -> void:
+	var moved := _board.move(&"ana", ANA)
+	assert_bool(moved.is_ok()).is_false()
+	assert_str(moved.reason()).is_equal(MoveResult.NO_MOVE)
+	assert_bool(_board.body(&"ana").has_moved()).is_false()
+	assert_int(_board.reachable(&"ana")[ANA]).is_equal(0)
+
+# --- ce qu'un écran demande avant de dessiner ------------------------------------------
+
+## Les cases à portée, sans la sienne. Au contact, c'est exactement les quatre voisines.
+func test_contact_can_strike_its_four_neighbours() -> void:
+	var cells := _board.strikeable(&"ana")
+	assert_int(cells.size()).is_equal(4)
+	for step in CombatMovement.NEIGHBOURS:
+		assert_bool(cells.has(ANA + step)).is_true()
+	assert_bool(cells.has(ANA)).is_false()
+
+## **Les cases vides en font partie**, et c'est la moitié de l'esquive de 3.6 : filtrer sur
+## ce qui s'y trouve ferait d'une case qui s'éteint une information que le joueur n'a pas à
+## recevoir avant d'avoir frappé.
+func test_an_empty_cell_is_still_strikeable() -> void:
+	var empty := ANA + Vector2i(0, 1)
+	assert_object(_board.body_at(empty)).is_null()
+	assert_bool(_board.strikeable(&"ana").has(empty)).is_true()
+
+## Une portée de trois ouvre le losange de Manhattan, sa propre case retirée.
+##
+## Le tireur est placé assez loin des bords pour que le losange tienne **entièrement** dans
+## la carte : sur un 9×9, une portée de trois déborde dès qu'on s'approche à moins de trois
+## cases d'un bord, et le compte tomberait pour une raison qui n'a rien à voir avec la
+## règle mesurée. Le bord a son propre cas, juste en dessous.
+func test_reach_opens_a_manhattan_diamond() -> void:
+	var board := _open()
+	board.deploy(_unit_with_reach(&"bow", 3), Vector2i(4, 5))
+	assert_int(board.strikeable(&"bow").size()).is_equal(2 * 3 * (3 + 1))
+
+## Le bord de carte borne ce qu'un écran allume : une case hors grille n'est pas une cible,
+## et `strike()` la refuse déjà.
+func test_the_map_edge_bounds_what_can_be_struck() -> void:
+	var board := _open()
+	board.deploy(_unit(&"corner", 3, 3), Vector2i(0, 0))
+	var cells := board.strikeable(&"corner")
+	assert_int(cells.size()).is_equal(2)
+	for cell in cells:
+		assert_bool(board.terrain().in_bounds(cell)).is_true()
+
 # --- ce que les bâtiments prennent -----------------------------------------------------
 
 ## Un coup sur une case bâtie compte pour l'**ancre** : une empreinte de quatre cases n'a
@@ -318,6 +378,11 @@ func _open(low := 3, high := 3, extent := EXTENT, grain := SEED) -> CombatBoard:
 	board.deploy(_unit(&"ana", low, high), ANA)
 	board.send(&"orc", _make_enemy(low, high), ORC)
 	return board
+
+## Un ouvrier dont la seule particularité est sa portée.
+func _unit_with_reach(id: StringName, reach: int) -> CombatUnit:
+	return CombatUnit.create(id, CombatUnit.BASE_EFFICIENCY,
+		CombatStats.create(10, 3, 3, reach, MOVE, 1))
 
 func _unit(id: StringName, low: int, high: int) -> CombatUnit:
 	return CombatUnit.create(id, CombatUnit.BASE_EFFICIENCY,

@@ -8,7 +8,7 @@ extends GdUnitTestSuite
 
 func test_a_blank_enemy_reports_all_its_required_fields() -> void:
 	assert_array(EnemyData.new().missing_fields()) \
-		.contains(["id", "label", "hit_points", "damage_max", "reach"])
+		.contains(["id", "label", "hit_points", "damage_max", "reach", "color"])
 
 func test_a_filled_enemy_reports_nothing() -> void:
 	assert_array(_enemy().missing_fields()).is_empty()
@@ -73,6 +73,14 @@ func test_an_enemy_that_never_climbs_is_legitimate() -> void:
 	enemy.climb = 0
 	assert_array(enemy.missing_fields()).is_empty()
 
+## Le noir opaque est le défaut d'un `Color` en GDScript, donc exactement ce que Godot omet
+## d'un `.tres` : un champ oublié y est indiscernable d'un noir délibéré, et on tranche pour
+## « oublié ». Même sentinelle que `TerrainData` et `PhaseDef`.
+func test_an_unpainted_enemy_is_reported() -> void:
+	var enemy := _enemy()
+	enemy.color = EnemyData.UNSET_COLOR
+	assert_array(enemy.missing_fields()).contains(["color"])
+
 # --- la projection ---------------------------------------------------------------------
 
 ## Le profil rendu porte les chiffres du fichier, sans en inventer ni en perdre. C'est le
@@ -121,4 +129,5 @@ func _enemy() -> EnemyData:
 	enemy.reach = 3
 	enemy.move = 4
 	enemy.climb = 2
+	enemy.color = Color(0.5, 0.4, 0.3, 1.0)
 	return enemy

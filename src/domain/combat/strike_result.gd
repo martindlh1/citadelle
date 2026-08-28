@@ -27,6 +27,19 @@ const OUT_OF_RANGE := &"out_of_range"
 ## La case n'est pas sur la carte.
 const OFF_MAP := &"off_map"
 
+## La case visée est celle où le frappeur se tient.
+##
+## *(Entré à `F3a`.)* La règle de 3.6 dit qu'un coup frappe une case et que ce qui s'y
+## trouve encaisse — elle ne dit rien de celui qui frappe, parce que la question ne se
+## posait pas tant qu'aucun curseur ne se promenait sur la carte. Elle se pose dès qu'un
+## écran allume les cases à portée, et la portée inclut la distance zéro : un clic mal
+## placé ferait qu'un ouvrier se blesse lui-même, ce qu'aucun joueur ne veut jamais.
+##
+## Le refus est ici et non dans la vue, pour la même raison que `NO_MOVE` : une règle que
+## deux écrans doivent se rappeler est une règle qu'un troisième oubliera. Le jour où une
+## capacité de `X5` voudra se centrer sur soi, elle aura son propre ciblage.
+const SELF := &"self"
+
 ## Nature de ce que le coup a touché.
 enum Hit { NOTHING, BODY, BUILDING }
 

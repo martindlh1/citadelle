@@ -16,13 +16,20 @@ extends Resource
 ## qui soigne, un qui pousse — est légitimement une modification du domaine. Une Resource
 ## qui porterait une méthode de résolution serait du domaine déguisé.
 ##
-## Ce qu'il ne porte pas encore. Aucune **couleur** : elle arrivera avec le renderer qui la
-## lit, c'est-à-dire F3, exactement comme les colonnes Déf. et PV sont entrées à F1 avec le
-## système qui les consomme. Aucun **butin** non plus : ce qu'une vague emporte est une
-## règle que F2b écrira, et un champ que personne ne lit serait la frontière que ce projet
-## refuse depuis E1.
+## La **couleur** est entrée à F3a, et ce docstring l'annonçait mot pour mot : « elle
+## arrivera avec le renderer qui la lit ». Elle a mis un jalon à venir, pas trois. Il ne
+## reste dehors que le **butin** : ce qu'une vague emporte est une règle que F2b écrira, et
+## un champ que personne ne lit serait la frontière que ce projet refuse depuis E1.
 ##
 ## Aucun @export ne porte de défaut, pour la raison exposée dans terrain_balance.gd.
+
+## Couleur qu'on lit comme « non renseignée ».
+##
+## Même sentinelle et même raison que `TerrainData.UNSET_COLOR` et `PhaseDef.UNSET_COLOR` :
+## le noir opaque est le défaut d'un `Color` en GDScript, donc exactement ce que Godot omet
+## d'un `.tres`, et un champ oublié y est indiscernable d'un noir délibéré. On tranche pour
+## « oublié ». Un assaillant qui voudrait vraiment du noir écrit `Color(0.02, 0.02, 0.02)`.
+const UNSET_COLOR := Color(0.0, 0.0, 0.0, 1.0)
 
 ## Identifiant stable. Par convention il reprend le nom du fichier .tres.
 @export var id: StringName
@@ -72,6 +79,15 @@ extends Resource
 ## Zéro est légitime : il ne se déplace qu'à plat.
 @export_range(0, 20, 1) var climb: int
 
+## Couleur de son pion au rendu, en attendant de vrais assets.
+##
+## Elle vit ici et non dans le renderer pour la raison qui vaut depuis `TerrainData` :
+## celui-ci ne doit **jamais** commuter sur un identifiant, sans quoi ajouter un assaillant
+## cesserait d'être une édition de `data/`. Le camp des ouvriers, lui, n'a pas de couleur en
+## data — il n'a pas de types à distinguer, donc c'est une constante de décor du renderer,
+## comme celle de `CellHighlight`.
+@export var color: Color
+
 ## Son profil, tel que le plateau le consomme.
 ##
 ## Le seul point de passage entre ce fichier et le domaine, et il rend **la même forme**
@@ -107,4 +123,6 @@ func missing_fields() -> PackedStringArray:
 		missing.append("damage_min")
 	if reach < CombatStats.CONTACT:
 		missing.append("reach")
+	if color == UNSET_COLOR:
+		missing.append("color")
 	return missing

@@ -25,6 +25,15 @@ const WRONG_SIDE := &"wrong_side"
 ## Il a déjà employé son déplacement ce tour.
 const ALREADY_MOVED := &"already_moved"
 
+## La case visée est celle où il se tient déjà.
+##
+## *(Entré à `F3a`.)* Rester sur place **est** un déplacement légal, et `reachable()`
+## continue de rendre la case de départ à zéro parce que c'est une vérité sur les
+## distances. Mais le geste, lui, brûlerait le déplacement du tour pour rien : un clic
+## égaré sur son propre pion coûterait un tour sans que rien ne le dise. Le refus est donc
+## dans le domaine et non dans la vue, sinon deux écrans devraient s'en souvenir.
+const NO_MOVE := &"no_move"
+
 ## La case est hors de ce qu'il peut parcourir — trop loin, barrée, ou derrière une marche
 ## trop haute. Les trois se confondent volontairement : du point de vue de celui qui joue,
 ## « je ne peux pas aller là » est une seule réponse, et l'écran allume de toute façon les
