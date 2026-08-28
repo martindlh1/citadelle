@@ -112,6 +112,18 @@ func test_two_walls_equally_close_are_settled_by_anchor_and_not_by_order() -> vo
 	assert_vector(_wall_tie([north, POST + Vector2i(0, 1)])).is_equal(north)
 	assert_vector(_wall_tie([POST + Vector2i(0, 1), north])).is_equal(north)
 
+## **Une vague repartie n'annonce rien.** Trouvé en capture et non par un test : la borne
+## franchie, le plateau gardait les quatre cases de la dernière manche et l'écran promettait
+## des coups qui ne tomberaient jamais.
+func test_a_wave_that_has_left_announces_nothing() -> void:
+	var board := _open()
+	_worker(board, &"ana", POST)
+	_foe(board, &"orc", POST + Vector2i(0, -1))
+	assert_dict(WaveAI.announce(board)).is_not_empty()
+	while not board.is_over():
+		board.end_turn()
+	assert_dict(WaveAI.announce(board)).is_empty()
+
 # --- ce qu'une annonce engage -----------------------------------------------------------
 
 ## **Esquiver annule le coup, et coûte son tour à l'assaillant.** C'est ce que 3.6 achète en

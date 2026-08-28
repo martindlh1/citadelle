@@ -56,9 +56,17 @@ const NO_PREY := 1 << 30
 ## Elle se prend sur le plateau **tel que le joueur va le trouver**, donc avant qu'il joue.
 ## C'est ce qui rend l'esquive possible : ce qui est annoncé l'a été contre des positions
 ## que le joueur peut encore changer.
+##
+## **Une vague repartie n'annonce rien**, et c'est une règle du domaine plutôt qu'un réflexe
+## d'écran. Trouvé en capture : la borne franchie, le plateau gardait les quatre cases de la
+## dernière manche et l'écran promettait des coups qui ne tomberaient jamais. Une vue qui
+## invite à un geste doit demander si le geste est possible — `CLAUDE.md` l'écrit depuis
+## `I2b` —, mais la réponse est la même pour toutes les vues, donc elle se donne ici.
 static func announce(board: CombatBoard) -> Dictionary[StringName, CombatIntent]:
 	assert(board != null, "annonce sans plateau")
 	var table: Dictionary[StringName, CombatIntent] = {}
+	if board.is_over():
+		return table
 	for piece in board.standing(Combatant.Side.FOE):
 		var target := prey_from(board, piece, piece.cell())
 		table[piece.id()] = (CombatIntent.advance() if target == CombatIntent.NO_CELL
