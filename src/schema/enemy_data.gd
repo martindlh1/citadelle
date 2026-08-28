@@ -16,10 +16,9 @@ extends Resource
 ## qui soigne, un qui pousse — est légitimement une modification du domaine. Une Resource
 ## qui porterait une méthode de résolution serait du domaine déguisé.
 ##
-## La **couleur** est entrée à F3a, et ce docstring l'annonçait mot pour mot : « elle
-## arrivera avec le renderer qui la lit ». Elle a mis un jalon à venir, pas trois. Il ne
-## reste dehors que le **butin** : ce qu'une vague emporte est une règle que F2b écrira, et
-## un champ que personne ne lit serait la frontière que ce projet refuse depuis E1.
+## La **couleur** est entrée à F3a et le **butin** à F2b, et ce docstring les annonçait tous
+## deux mot pour mot : chacun est arrivé avec le code qui le lit, jamais avant. Rien ne
+## reste dehors — ce fichier décrit désormais un assaillant en entier.
 ##
 ## Aucun @export ne porte de défaut, pour la raison exposée dans terrain_balance.gd.
 
@@ -78,6 +77,23 @@ const UNSET_COLOR := Color(0.0, 0.0, 0.0, 1.0)
 ##
 ## Zéro est légitime : il ne se déplace qu'à plat.
 @export_range(0, 20, 1) var climb: int
+
+## Unités de réserve qu'il emporte par manche passée dans l'enceinte.
+##
+## Le pillage de DESIGN.md 3.6, tranché à F2b : « seulement une facture — ce qu'ils ont
+## cassé et **emporté entre-temps** ». Il s'accumule donc pendant la bataille et non à son
+## départ, et c'est ce qui fait payer les deux bonnes façons de jouer : les abattre vite, ou
+## les tenir dehors. Une vague bloquée à la lisière repart les mains vides sans qu'une règle
+## ait à le dire.
+##
+## L'enceinte est le rectangle du bâti, celui-là même dont la vague longe la lisière pour
+## entrer. Un rectangle et non les seules cases bâties : ce qu'on défend est un village, pas
+## une collection de murs, et les trous entre les maisons en font partie.
+##
+## Zéro est légitime et n'est pas un oubli : une pièce de siège qui casse sans rien emporter
+## est un assaillant qu'on redoute autrement. Même exemption que `move` et `climb`, et que
+## `plunder_per_breach` avant eux.
+@export_range(0, 100, 1) var plunder: int
 
 ## Couleur de son pion au rendu, en attendant de vrais assets.
 ##

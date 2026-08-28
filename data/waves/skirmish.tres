@@ -6,4 +6,6 @@
 script = ExtResource("1_wave_def")
 id = &"skirmish"
 label = "Escarmouche"
+roster = Array[StringName]([&"raider", &"raider"])
+rounds = 4
 power = 8

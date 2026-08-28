@@ -33,6 +33,7 @@ func _ready() -> void:
 	_assert_enemies_are_complete()
 	_assert_resources_are_known()
 	_assert_cards_are_known()
+	_assert_enemies_are_known()
 	EventBus.database_ready.emit.call_deferred()
 
 ## Racine de l'équilibrage. Jamais null une fois le boot passé.
@@ -279,6 +280,25 @@ func _assert_cards_are_known() -> void:
 	for card in balance.deck.starting_deck:
 		assert(known.has(card),
 			"carte inconnue « %s » dans balance/deck_balance.tres → starting_deck" % card)
+
+## Les assaillants que les vagues nomment existent-ils ?
+##
+## Troisième contrôle croisé après les ressources et les cartes, et il est ici pour la même
+## raison qu'eux : une WaveDef ne lit pas l'index, et c'est très bien ainsi. Sans lui, un
+## &"raidre" dans une composition ferait entrer une vague avec un corps de moins, en
+## silence — le défaut exact qu'un deck de départ mal orthographié aurait eu.
+func _assert_enemies_are_known() -> void:
+	var known := list_enemy_ids()
+	if known.is_empty():
+		return
+	for id in list_wave_ids():
+		var wave := get_wave(id)
+		if wave == null:
+			continue
+		for enemy in wave.roster:
+			assert(known.has(enemy),
+				"la vague data/waves/%s.tres appelle un assaillant inconnu : %s"
+					% [id, enemy])
 
 ## Cette ressource figure-t-elle au catalogue ?
 func _assert_known(known: Array[StringName], resource: StringName, where: String) -> void:

@@ -45,4 +45,6 @@ func _wave() -> WaveDef:
 	wave.id = &"tide"
 	wave.label = "Marée"
 	wave.power = 12
+	wave.roster = [&"test_enemy"]
+	wave.rounds = 5
 	return wave

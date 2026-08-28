@@ -113,6 +113,22 @@ func test_the_catalogue_holds_a_melee_attacker() -> void:
 		.override_failure_message("aucun assaillant de data/ ne frappe au contact") \
 		.is_true()
 
+## **Un assaillant qui n'emporte rien** casse sans voler : c'est une pièce de siège, et
+## c'est un modèle qu'on doit pouvoir essayer sans toucher au GDScript. Même exemption que
+## `move` et `climb`.
+func test_an_enemy_that_carries_nothing_off_is_legitimate() -> void:
+	var enemy := _enemy()
+	enemy.plunder = 0
+	assert_array(enemy.missing_fields()).is_empty()
+
+## Et le catalogue en contient au moins un qui **vole**, sans quoi le pillage de
+## `DESIGN.md` 3.6 serait un champ que rien n'exerce. C'est le pendant des deux cas qui
+## exigent un tireur et un corps-à-corps.
+func test_the_catalogue_holds_a_looter() -> void:
+	assert_bool(_catalogue_declares(func(data: EnemyData) -> bool: return data.plunder > 0)) \
+		.override_failure_message("aucun assaillant de data/enemies/ n'emporte quoi que ce soit") \
+		.is_true()
+
 func _catalogue_declares(predicate: Callable) -> bool:
 	for id in GameDatabase.list_enemy_ids():
 		if predicate.call(GameDatabase.get_enemy(id)):

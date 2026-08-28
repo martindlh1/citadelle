@@ -302,6 +302,8 @@ func _slot(day: int, id: StringName) -> WaveSlot:
 	wave.id = id
 	wave.label = String(id).capitalize()
 	wave.power = 12
+	wave.roster = [&"test_enemy"]
+	wave.rounds = 5
 	slot.wave = wave
 	return slot
 
