@@ -4,6 +4,199 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-28 — `F2b` : la vague décide, et une annonce engage
+
+**État : terminé**, et `F2` est fini. Sept commits sur `feat/f2b-wave-ai`, tirée de
+`feat/f3a-battle-view` — la branche porte donc trois jalons. Les trois commandes passent :
+boot sans erreur ni warning, tout `src/domain/` parse, **962 tests verts contre 925**.
+Les neuf harnais bootés un par un. Six captures.
+
+### La question qui ouvrait le jalon, et la ligne qui la referme
+
+`DESIGN.md` 3.6 gardait le grain du vocabulaire d'intentions ouvert depuis `F2a`, et le
+jalon commençait par là plutôt que par du code. La réponse retenue tient en une ligne :
+
+> **Un corps annonce une case exactement quand il peut frapper sans bouger**, et cette
+> annonce engage.
+
+Ce qu'elle répare est la contradiction qui avait rouvert le paragraphe. Un **trajet** ne
+s'annonce pas — le joueur agit après, donc le plan est conditionnel ou rigide. Une **case**
+si, mais seulement quand rien de ce que le joueur fera ne peut l'invalider, c'est-à-dire
+quand le corps n'a pas à se déplacer pour la tenir.
+
+Elle répond **oui** à la question littérale que tu posais — un tireur posté annonce sa case
+—, et c'est ce qui compte : **ce n'est pas une règle sur les tireurs.** Un corps-à-corps
+déjà collé à un ouvrier annonce la sienne aussi. Ce qui varie est la **situation**, que le
+joueur lit sur le plateau, pas la fiche de l'assaillant — et l'objection du « vocabulaire à
+géométrie variable » tombe avec ça.
+
+La troisième sortie, ne jamais annoncer de case, était la plus courte à écrire et elle
+tuait une règle entière. On n'esquive pas ce qui n'est pas annoncé : « une intention frappe
+la case, pas la cible » aurait continué de fonctionner à la résolution sans que le joueur
+puisse jamais s'en servir.
+
+### Ce que le pillage a demandé de trancher
+
+`DESIGN.md` 3.6 dit « ce qu'ils ont cassé et emporté **entre-temps** », et c'est ce mot qui
+a décidé : le butin court **par manche passée dans l'enceinte**, pas au départ de la vague.
+Trois conséquences, et c'est pour elles que la lecture a été préférée à « chaque survivant
+emporte sa part » : les deux bonnes façons de jouer paient — les abattre vite, ou les tenir
+dehors —, une vague bloquée à la lisière repart les mains vides sans qu'une règle ait à le
+dire, et la borne de tours cesse d'être une durée pour devenir un montant.
+
+L'enceinte est **figée à l'ouverture**. La recalculer ferait rapporter *moins* à une vague
+qui casse *plus*, ce qui est l'inverse de ce qu'on veut.
+
+### Ce que la data porte maintenant
+
+`WaveDef` dit enfin **qui vient** — un identifiant d'`EnemyData` par corps, répétitions
+écrites, dans l'ordre où ils prennent les cases d'entrée — et **combien de manches il faut
+tenir**. La borne est par vague et non dans `CombatBalance` : un siège s'installe là où une
+escarmouche passe, et la durée d'une razzia est du contenu au même titre que sa composition.
+Les deux dans le même `.tres`, ce qui est la seule façon de les garder d'accord.
+
+`power` reste, seul champ de l'époque du bouchon, et il partira avec lui à `F3b`. Deux
+époques cohabitent, exactement comme `CombatBalance` en porte trois depuis `F2a`.
+
+`EnemyData` gagne son butin, et son docstring l'annonçait mot pour mot depuis `F2a` : « il
+ne reste dehors que le **butin** ». Rien ne reste dehors désormais.
+
+`GameDatabase` gagne un troisième contrôle croisé, après les ressources et les cartes : une
+composition qui nommerait un assaillant inexistant ferait entrer une vague avec un corps de
+moins, en silence.
+
+### Le contrat, et ce qu'il cesse de publier
+
+`assault`, `defense` et `breach()` ont quitté le `DamageReport`, `swept()` y est entré, et
+`is_empty()` a fondu dans `is_held()`. Les trois premiers décrivaient une **soustraction**,
+pas un fait du combat : une vague qui est une poignée de corps sur une grille n'a plus de
+« puissance » à publier. Ce que le rapport dit désormais, ce sont des faits — ce qui est
+tombé, qui est mort, ce qui est parti.
+
+Et la promesse de `F1` se vérifie enfin : **`RunOrchestrator.fight()` applique ce rapport
+sans une ligne à changer.** C'est ce que `DESIGN.md` 3.6 annonçait en corrigeant la phrase
+sur « l'échange en une ligne » — l'applicateur ne bouge pas, c'est le producteur qui change
+de nature.
+
+Ce qui n'est **pas** entré, et c'est la discipline habituelle : le nombre de manches tenues.
+Le plateau le connaît, personne hors du Combat ne le lit, et un champ que personne ne
+franchit est la frontière que ce projet refuse depuis `E1`. Il entrera avec l'écran qui
+voudra dire « tenue cinq manches ».
+
+### Le partage entre qui décide et qui se souvient
+
+`WaveAI` décide, `CombatBoard` se souvient, l'écran lit. Le plateau porte les intentions, la
+borne, le butin et `to_report()` — mais il ne décide de rien, et ce n'est pas seulement de la
+doctrine : le harnais joue les deux camps à la main depuis `F3a`, et un plateau qui
+réannoncerait tout seul le lui interdirait. La touche `A` rend donc la vague au joueur, et
+**le même plateau se rejoue des deux façons**, ce qui était l'argument qui avait fait passer
+`F3a` devant ce jalon.
+
+`WaveAI.take_turn()` est la seule porte, et l'ordre qu'elle tient compte : la manche se ferme
+**entre** l'exécution et l'annonce suivante, parce que c'est à cette fermeture que le butin
+se compte et que la borne avance. Annoncer avant décrirait un plateau d'une manche en retard.
+
+### Les deux défauts, et aucun n'a été trouvé par un test
+
+**En capture.** La borne franchie, l'écran gardait affichées les quatre cases annoncées à la
+dernière manche : une vague repartie promettait des coups qui ne tomberaient jamais. La
+réparation est dans le **domaine** et pas dans la vue — une vague repartie n'annonce rien, et
+la réponse est la même pour tous les écrans. Le compteur de voiles du harnais l'a confirmée
+sans qu'on ait à sonder un PNG : « 4 annoncée(s) » est devenu « 0 annoncée(s) ».
+
+**Dans une table.** Celui-là est le plus instructif du jalon, et il est d'une famille neuve.
+La table qui mesure ce qu'esquiver retire à la vague la prenait à la **première** manche —
+celle où la vague entre à trois cases de la lisière et n'a encore personne à portée. Le
+chiffre était exact, la colonne alignée, le verdict formellement satisfait, et la table
+mesurait **l'approche**. Prise à la manche où la vague est le plus engagée, elle est passée
+de « 13 contre 11 » à **« 12 contre 3 »**, pour le même nombre de coups portés, la
+différence entièrement en coups tombés dans le vide.
+
+C'est entré dans `CLAUDE.md` : les deux règles qui y étaient portaient sur *ce qu'on compte*,
+celle-ci porte sur **quand** on le compte. Une table choisit son moment et l'écrit dans son
+titre.
+
+### Ce que le harnais dit, et qui n'est pas rassurant
+
+La chronique manche par manche est lisible et le verdict est dur : à ces chiffres-là, la
+Razzia tue les **trois** défenseurs avant la quatrième manche, rase trois bâtiments sur
+quatre, emporte douze de réserve et repart sans une égratignure. C'est le même constat que
+`F2a`, mesuré autrement, et c'est `I3`.
+
+La chronique dit aussi ce qu'elle devait dire du reste : le vocabulaire est **exercé** — la
+colonne « annoncent » va de 0 à 4 selon les manches, donc les deux entrées existent
+vraiment —, et le pillage reste à zéro tant qu'ils sont dehors puis monte dès qu'ils entrent,
+ce que la colonne « dans murs » corrobore depuis un autre compteur.
+
+### Un piège d'outil, et une leçon de portée de tests
+
+**Un `&&` avale une vérification.** J'ai chaîné `python patch.py && godot --headless --quit`
+suivi d'un `echo` séparé par `;`. Le patch a échoué, le boot n'a jamais tourné, et le `echo`
+a imprimé « boot fini ». Une vérification ne se chaîne pas derrière ce qui peut échouer.
+
+**Et j'ai élargi la suite de tests un cran trop tard.** Le commit de schéma a cassé
+`run_orchestrator_test`, qui fabrique ses propres `WaveDef` et que `RunState.open()` refuse
+désormais sans composition. Les suites ciblées ne l'ont pas vu parce que j'avais lancé
+`tests/domain/run` avant ce commit et `tests/schema` après. La règle existait — élargir quand
+un changement traverse — et il fallait la lire d'un cran plus large : **un champ de
+`src/schema/` qu'agrège `RunBalance` voyage aussi loin qu'un champ de `data/balance/`.**
+
+### Ce que je n'ai pas fait
+
+Aucun branchement sur le run : la bataille ne se déclenche toujours pas à la fermeture d'une
+journée, et le `DamageReport` que le plateau sait rendre n'est appliqué par personne. C'est
+`F3b`, et il n'attend plus que lui-même.
+
+Aucun équilibrage. Le bonus d'un balayage complet est **constaté** par le rapport et payé par
+personne, ce que `DESIGN.md` 3.6 réserve à `I3`.
+
+Aucune capacité (`X5`), aucun état (`X6`), aucune coordination entre assaillants : trois
+corps qui appliquent la même règle chacun de leur côté produisent déjà de l'encerclement et
+du blocage de porte.
+
+`InstantCombatResolver` est **intact** et fait encore tourner le jeu. Il expose une
+`breach_of()` publique de plus, pour son seul lecteur restant — le harnais qui le calibre —,
+et il partira avec elle à `F3b`.
+
+### Une tension d'écran laissée à `F3b`
+
+Quand la vague repart, le panneau dit « La vague repart » pendant que les pions des
+assaillants sont toujours sur la carte, debout au milieu des ruines. Ce n'est pas un bug —
+la carte montre l'état, le panneau raconte, et c'est le partage que `F3a` a posé — mais les
+deux se contredisent à la lecture. Le despawn effacerait où la bataille s'est terminée, et
+rendrait un balayage indiscernable d'un départ. La vraie réponse est ce qui **ferme** un
+écran de bataille, et c'est `F3b` qui l'écrira.
+
+### Prochain jalon
+
+**`F3b`** — l'intégration : le producteur branché dans `RunOrchestrator`, la fin de journée
+qui cesse d'être atomique, `EventBus`, et l'écran qui s'ouvre et se ferme. Tout ce qu'il
+attendait existe.
+
+Puis **`M1`**, le menu, toujours le premier jalon qui demande une `.tscn`. Puis **`I3`**, qui
+a maintenant trois fronts : la nourriture, la dureté des vagues, et les deux chiffres neufs —
+la borne de tours et le butin par manche.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien.** Aucune `.tscn` ni `project.godot` touché.
+
+- **`HARNESS` vaut `&"battle"`.** L'IA tient la vague : `Entrée` finit ton tour, elle joue le
+  sien, tu reprends la main. **`A`** te la rend si tu veux rejouer le même plateau à la main.
+- **Le voile ambre** est ce que la vague a annoncé. Une case ambre est un coup qui tombera
+  là quoi qu'il arrive — en partir le fait tomber dans le vide, et coûte son tour à celui qui
+  l'avait annoncé.
+- **Les fiches d'en face** disent « frappe » ou « avance » pendant ton tour, et leurs gestes
+  restants pendant le leur.
+- **`H`** montre deux tables neuves : ce qu'esquiver retire à la vague, et ce qu'une vague
+  fait seule manche par manche.
+- **Deux drapeaux de capture** : `--shot-rounds n` laisse l'IA jouer n manches,
+  `--shot-foes` te rend la main. Documentés au README.
+- **La branche n'est pas fusionnée** : `feat/f2b-wave-ai`, sept commits, par-dessus les huit
+  de `F2a` et `F3a`.
+
+---
+
 ## 2026-08-28 — `F3a` : la bataille se regarde, et quatre défauts que seule l'image montre
 
 **État : terminé.** Trois commits sur `feat/f3a-battle-view`, tirée de `feat/f2a-battle-board`

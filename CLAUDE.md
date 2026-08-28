@@ -214,6 +214,20 @@ les autres, ce qui n'était pas une différence de jeu mais un défaut de mesure
 compilaient, s'alignaient, et étaient plausibles : c'est la relecture de la table contre ce
 qu'elle prétend montrer qui les a trouvés, pas un test.
 
+**Et une mesure prise au mauvais moment mesure le mauvais moment.** *(Écrit à `F2b`.)* Les
+deux familles ci-dessus portent sur *ce qu'on compte* ; celle-ci sur **quand** on le compte.
+Une table censée dire ce qu'esquiver retire à une vague a d'abord été prise à la **première**
+manche — celle où la vague entre à trois cases de la lisière et n'a encore personne à portée.
+Le chiffre était exact, la colonne alignée, le verdict formellement satisfait, et la table
+répondait à une autre question que la sienne : elle mesurait l'approche. Prise à la manche où
+la vague est le plus engagée, elle est passée de « 13 contre 11 » à « 12 contre 3 ».
+
+La parade est celle des autres : **la table choisit son moment, et l'écrit dans son titre.**
+Ici elle rejoue la bataille pour trouver la manche où le plus de cases sont annoncées, et
+imprime ce numéro. Un instant de mesure codé en dur est un raccourci comme un autre, et il se
+reconnaît à la même question — *cette table pourrait-elle rendre ce chiffre-là sans que la
+règle qu'elle prétend montrer existe ?*
+
 **Un chemin de capture qui court-circuite les gestes du joueur finit par mentir.**
 *(Écrit à `P1a`.)* La capture scriptée du harnais Run appelait `RunManager.play()` en
 direct, sans passer par le geste que la souris déclenche — donc sans rien redessiner.
