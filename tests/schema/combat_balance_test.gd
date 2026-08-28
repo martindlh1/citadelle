@@ -59,4 +59,13 @@ func _balance() -> CombatBalance:
 	balance.combat_skill_family = &"combat"
 	balance.breach_per_casualty = 6
 	balance.plunder_per_breach = 1
+	balance.fighter_hit_points = 10
+	balance.fighter_damage_min = 2
+	balance.fighter_damage_max = 4
+	balance.fighter_reach = 1
+	balance.fighter_move = 5
+	balance.fighter_climb = 1
+	balance.climb_cost = 1
+	balance.impassable_tags = [&"water"] as Array[StringName]
+	balance.spawn_margin = 3
 	return balance

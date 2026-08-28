@@ -124,7 +124,7 @@ func test_the_roster_does_not_enforce_the_cap_itself() -> void:
 ## ces deux fonctions font en partant du même present().
 func test_the_combat_projection_carries_the_present() -> void:
 	var roster := _roster([&"ana", &"bo"])
-	assert_array(roster.to_combat(COMBAT, _balance()).fighters()) \
+	assert_array(roster.to_combat(COMBAT, _balance(), _combat()).fighters()) \
 		.contains_exactly([&"ana", &"bo"])
 
 ## Un absent ne se bat pas, comme il ne mange pas. Même ligne, même raison : la projection
@@ -132,13 +132,13 @@ func test_the_combat_projection_carries_the_present() -> void:
 func test_an_absent_worker_does_not_fight() -> void:
 	var roster := _roster([&"ana", &"bo"])
 	roster.worker(&"ana").set_present(false)
-	assert_array(roster.to_combat(COMBAT, _balance()).fighters()).contains_exactly([&"bo"])
+	assert_array(roster.to_combat(COMBAT, _balance(), _combat()).fighters()).contains_exactly([&"bo"])
 
 ## La piste Combat traverse, et c'est tout ce que le Combat reçoit d'un ouvrier.
 func test_the_combat_projection_carries_the_combat_track() -> void:
 	var roster := _roster([&"ana"])
 	roster.worker(&"ana").gain(COMBAT, 20)
-	assert_float(roster.to_combat(COMBAT, _balance()).efficiency(&"ana")).is_equal(2.0)
+	assert_float(roster.to_combat(COMBAT, _balance(), _combat()).efficiency(&"ana")).is_equal(2.0)
 
 ## **Le cas qui distingue les deux projections.** Un excellent récoltant est un combattant
 ## ordinaire : la LaborUnit répond par métier, la CombatUnit par un seul chiffre, et lire
@@ -146,7 +146,7 @@ func test_the_combat_projection_carries_the_combat_track() -> void:
 func test_a_great_harvester_is_a_plain_fighter() -> void:
 	var roster := _roster([&"ana"])
 	roster.worker(&"ana").gain(HARVEST, 20)
-	assert_float(roster.to_combat(COMBAT, _balance()).efficiency(&"ana")) \
+	assert_float(roster.to_combat(COMBAT, _balance(), _combat()).efficiency(&"ana")) \
 		.is_equal(CombatUnit.BASE_EFFICIENCY)
 
 ## La famille est un argument et non une constante : DESIGN.md 3.4 pose que la liste des
@@ -155,7 +155,7 @@ func test_a_great_harvester_is_a_plain_fighter() -> void:
 func test_the_projection_reads_the_family_it_is_given() -> void:
 	var roster := _roster([&"ana"])
 	roster.worker(&"ana").gain(&"sailing", 20)
-	assert_float(roster.to_combat(&"sailing", _balance()).efficiency(&"ana")).is_equal(2.0)
+	assert_float(roster.to_combat(&"sailing", _balance(), _combat()).efficiency(&"ana")).is_equal(2.0)
 
 ## Les deux valeurs de repli sont la même, et le cas l'épingle plutôt que de le supposer :
 ## CombatUnit recopie la constante de LaborUnit au lieu de l'importer, pour ne pas faire
@@ -202,6 +202,27 @@ func _city(flat: Array) -> CitySnapshot:
 		placed.append(BuildingSnapshot.create(flat[index], flat[index + 1], 0))
 		index += 2
 	return CitySnapshot.create(placed)
+
+## Le profil d'un combattant, tel que `data/balance/` le porte. Des chiffres ronds et
+## volontairement distincts les uns des autres : un test qui confondrait deux champs le
+## verrait, ce qu'une table de 3 partout laisserait passer.
+func _combat() -> CombatBalance:
+	var balance := CombatBalance.new()
+	balance.base_deployment_slots = 3
+	balance.defense_per_fighter = 2
+	balance.combat_skill_family = COMBAT
+	balance.breach_per_casualty = 6
+	balance.plunder_per_breach = 1
+	balance.fighter_hit_points = 10
+	balance.fighter_damage_min = 2
+	balance.fighter_damage_max = 4
+	balance.fighter_reach = 1
+	balance.fighter_move = 5
+	balance.fighter_climb = 1
+	balance.climb_cost = 1
+	balance.impassable_tags = [&"water"] as Array[StringName]
+	balance.spawn_margin = 3
+	return balance
 
 func _balance() -> WorkforceBalance:
 	var balance := WorkforceBalance.new()

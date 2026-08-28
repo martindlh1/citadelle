@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="EnemyData" format=3]
+
+[ext_resource type="Script" path="res://src/schema/enemy_data.gd" id="1_enemy_data"]
+
+[resource]
+script = ExtResource("1_enemy_data")
+id = &"archer"
+label = "Archer"
+hit_points = 6
+damage_min = 2
+damage_max = 3
+reach = 3
+move = 3
+climb = 1

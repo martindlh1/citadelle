@@ -363,8 +363,17 @@ func _plain_force() -> CombatForce:
 func _force(multipliers: Dictionary) -> CombatForce:
 	var units: Array[CombatUnit] = []
 	for id in multipliers:
-		units.append(CombatUnit.create(id, multipliers[id]))
+		units.append(CombatUnit.create(id, multipliers[id], _stats()))
 	return CombatForce.create(units)
+
+## Un profil quelconque mais valide.
+##
+## Le bouchon ne lit **que** le rang — sa défense est `defense_per_fighter × efficiency` —,
+## donc ces chiffres ne changent aucun résultat de ce fichier. Ils sont là parce que
+## `F2a` a donné un profil au contrat, et ce commentaire est là pour qu'on ne les prenne
+## pas un jour pour des chiffres que le bouchon consommerait.
+func _stats() -> CombatStats:
+	return CombatStats.create(10, 2, 4, CombatStats.CONTACT, 4, 1)
 
 ## Le village de référence. `reversed` le repose à l'envers, ce qui doit ne rien changer.
 func _make_city(reversed := false) -> CitySnapshot:

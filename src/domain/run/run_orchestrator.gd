@@ -353,7 +353,7 @@ static func fight(state: RunState) -> BattleReport:
 	var wave := state.pending_wave()
 	var balance := state.balance()
 	var force := state.roster().to_combat(balance.combat.combat_skill_family,
-		balance.workforce)
+		balance.workforce, balance.combat)
 	var damage := InstantCombatResolver.resolve(state.city().to_snapshot(), force, wave,
 		balance.combat)
 
