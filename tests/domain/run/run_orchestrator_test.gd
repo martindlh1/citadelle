@@ -1067,6 +1067,8 @@ func _wave(power: int) -> WaveDef:
 	wave.id = &"test_wave"
 	wave.label = "Vague d'essai"
 	wave.power = power
+	wave.roster = [&"test_enemy"]
+	wave.rounds = 5
 	return wave
 
 func _open(run_seed := SEED, phases: Array[PhaseDef] = [],

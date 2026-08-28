@@ -22,10 +22,16 @@ const WATER := Vector2i(0, 8)
 const ANA := Vector2i(2, 4)
 const ORC := Vector2i(7, 4)
 
+## Entre la cabane et le chantier, donc **dans** l'enceinte que le pillage compte.
+const INSIDE := Vector2i(5, 4)
+
 const EXTENT := Vector2i(9, 9)
 const HUT_HP := 6
 const SITE_ACTIONS := 3
 const MOVE := 3
+## Borne de tours des plateaux de cette suite. Large, pour qu'aucun cas qui parle d'autre
+## chose ne s'arrête au milieu.
+const ROUNDS := 20
 const SEED := 4413
 const SAMPLES := 12
 
@@ -338,6 +344,137 @@ func test_two_boards_played_alike_end_alike() -> void:
 	assert_int(_scripted().body(&"orc").hit_points()) \
 		.is_equal(_scripted().body(&"orc").hit_points())
 
+# --- la borne, et le départ de la vague -------------------------------------------------
+
+## **Tenir la borne suffit à ce que la vague reparte.** `DESIGN.md` 3.6 : une vague est une
+## razzia, pas un duel. Il n'y a donc ni victoire ni défaite — seulement une facture.
+func test_a_battle_ends_once_the_round_cap_is_passed() -> void:
+	var board := _open(3, 3, EXTENT, SEED, 2)
+	assert_bool(board.is_over()).is_false()
+	for _turn in 4:
+		board.end_turn()
+	assert_int(board.round_number()).is_equal(3)
+	assert_bool(board.is_over()).is_true()
+
+## Et battre le dernier assaillant y met fin aussi, sans attendre la borne. C'est le
+## nettoyage complet que 3.6 récompense « par-dessus » ; ce qu'il vaut est `I3`.
+func test_a_battle_ends_when_the_last_attacker_falls() -> void:
+	var board := _open()
+	board.deploy(_unit(&"hitter", 20, 20), ORC + Vector2i(0, -1))
+	board.strike(&"hitter", ORC)
+	assert_bool(board.swept()).is_true()
+	assert_bool(board.is_over()).is_true()
+
+## Un plateau où personne n'est entré n'a balayé personne. Le rendre vrai par vacuité ferait
+## passer une bataille qui n'a pas eu lieu pour une victoire nette.
+func test_a_board_no_attacker_entered_has_swept_nothing() -> void:
+	var quiet := _open(3, 3, Vector2i(4, 4))
+	assert_bool(quiet.swept()).is_false()
+	assert_bool(quiet.is_over()).is_false()
+
+## **Un village vidé de ses défenseurs ne met pas fin à la bataille.** Les manches restantes
+## se jouent sans lui, et c'est ce qui rend la fuite coûteuse : une razzia qui s'arrêterait
+## faute d'adversaire récompenserait le fait de ne plus en avoir.
+func test_losing_every_defender_does_not_end_the_battle() -> void:
+	var board := _open()
+	board.send(&"beast", _make_enemy(20, 20), ANA + Vector2i(1, 0))
+	board.end_turn()
+	board.strike(&"beast", ANA)
+	assert_array(board.fallen()).contains_exactly([&"ana"])
+	assert_bool(board.is_over()).is_false()
+
+# --- ce que la vague annonce ------------------------------------------------------------
+
+## Une annonce vaut pour un tour, donc la table **remplace** la précédente. Un reliquat de la
+## manche d'avant serait une case allumée que plus personne ne frappera.
+func test_announcing_replaces_the_previous_table() -> void:
+	var board := _open()
+	var aimed: Dictionary[StringName, CombatIntent] = {&"orc": CombatIntent.strike(HUT)}
+	board.announce(aimed)
+	assert_bool(board.intent_of(&"orc").is_bound()).is_true()
+	var coming: Dictionary[StringName, CombatIntent] = {&"orc": CombatIntent.advance()}
+	board.announce(coming)
+	assert_bool(board.intent_of(&"orc").is_bound()).is_false()
+	assert_int(board.intents().size()).is_equal(1)
+
+## Un corps qui n'a rien annoncé **avance**, et ce n'est pas un cas d'erreur : c'est ce que
+## fera un renfort entré après le tour d'annonce, le jour où `X6` en enverra.
+func test_a_body_that_announced_nothing_advances() -> void:
+	assert_int(_board.intent_of(&"orc").kind()).is_equal(CombatIntent.Kind.ADVANCE)
+
+# --- ce que la vague emporte ------------------------------------------------------------
+
+## **Le butin court par manche passée dans l'enceinte**, ce que `DESIGN.md` 3.6 appelle « ce
+## qu'ils ont cassé et emporté entre-temps ». Il s'accumule pendant la bataille et non à son
+## départ, ce qui fait payer les deux bonnes façons de jouer.
+func test_an_attacker_inside_the_walls_carries_off_its_share_each_round() -> void:
+	var board := _open()
+	board.send(&"thief", _make_looter(2), INSIDE)
+	_a_round(board)
+	assert_int(board.plunder()).is_equal(2)
+	_a_round(board)
+	assert_int(board.plunder()).is_equal(4)
+
+## Et une vague tenue dehors repart les mains vides, sans qu'une règle ait à le dire.
+func test_an_attacker_held_outside_carries_nothing_off() -> void:
+	var board := _open()
+	board.send(&"thief", _make_looter(2), ORC + Vector2i(0, -1))
+	_a_round(board)
+	assert_int(board.plunder()).is_equal(0)
+
+## Un assaillant tombé ne pille plus. C'est la moitié de la règle qui fait payer le nettoyage
+## sans qu'aucun bonus n'ait à être chiffré.
+func test_a_fallen_attacker_stops_looting() -> void:
+	var board := _open()
+	board.send(&"thief", _make_looter(2), INSIDE)
+	board.deploy(_unit(&"hitter", 20, 20), INSIDE + Vector2i(0, -1))
+	board.strike(&"hitter", INSIDE)
+	_a_round(board)
+	assert_int(board.plunder()).is_equal(0)
+
+## **L'enceinte ne rétrécit pas quand un mur tombe.** La recalculer ferait rapporter *moins*
+## à une vague qui casse *plus*, ce qui est l'inverse de ce qu'on veut : le village qu'on
+## pille est celui qu'on a trouvé en arrivant.
+func test_the_enclosure_does_not_shrink_when_a_wall_falls() -> void:
+	var board := _blow_at(SITE, HUT_HP)
+	assert_bool(board.is_wrecked(SITE)).is_true()
+	assert_vector(board.enclosure().size).is_equal(Vector2i(3, 1))
+
+# --- le rapport -------------------------------------------------------------------------
+
+## **Le producteur que `DESIGN.md` 3.6 réclame depuis `F1`**, et il ne calcule rien : tout ce
+## qu'il rend, le plateau le tenait déjà. C'est ce qui laissera l'applicateur de
+## `RunOrchestrator.fight()` intact à `F3b`.
+func test_the_report_carries_what_the_battle_did() -> void:
+	var board := _open(HUT_HP, HUT_HP)
+	board.deploy(_unit(&"bo", HUT_HP, HUT_HP), HUT + Vector2i(0, -1))
+	board.strike(&"bo", HUT)
+	board.end_turn()
+	board.strike(&"orc", SITE)
+	var report := board.to_report()
+	assert_dict(report.damaged()).contains_keys([HUT, SITE])
+	assert_array(report.destroyed()).contains_exactly([HUT, SITE])
+	assert_array(report.interrupted()).contains_exactly([SITE])
+	assert_bool(report.is_held()).is_false()
+	assert_bool(report.swept()).is_false()
+
+## Un village que rien n'a entamé rend un rapport **tenu**, ce qui est l'état d'un joueur qui
+## a bien joué et non une erreur.
+func test_an_untouched_village_reports_a_held_wave() -> void:
+	assert_bool(_board.to_report().is_held()).is_true()
+
+## La ligne est payée en entier, **tombés compris** : un mort a tenu la ligne, et
+## `DamageReport.fighters()` en dépend.
+func test_the_report_pays_the_line_including_the_fallen() -> void:
+	var board := _open()
+	board.send(&"beast", _make_enemy(20, 20), ANA + Vector2i(1, 0))
+	board.end_turn()
+	board.strike(&"beast", ANA)
+	var report := board.to_report()
+	assert_array(report.lost()).contains_exactly([&"ana"])
+	assert_array(report.fighters()).contains_exactly([&"ana"])
+
+
 # --- fabrique --------------------------------------------------------------------------
 
 ## Une bataille jouée d'avance, toujours la même : on approche, on cogne le chantier, on
@@ -350,6 +487,20 @@ func _scripted() -> CombatBoard:
 	board.move(&"orc", ORC + Vector2i(-1, 0))
 	board.strike(&"orc", HUT)
 	return board
+
+## Une manche entière pendant laquelle personne n'agit : on passe la main, puis on la
+## reprend. C'est la fermeture du tour de la vague qui compte le butin, donc les deux
+## `end_turn()` sont nécessaires et le second ne peut pas être sous-entendu.
+func _a_round(board: CombatBoard) -> void:
+	board.end_turn()
+	board.end_turn()
+
+## Un assaillant dont la seule particularité est ce qu'il emporte.
+func _make_looter(loot: int) -> EnemyData:
+	var enemy := _make_enemy(1, 1)
+	enemy.plunder = loot
+	return enemy
+
 
 ## Un plateau où `ana` a frappé cette case de ce coup, une fois.
 func _blow_at(cell: Vector2i, blow: int) -> CombatBoard:
@@ -368,11 +519,12 @@ func _rolled(salt: int, low := 2, high := 6) -> int:
 	board.deploy(_unit(&"dummy", 1, 1), ANA + Vector2i(1, 0))
 	return board.strike(&"ana", ANA + Vector2i(1, 0)).damage()
 
-func _open(low := 3, high := 3, extent := EXTENT, grain := SEED) -> CombatBoard:
+func _open(low := 3, high := 3, extent := EXTENT, grain := SEED,
+		rounds := ROUNDS) -> CombatBoard:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = grain
 	var board := CombatBoard.open(_make_grid(extent).to_query(), _make_city(extent),
-		_make_balance(), rng)
+		_make_balance(), rng, rounds)
 	if extent != EXTENT:
 		return board
 	board.deploy(_unit(&"ana", low, high), ANA)
@@ -436,4 +588,5 @@ func _make_balance() -> CombatBalance:
 	balance.climb_cost = 1
 	balance.impassable_tags = [&"water"] as Array[StringName]
 	balance.spawn_margin = 2
+	balance.combat_skill_family = &"combat"
 	return balance

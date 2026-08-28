@@ -19,6 +19,10 @@ const SITE := Vector2i(5, 6)
 
 const EXTENT := Vector2i(12, 12)
 const MARGIN := 3
+## Borne de tours des plateaux de cette suite. Large, pour qu'aucun cas qui parle d'autre
+## chose ne s'arrête au milieu.
+const ROUNDS := 20
+
 const NORTH := Vector2i(0, -1)
 const SOUTH := Vector2i(0, 1)
 const WEST := Vector2i(-1, 0)
@@ -88,7 +92,7 @@ func test_no_entry_cell_is_one_a_body_could_not_stand_on() -> void:
 func test_a_cramped_side_returns_what_it_can() -> void:
 	var placed: Array[BuildingSnapshot] = [_placed(Vector2i(5, 0))]
 	var edged := CombatBoard.open(_grid.to_query(), CitySnapshot.create(placed),
-		_make_balance(), _make_rng())
+		_make_balance(), _make_rng(), ROUNDS)
 	assert_array(BattleGround.entry_cells(edged, NORTH, 5)).is_empty()
 
 ## Zéro assaillant, zéro case. Le cas existe parce qu'une vague vide est légitime — un
@@ -125,7 +129,8 @@ func test_defenders_stand_closer_than_the_wave() -> void:
 # --- fabrique --------------------------------------------------------------------------
 
 func _open() -> CombatBoard:
-	return CombatBoard.open(_grid.to_query(), _make_city(), _make_balance(), _make_rng())
+	return CombatBoard.open(_grid.to_query(), _make_city(), _make_balance(),
+		_make_rng(), ROUNDS)
 
 func _make_city() -> CitySnapshot:
 	var placed: Array[BuildingSnapshot] = [
