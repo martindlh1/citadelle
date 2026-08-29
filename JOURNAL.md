@@ -4,6 +4,524 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-08-28 — `F2b` : la vague décide, et une annonce engage
+
+**État : terminé**, et `F2` est fini. Sept commits sur `feat/f2b-wave-ai`, tirée de
+`feat/f3a-battle-view` — la branche porte donc trois jalons. Les trois commandes passent :
+boot sans erreur ni warning, tout `src/domain/` parse, **962 tests verts contre 925**.
+Les neuf harnais bootés un par un. Six captures.
+
+### La question qui ouvrait le jalon, et la ligne qui la referme
+
+`DESIGN.md` 3.6 gardait le grain du vocabulaire d'intentions ouvert depuis `F2a`, et le
+jalon commençait par là plutôt que par du code. La réponse retenue tient en une ligne :
+
+> **Un corps annonce une case exactement quand il peut frapper sans bouger**, et cette
+> annonce engage.
+
+Ce qu'elle répare est la contradiction qui avait rouvert le paragraphe. Un **trajet** ne
+s'annonce pas — le joueur agit après, donc le plan est conditionnel ou rigide. Une **case**
+si, mais seulement quand rien de ce que le joueur fera ne peut l'invalider, c'est-à-dire
+quand le corps n'a pas à se déplacer pour la tenir.
+
+Elle répond **oui** à la question littérale que tu posais — un tireur posté annonce sa case
+—, et c'est ce qui compte : **ce n'est pas une règle sur les tireurs.** Un corps-à-corps
+déjà collé à un ouvrier annonce la sienne aussi. Ce qui varie est la **situation**, que le
+joueur lit sur le plateau, pas la fiche de l'assaillant — et l'objection du « vocabulaire à
+géométrie variable » tombe avec ça.
+
+La troisième sortie, ne jamais annoncer de case, était la plus courte à écrire et elle
+tuait une règle entière. On n'esquive pas ce qui n'est pas annoncé : « une intention frappe
+la case, pas la cible » aurait continué de fonctionner à la résolution sans que le joueur
+puisse jamais s'en servir.
+
+### Ce que le pillage a demandé de trancher
+
+`DESIGN.md` 3.6 dit « ce qu'ils ont cassé et emporté **entre-temps** », et c'est ce mot qui
+a décidé : le butin court **par manche passée dans l'enceinte**, pas au départ de la vague.
+Trois conséquences, et c'est pour elles que la lecture a été préférée à « chaque survivant
+emporte sa part » : les deux bonnes façons de jouer paient — les abattre vite, ou les tenir
+dehors —, une vague bloquée à la lisière repart les mains vides sans qu'une règle ait à le
+dire, et la borne de tours cesse d'être une durée pour devenir un montant.
+
+L'enceinte est **figée à l'ouverture**. La recalculer ferait rapporter *moins* à une vague
+qui casse *plus*, ce qui est l'inverse de ce qu'on veut.
+
+### Ce que la data porte maintenant
+
+`WaveDef` dit enfin **qui vient** — un identifiant d'`EnemyData` par corps, répétitions
+écrites, dans l'ordre où ils prennent les cases d'entrée — et **combien de manches il faut
+tenir**. La borne est par vague et non dans `CombatBalance` : un siège s'installe là où une
+escarmouche passe, et la durée d'une razzia est du contenu au même titre que sa composition.
+Les deux dans le même `.tres`, ce qui est la seule façon de les garder d'accord.
+
+`power` reste, seul champ de l'époque du bouchon, et il partira avec lui à `F3b`. Deux
+époques cohabitent, exactement comme `CombatBalance` en porte trois depuis `F2a`.
+
+`EnemyData` gagne son butin, et son docstring l'annonçait mot pour mot depuis `F2a` : « il
+ne reste dehors que le **butin** ». Rien ne reste dehors désormais.
+
+`GameDatabase` gagne un troisième contrôle croisé, après les ressources et les cartes : une
+composition qui nommerait un assaillant inexistant ferait entrer une vague avec un corps de
+moins, en silence.
+
+### Le contrat, et ce qu'il cesse de publier
+
+`assault`, `defense` et `breach()` ont quitté le `DamageReport`, `swept()` y est entré, et
+`is_empty()` a fondu dans `is_held()`. Les trois premiers décrivaient une **soustraction**,
+pas un fait du combat : une vague qui est une poignée de corps sur une grille n'a plus de
+« puissance » à publier. Ce que le rapport dit désormais, ce sont des faits — ce qui est
+tombé, qui est mort, ce qui est parti.
+
+Et la promesse de `F1` se vérifie enfin : **`RunOrchestrator.fight()` applique ce rapport
+sans une ligne à changer.** C'est ce que `DESIGN.md` 3.6 annonçait en corrigeant la phrase
+sur « l'échange en une ligne » — l'applicateur ne bouge pas, c'est le producteur qui change
+de nature.
+
+Ce qui n'est **pas** entré, et c'est la discipline habituelle : le nombre de manches tenues.
+Le plateau le connaît, personne hors du Combat ne le lit, et un champ que personne ne
+franchit est la frontière que ce projet refuse depuis `E1`. Il entrera avec l'écran qui
+voudra dire « tenue cinq manches ».
+
+### Le partage entre qui décide et qui se souvient
+
+`WaveAI` décide, `CombatBoard` se souvient, l'écran lit. Le plateau porte les intentions, la
+borne, le butin et `to_report()` — mais il ne décide de rien, et ce n'est pas seulement de la
+doctrine : le harnais joue les deux camps à la main depuis `F3a`, et un plateau qui
+réannoncerait tout seul le lui interdirait. La touche `A` rend donc la vague au joueur, et
+**le même plateau se rejoue des deux façons**, ce qui était l'argument qui avait fait passer
+`F3a` devant ce jalon.
+
+`WaveAI.take_turn()` est la seule porte, et l'ordre qu'elle tient compte : la manche se ferme
+**entre** l'exécution et l'annonce suivante, parce que c'est à cette fermeture que le butin
+se compte et que la borne avance. Annoncer avant décrirait un plateau d'une manche en retard.
+
+### Les deux défauts, et aucun n'a été trouvé par un test
+
+**En capture.** La borne franchie, l'écran gardait affichées les quatre cases annoncées à la
+dernière manche : une vague repartie promettait des coups qui ne tomberaient jamais. La
+réparation est dans le **domaine** et pas dans la vue — une vague repartie n'annonce rien, et
+la réponse est la même pour tous les écrans. Le compteur de voiles du harnais l'a confirmée
+sans qu'on ait à sonder un PNG : « 4 annoncée(s) » est devenu « 0 annoncée(s) ».
+
+**Dans une table.** Celui-là est le plus instructif du jalon, et il est d'une famille neuve.
+La table qui mesure ce qu'esquiver retire à la vague la prenait à la **première** manche —
+celle où la vague entre à trois cases de la lisière et n'a encore personne à portée. Le
+chiffre était exact, la colonne alignée, le verdict formellement satisfait, et la table
+mesurait **l'approche**. Prise à la manche où la vague est le plus engagée, elle est passée
+de « 13 contre 11 » à **« 12 contre 3 »**, pour le même nombre de coups portés, la
+différence entièrement en coups tombés dans le vide.
+
+C'est entré dans `CLAUDE.md` : les deux règles qui y étaient portaient sur *ce qu'on compte*,
+celle-ci porte sur **quand** on le compte. Une table choisit son moment et l'écrit dans son
+titre.
+
+### Ce que le harnais dit, et qui n'est pas rassurant
+
+La chronique manche par manche est lisible et le verdict est dur : à ces chiffres-là, la
+Razzia tue les **trois** défenseurs avant la quatrième manche, rase trois bâtiments sur
+quatre, emporte douze de réserve et repart sans une égratignure. C'est le même constat que
+`F2a`, mesuré autrement, et c'est `I3`.
+
+La chronique dit aussi ce qu'elle devait dire du reste : le vocabulaire est **exercé** — la
+colonne « annoncent » va de 0 à 4 selon les manches, donc les deux entrées existent
+vraiment —, et le pillage reste à zéro tant qu'ils sont dehors puis monte dès qu'ils entrent,
+ce que la colonne « dans murs » corrobore depuis un autre compteur.
+
+### Un piège d'outil, et une leçon de portée de tests
+
+**Un `&&` avale une vérification.** J'ai chaîné `python patch.py && godot --headless --quit`
+suivi d'un `echo` séparé par `;`. Le patch a échoué, le boot n'a jamais tourné, et le `echo`
+a imprimé « boot fini ». Une vérification ne se chaîne pas derrière ce qui peut échouer.
+
+**Et j'ai élargi la suite de tests un cran trop tard.** Le commit de schéma a cassé
+`run_orchestrator_test`, qui fabrique ses propres `WaveDef` et que `RunState.open()` refuse
+désormais sans composition. Les suites ciblées ne l'ont pas vu parce que j'avais lancé
+`tests/domain/run` avant ce commit et `tests/schema` après. La règle existait — élargir quand
+un changement traverse — et il fallait la lire d'un cran plus large : **un champ de
+`src/schema/` qu'agrège `RunBalance` voyage aussi loin qu'un champ de `data/balance/`.**
+
+### Ce que je n'ai pas fait
+
+Aucun branchement sur le run : la bataille ne se déclenche toujours pas à la fermeture d'une
+journée, et le `DamageReport` que le plateau sait rendre n'est appliqué par personne. C'est
+`F3b`, et il n'attend plus que lui-même.
+
+Aucun équilibrage. Le bonus d'un balayage complet est **constaté** par le rapport et payé par
+personne, ce que `DESIGN.md` 3.6 réserve à `I3`.
+
+Aucune capacité (`X5`), aucun état (`X6`), aucune coordination entre assaillants : trois
+corps qui appliquent la même règle chacun de leur côté produisent déjà de l'encerclement et
+du blocage de porte.
+
+`InstantCombatResolver` est **intact** et fait encore tourner le jeu. Il expose une
+`breach_of()` publique de plus, pour son seul lecteur restant — le harnais qui le calibre —,
+et il partira avec elle à `F3b`.
+
+### Une tension d'écran laissée à `F3b`
+
+Quand la vague repart, le panneau dit « La vague repart » pendant que les pions des
+assaillants sont toujours sur la carte, debout au milieu des ruines. Ce n'est pas un bug —
+la carte montre l'état, le panneau raconte, et c'est le partage que `F3a` a posé — mais les
+deux se contredisent à la lecture. Le despawn effacerait où la bataille s'est terminée, et
+rendrait un balayage indiscernable d'un départ. La vraie réponse est ce qui **ferme** un
+écran de bataille, et c'est `F3b` qui l'écrira.
+
+### Prochain jalon
+
+**`F3b`** — l'intégration : le producteur branché dans `RunOrchestrator`, la fin de journée
+qui cesse d'être atomique, `EventBus`, et l'écran qui s'ouvre et se ferme. Tout ce qu'il
+attendait existe.
+
+Puis **`M1`**, le menu, toujours le premier jalon qui demande une `.tscn`. Puis **`I3`**, qui
+a maintenant trois fronts : la nourriture, la dureté des vagues, et les deux chiffres neufs —
+la borne de tours et le butin par manche.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien.** Aucune `.tscn` ni `project.godot` touché.
+
+- **`HARNESS` vaut `&"battle"`.** L'IA tient la vague : `Entrée` finit ton tour, elle joue le
+  sien, tu reprends la main. **`A`** te la rend si tu veux rejouer le même plateau à la main.
+- **Le voile ambre** est ce que la vague a annoncé. Une case ambre est un coup qui tombera
+  là quoi qu'il arrive — en partir le fait tomber dans le vide, et coûte son tour à celui qui
+  l'avait annoncé.
+- **Les fiches d'en face** disent « frappe » ou « avance » pendant ton tour, et leurs gestes
+  restants pendant le leur.
+- **`H`** montre deux tables neuves : ce qu'esquiver retire à la vague, et ce qu'une vague
+  fait seule manche par manche.
+- **Deux drapeaux de capture** : `--shot-rounds n` laisse l'IA jouer n manches,
+  `--shot-foes` te rend la main. Documentés au README.
+- **La branche n'est pas fusionnée** : `feat/f2b-wave-ai`, sept commits, par-dessus les huit
+  de `F2a` et `F3a`.
+
+---
+
+## 2026-08-28 — `F3a` : la bataille se regarde, et quatre défauts que seule l'image montre
+
+**État : terminé.** Trois commits sur `feat/f3a-battle-view`, tirée de `feat/f2a-battle-board`
+— la branche porte donc les deux jalons, comme `feat/i2b-knobs` en portait trois. Les trois
+commandes passent : boot sans erreur ni warning, tout `src/domain/` parse, **925 tests verts
+contre 918**. Les neuf harnais bootés un par un. Cinq captures.
+
+### Pourquoi un bout de `F3` est passé devant `F2b`
+
+C'est venu de toi, et l'argument tenait en une phrase : *« le rendu texte ne m'est pas aussi
+facile à lire »*. Le calendrier d'origine faisait écrire l'IA contre un damier ASCII, puis la
+vue après — c'est-à-dire décider du format en le lisant dans un terminal.
+
+Ce que la conversation a fait apparaître en plus, et qui rend l'ordre meilleur qu'il n'y
+paraissait : **sans IA, une vue laisse jouer les deux camps.** On sent donc le format en
+entier — déplacement, relief, blocage, la règle « on frappe la case » — sans qu'aucune ligne
+d'IA existe. Et `F2b` remplacera ton contrôle du camp d'en face par une IA, donc le **même
+plateau se rejouera des deux façons**. C'est le meilleur banc d'essai possible pour la
+question d'intentions qui reste ouverte.
+
+C'est la seconde fois qu'un ordre de jalons change en cours de route, après `E1b` passé avant
+`W1`, et la raison est de la même famille : **on ne fait pas de contenu dans un instrument
+qu'on ne sait pas lire.**
+
+### Ce qu'il a fallu écrire, et c'est peu
+
+`DevWorld` donnait déjà le ciel, le soleil, la caméra, le relief et le survol.
+`TargetHighlight` posait déjà un voile sur un jeu de cellules — il lui manquait une teinte en
+argument, une ligne. `BuildingRenderer` dessinait déjà la ville — il lui manquait une liste
+d'ancres à sauter, six lignes. `CellCursor` désignait déjà une case.
+
+Deux vues sont neuves : les pions, et un panneau. Le panneau est **la sœur d'`AssignmentPanel`
+jusque dans le geste** — on clique une fiche, puis on clique la carte —, ce que `P1a` a posé
+comme le vocabulaire du jeu et qu'il n'y avait aucune raison de rompre parce qu'on se bat.
+
+Trois choses ont débordé d'`adapters/`, et toutes les trois étaient prévues au plan sauf la
+troisième.
+
+**`CombatBoard.strikeable()`**, parce qu'une vue ne juge rien. Allumer les cases à portée
+*est* la question « jusqu'où puis-je frapper », et un écran qui recopierait `can_reach()`
+finirait par allumer autre chose que ce que `strike()` accepte. Elle rend **toutes** les cases
+à portée, vides comprises : filtrer sur ce qui s'y trouve ferait d'une case qui s'éteint une
+information que le joueur n'a pas à recevoir avant d'avoir frappé.
+
+**Deux refus qu'un écran rend nécessaires**, et ils sont le meilleur de la couche domaine.
+On ne frappe pas sa propre case — la portée inclut la distance zéro, donc un clic mal placé
+blesserait le sien. Et on ne dépense pas son pas pour rester où l'on est — `reachable()` rend
+toujours la case de départ à zéro, parce que c'est une vérité sur les distances, mais le geste
+brûlerait le déplacement du tour pour rien.
+
+Les deux sont dans le **domaine** et non dans la vue, par la règle qu'`E2` et `W2` n'arrêtent
+pas de prouver : une règle que deux écrans doivent se rappeler est une règle qu'un troisième
+oubliera. Et ni l'un ni l'autre n'aurait été cherché par un test : ce sont des pièges que
+l'existence d'un curseur crée, pas des règles qu'un domaine viole.
+
+**La couleur d'un `EnemyData`** est entrée, et son docstring l'annonçait mot pour mot : « elle
+arrivera avec le renderer qui la lit ». Il ne reste dehors que le butin, qui attend `F2b`.
+
+### Les quatre défauts que la capture a trouvés
+
+Aucun n'était cherché, aucun n'aurait été vu autrement. `src/adapters/` n'est pas testé et les
+trois commandes ne regardent pas l'écran : la capture **est** le contrôle du jalon.
+
+**La caméra cadrait les 32×32.** `DevWorld` cadre la grille entière, ce qui est juste pour les
+harnais qui la regardent toute — et illisible ici : une bataille tient dans une dizaine de
+cases, donc les pions faisaient trois pixels. Elle cadre le bâti plus la marge d'entrée, de
+sorte que la vague soit dans l'image dès la première frame.
+
+**Le rapport couvrait les deux tiers du champ.** Un jalon d'écran qui cache ce qu'il vient de
+rendre visible est un contresens. Seules les commandes restent affichées ; les tables partent
+sur la sortie standard et reviennent sous `H`.
+
+**Les assaillants étaient des cônes, et `TerrainDecorRenderer` dessine les forêts en cônes
+sombres.** Un pillard ne différait donc d'un arbre que par sa teinte — exactement ce que le
+docstring du renderer refuse trois paragraphes plus haut. Les rochers étant des dômes, les
+deux primitives libres de `T3` étaient prises ; un **tronc de cône** se glisse entre les deux
+et garde ses flancs courbes.
+
+**Et le voile rouge disparaissait pour un corps-à-corps.** Celui-là est le plus instructif,
+parce qu'il a failli me faire chercher au mauvais endroit. Le compteur ajouté à la capture a
+répondu « 13 cases atteignables, 4 frappables » — donc le domaine et le câblage étaient
+justes, et le défaut était une **opacité**. À 0,34 le voile tenait pour un archer, dont la
+portée couvre vingt-quatre cases, et s'effaçait pour les quatre d'un corps-à-corps : il
+disparaissait précisément dans le cas le plus fréquent.
+
+C'est la leçon de `P1b` telle quelle : **sonder un PNG rend un doute, faire dire le chiffre au
+harnais rend un nombre.** Les deux compteurs sortent désormais sur toutes les captures.
+
+Un cinquième défaut a été corrigé sans jamais être vu, parce qu'il se déduisait : les deux
+voiles étaient coplanaires, donc se disputaient le même Y sur toutes les cases à la fois
+atteignables et frappables — c'est-à-dire les voisines, donc les seules qui comptent.
+
+### Ce que je n'ai pas fait
+
+Aucune intention affichée : `F2b` n'a pas décidé de leur forme. Aucune IA. Aucun branchement
+sur le run — la bataille ne se déclenche pas à la fermeture d'une journée et ne rend aucun
+`DamageReport`, c'est `F3b`. Aucun cadrage sur le côté attaqué au-delà du recadrage sur le
+bâti. Et **aucun test d'adapter**, `CLAUDE.md` posant que `src/adapters/` n'est pas testé —
+les sept cas de plus couvrent les trois ajouts au domaine.
+
+`DamageReport` n'a toujours pas bougé, pour la raison écrite à `F2a` : il perdra `assault`,
+`defense` et `breach()` quand il y aura un producteur pour le remplir.
+
+### Un piège d'outil qui m'a coûté trois allers-retours
+
+Les backslashes d'un heredoc `<<'PY'` perdent un niveau d'échappement avant d'arriver à
+Python, y compris avec un délimiteur cité. Une continuation de ligne GDScript et un `"\n"`
+littéral n'ont donc jamais pu être trouvés dans un fichier où ils étaient pourtant. La
+parade est d'écrire le script de patch dans un fichier plutôt que de le passer en heredoc.
+
+### Prochain jalon
+
+**`F2b`** — les intentions, l'IA, la borne de tours, le pillage, le `DamageReport`. Il commence
+par ta question et non par du code : le grain du vocabulaire d'intentions, et notamment si une
+attaque à distance annonce sa case.
+
+Puis **`F3b`**, l'intégration, qui n'attend que ce rapport. Puis **`M1`**, puis **`I3`**.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien.** Aucune `.tscn` ni `project.godot` touché — les vues se bâtissent en code.
+
+- **`HARNESS` vaut `&"battle"`.** Clic gauche : prendre un corps, ou l'emmener sur une case
+  bleue. Clic droit : frapper une case rouge. `Entrée` finit le tour, `N` relance une bataille
+  neuve, `H` montre les chiffres. La caméra garde ses touches : `Q`/`E` pivotent, `R` recadre.
+- **Tu joues les deux camps**, exprès. Finis le tour et la vague devient jouable.
+- **Deux drapeaux de capture neufs** : `--shot-select n` prend le corps de ce rang,
+  `--shot-foes` passe la main à la vague. Documentés au README.
+- **Les chiffres sont des placeholders** et le harnais le dit : quatre assaillants balaient
+  trois défenseurs. C'est `I3`.
+- **La branche n'est pas fusionnée** : `feat/f3a-battle-view`, huit commits en tout — cinq
+  pour `F2a`, trois pour `F3a`.
+
+---
+
+## 2026-08-28 — `F2a` : le plateau existe, le relief joue, et les deux camps se ressemblent enfin
+
+**État : terminé**, et `F2` est découpé en deux — `F2b` reste entier. Quatre commits sur
+`feat/f2a-battle-board`, tirée de `master`. Les trois commandes passent : boot sans erreur
+ni warning, tout `src/domain/` parse, **918 tests verts contre 826**, 50 suites contre 46.
+Les neuf harnais ont été bootés un par un — un contrat a bougé.
+
+### Pourquoi le jalon a été coupé en deux
+
+Compté honnêtement, `F2` faisait vingt-cinq fichiers, une catégorie de `data/` de plus et
+une centaine de cas — plus gros que `I1` et que `F1`. La découpe suit ce que chaque moitié
+**touche**, comme `P1a`/`P1b` : `F2a` ne sort pas de `domain/combat/`, `src/schema/` et
+`data/`, à un contrat près ; `F2b` porte tout ce qui **décide**.
+
+Elle s'est trouvée justifiée pour une raison qu'on n'avait pas prévue : tu as rouvert le
+système d'intentions en cours de session. Écrire un plateau ne l'attend pas ; écrire une IA
+ne peut pas s'en passer. La coupure est tombée exactement sur cette ligne.
+
+### Les deux corrections qui viennent de toi
+
+**Les attaquants n'ont pas à être des généralités, et les défenseurs non plus.** Le plan
+proposait `fighter_hit_points`, `fighter_attack` et consorts dans `CombatBalance` — c'est-à-dire
+*un* soldat décliné en N exemplaires, pendant qu'`EnemyData` allait décrire des assaillants
+tous différents. Un camp spécifique contre un camp générique n'est pas un combat tactique,
+c'est une multiplication.
+
+`CombatStats` est né de là, et c'est le premier DTO de `contracts/` créé depuis `F1` : **la
+même forme pour les deux camps**. Un assaillant tient la sienne de son `EnemyData`, un
+ouvrier de la projection des Effectifs, et le plateau ne sait pas laquelle il lit. C'est ce
+qui permet au déplacement, à la portée et aux dégâts de s'écrire **une fois** — sans lui, les
+deux camps auraient eu deux chemins de code et deux occasions de diverger sur ce que
+« grimper » veut dire.
+
+`CombatUnit` cesse donc d'être un multiplicateur. Son docstring gardait la place depuis `F1`
+en toutes lettres — « ni PV, ni équipement, ni blessure… ce contrat lui laisse la place
+d'ajouter ce dont il aura besoin » — et `F1` avait raison d'attendre : il aurait deviné.
+
+Ce que ça a demandé de trancher, et ce n'était pas dans le plan : **ce qu'un palier de piste
+Combat achète.** La réponse retenue est *les dégâts, et rien d'autre*. Un entraînement fait
+frapper plus fort ; encaisser relève de l'équipement et de la constitution, donc de `X5` et
+de `X6`. Lui faire multiplier les deux rendrait un vétéran deux fois meilleur sur deux axes à
+la fois, ce qui est une courbe qu'on ne peut plus régler.
+
+Tous les ouvriers ont donc les mêmes points de vie aujourd'hui — et ce n'est **pas** une
+généralité de contrat, ce qui est toute la différence. Le chiffre voyage par unité, si bien
+que la piste que tu gardes ouverte — des paliers qui donnent des stats, des PV tirés à la
+création — ne changera que `Worker.to_combat_unit()`, un fichier, et le plateau ne s'en
+apercevra pas.
+
+**Il y a de l'aléatoire, et il est borné.** Chaque corps porte une fourchette de dégâts
+plutôt qu'un chiffre : un combat entièrement calculable se calcule au lieu de se jouer. Le
+tirage passe par le `RandomNumberGenerator` du run, jamais `randf()` — donc un seed plus une
+suite de gestes rejoue une bataille à l'identique, et le déterminisme promis depuis `I0`
+n'est pas entamé. Un cas de test le porte.
+
+Les **pourcentages** que tu mentionnais en plus — infliger un effet — appartiennent à `X6`, et
+`F2` n'en invente aucun : 3.6 est explicite, « il en inventerait quatre ». Le tirage aura sa
+place au moment de frapper ; rien ne l'occupe.
+
+### Les intentions, rouvertes, et ce que la session en retient
+
+Tu as mis le doigt sur la vraie difficulté, et elle est structurelle : sur une grille où les
+corps bloquent, le joueur agit **après** l'annonce, donc un trajet annoncé est soit
+conditionnel — et l'information cesse d'être complète, ce que 3.6 refuse en toutes lettres —
+soit rigide, et un ennemi enfermé cogne l'air.
+
+Trois sorties ont été pesées, dont « un pion fait une chose par tour », que tu as écartée
+parce qu'elle ralentit les combats. La direction retenue est plus vague, à la *Slay the
+Spire* : on sait de quelle **nature** sera le tour d'un ennemi, sans son trajet ni sa case.
+
+Ce que la conversation a fait apparaître et qui vaut d'être noté : **la difficulté ne venait
+pas du « bouger *et* frapper », elle venait du trajet annoncé.** En ne déclarant que la
+nature, l'IA se résout à l'exécution contre le plateau réel, et le blocage cesse d'être un
+cas à traiter — sans rien coûter au rythme. Le plateau a donc été écrit pour qu'un corps
+puisse se déplacer et frapper dans le même tour, ce qui est la lettre de 3.6.
+
+Reste à trancher, et c'est la première chose de `F2b` : si une attaque **à distance** annonce
+sa case. L'argument pour est qu'un tireur qui ne bouge pas a une visée que rien ne peut
+invalider sauf l'esquive, donc que c'est exactement là que la règle de 3.6 a un sens.
+
+### Ce que le relief fait, et l'asymétrie qui se discute
+
+Trois précisions que l'écriture a demandées. Le déplacement est **orthogonal** et la portée
+en **Manhattan** : mélanger deux métriques sur la même grille produit des distances qu'on ne
+peut pas lire à l'œil, et une case atteignable en deux pas qui serait « au contact » ferait
+mentir toute case allumée à l'écran. Un mur, un chantier et un corps **barrent de la même
+façon** — c'est la seule tactique que `F2a` livre.
+
+Et **descendre ne coûte que le pas**, quelle que soit la chute. Celle-là se discute, donc
+elle est dans `DESIGN.md` : elle fait d'une hauteur une position qu'on *tient* — longue à
+gagner, facile à quitter — plutôt qu'un mur qui enferme aussi celui qui est dessus. Un
+défenseur peut sauter d'un plateau pour rompre le contact, et l'assaillant devra remonter.
+
+La marche franchissable est **par corps** et non globale, ce qui laisse la place à un
+assaillant qui escalade là où les autres contournent — le Colosse de `data/enemies/` en
+franchit deux là où tout le monde en franchit un.
+
+### Ce que les tags de terrain ont évité
+
+`impassable_tags` vit dans `data/balance/` et non dans le code, parce que le domaine aurait
+sinon écrit `&"water"`. C'est le même geste que `combat_skill_family` à `F1`.
+
+Il est le seul champ neuf **réclamé non vide**, et la raison mérite d'être notée : Godot
+n'écrit pas un tableau vide dans un `.tres`, donc « oublié » et « délibérément vide » y sont
+indiscernables — c'est exactement le piège de `resolves`. L'issue de `PhaseDef`, faire monter
+la règle d'un cran, ne s'applique pas ici : aucun bloc au-dessus ne voit cette liste. Un
+combat où l'on marche sur l'eau n'est pas un modèle qu'on essaie, c'est un champ perdu.
+
+### Ce que le harnais a trouvé tout seul, et c'est le meilleur du jalon
+
+Deux défauts, tous deux au premier lancement, et **aucun n'était cherché**.
+
+**Le village se bâtissait contre le bord haut de la carte.** `_raise()` posait chaque
+bâtiment sur la première ancre acceptée en balayant depuis l'origine — le harnais Combat fait
+pareil et ne s'en aperçoit pas, parce qu'aucune de ses tables n'est géométrique. La lisière du
+bâti touchait donc le bord, et une vague qui arrive du nord n'avait **aucune** case où entrer.
+
+La table l'a dit en toutes lettres — « entrée de la vague : aucune » — sous un damier
+parfaitement aligné. C'est la variante *utile* du défaut que `F1` a décrit : elle n'a pas
+menti, elle a annoncé qu'elle n'avait rien à montrer. Et c'est le verdict en fin de fichier
+qui l'a rendue lisible, ce qui est précisément ce à quoi il sert.
+
+**Et à ces chiffres-là, une vague de quatre balaie trois défenseurs en deux manches sans
+perdre personne.** Le verdict demande à l'échange « d'entamer quelque chose sans tout finir » ;
+il finit tout, du mauvais côté. Le harnais **dit lui-même** le constat sous la table plutôt
+que de laisser un critère que sa propre table contredit — un verdict faux serait exactement
+le tableau aligné, plausible et faux que `CLAUDE.md` refuse depuis `F1`. C'est un chiffre pour
+`I3` et pas une règle.
+
+La table du blocage a gagné une seconde colonne prise sur le **voisinage** et non sur le
+parcours, par la règle de `I2b` : deux colonnes tirées du même compteur ne prouvent rien en
+se ressemblant. Elle lit treize cases contre une, et une sortie contre zéro — ce qui dit
+qu'on tient une porte, pas qu'un calcul a raté.
+
+### Deux pièges de test, tous deux silencieux
+
+**Un coup dans le vide réussit et rend zéro.** C'est la règle d'esquive qui fonctionne — et
+c'est ce qui a fait qu'un cas censé mesurer une fourchette de dégâts ne mesurait rien du tout,
+faute de cible sur la case visée. Le cas échouait, ce qui est la chance ; il aurait pu passer.
+
+**Et « un village à l'étroit rend moins de cases » a d'abord été écrit avec une carte
+étroite**, ce qui était faux : une bande de deux cases de large offre autant d'entrées qu'on
+veut dès qu'on s'éloigne. Ce qui manque à un village acculé est la **profondeur**, jamais la
+largeur. Le cas serait passé au vert pour la mauvaise raison.
+
+### Le piège GDScript, entré dans `CLAUDE.md`
+
+Un `enum` déclaré dans une classe doit être **qualifié** dans les signatures de cette classe :
+`static func create(side: Side)` compile, puis refuse ce que tout appelant lui passe, parce
+que GDScript traite le `Side` interne et le `Combatant.Side` du dehors comme deux types
+distincts. Attrapé par le parsing, invisible à la lecture.
+
+### Ce qui ne bouge pas
+
+`InstantCombatResolver` est **intact** : il fait encore tourner le jeu, et `F3` l'échangera.
+Le harnais `combat` de `F1` reste à côté du nouveau pour la même raison — il calibre le
+bouchon. Aucune ligne de `RunOrchestrator.fight()`, d'`EventBus` ou de `src/adapters/`.
+
+`DamageReport` n'a **pas** bougé non plus, alors que tu as validé qu'il le fasse : il perdra
+`assault`, `defense` et `breach()` et gagnera `swept()` à `F2b`, quand il y aura un rapport à
+produire. Un contrat qu'on casse avant d'avoir son nouveau producteur est un contrat cassé
+deux fois.
+
+### Prochain jalon
+
+**`F2b`**, et il commence par une question de design plutôt que par du code : le grain du
+vocabulaire d'intentions, et notamment si une attaque à distance annonce sa case.
+
+Puis **`M1`**, le menu, inchangé — c'est toujours l'écran de fin de `P2a` qui le rend
+nécessaire, et toujours le premier jalon qui demande une `.tscn` et la scène principale.
+
+Puis **`I3`**, qui a maintenant deux fronts au lieu d'un : la nourriture — vingt-sept
+récoltées pour quatre-vingt-cinq dues — et le combat, dont le harnais dit déjà que la vague
+est trop dure de beaucoup.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien d'obligatoire.** Aucune `.tscn` ni `project.godot` touché.
+
+- **`HARNESS` vaut `&"battle"`** — le nouveau harnais, un rapport texte avec un damier.
+  `&"combat"` rend les tables du bouchon, `&"run"` rend le jeu.
+- **Le damier se lit ainsi** : un chiffre est la hauteur du relief, `#` un bâtiment, `+` un
+  chantier, `~` de l'eau, `^` du rocher ; une majuscule est un ouvrier engagé, une minuscule
+  un assaillant. La seconde carte remplace le décor par le **coût** pour aller sur chaque case.
+- **`data/enemies/` est neuf** — trois assaillants, un au contact, un lourd qui grimpe, un à
+  distance. Leurs chiffres sont des placeholders assumés.
+- **La branche n'est pas fusionnée** : `feat/f2a-battle-board`, quatre commits.
+
+---
+
 ## 2026-08-27 — `P2b` : la journée se souvient d'elle-même, et le soir a quelque chose à lire
 
 **État : terminé**, et `P2` avec lui. Trois commits sur `feat/i2b-knobs`. Les trois commandes

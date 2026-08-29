@@ -95,6 +95,18 @@ static func defense_of(city: CitySnapshot, force: CombatForce,
 		men += balance.defense_per_fighter * force.efficiency(fighter)
 	return walls + int(men)
 
+## Ce qui passe la ligne : la puissance de la vague moins ce qu'on lui oppose.
+##
+## Publique pour la même raison que slots_for() et defense_of(), et pour une de plus depuis
+## F2b : ce chiffre a **quitté le DamageReport**, où il décrivait l'arithmétique de ce
+## fichier et non un fait du combat. Le seul lecteur qui reste est le harnais qui calibre ce
+## bouchon, et c'est exactement là qu'il doit être demandé — au bouchon lui-même, qui
+## disparaîtra avec lui, plutôt que recalculé ailleurs à partir de deux chiffres publics.
+static func breach_of(city: CitySnapshot, force: CombatForce, wave: WaveDef,
+		balance: CombatBalance) -> int:
+	assert(wave != null, "brèche demandée sans vague")
+	return maxi(0, wave.power - defense_of(city, force, balance))
+
 ## Résout une vague et rend ce qu'elle ordonne.
 ##
 ## Toute l'arithmétique du bouchon tient dans les cinq lignes qui suivent, et c'est le
@@ -126,7 +138,7 @@ static func resolve(city: CitySnapshot, force: CombatForce, wave: WaveDef,
 	var defense := defense_of(city, force, balance)
 	var breach := maxi(0, wave.power - defense)
 	if breach <= 0:
-		return DamageReport.held(wave.power, defense, work)
+		return DamageReport.held(work, false)
 
 	var damaged: Dictionary[Vector2i, int] = {}
 	var destroyed: Array[Vector2i] = []
@@ -148,7 +160,7 @@ static func resolve(city: CitySnapshot, force: CombatForce, wave: WaveDef,
 
 	return DamageReport.create(damaged, destroyed, interrupted,
 		_casualties(line, breach, balance), breach * balance.plunder_per_breach, work,
-		wave.power, defense)
+		false)
 
 ## Les bâtiments dans l'ordre où la vague les frappe.
 ##

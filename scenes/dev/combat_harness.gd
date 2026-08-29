@@ -210,10 +210,11 @@ func _report_chronicle(balance: BalanceData) -> void:
 	for index in CHRONICLE_WAVES:
 		var wave := _waves[mini(index, _waves.size() - 1)]
 		var defense := _defense_of(state)
+		var breach := _breach_of(state, wave)
 		state.arm_wave(wave)
 		var report := RunOrchestrator.fight(state)
 		_lines.append("  %-*s %5d %5d %6d  %s" % [NAME_WIDTH, wave.label, defense,
-			report.damage().breach(), report.total_plundered(), _aftermath(state, report)])
+			breach, report.total_plundered(), _aftermath(state, report)])
 	_lines.append("")
 
 ## Ce que la vague a laissé debout, et ce qu'elle a emporté.
@@ -312,17 +313,25 @@ func _cost_of(placed: Array[StringName]) -> String:
 	return str(total)
 
 ## Une force de ce nombre d'hommes, tous au même palier de piste Combat.
-func _force(size: int, level := 0) -> CombatForce:
-	var units: Array[CombatUnit] = []
-	for index in size:
-		units.append(CombatUnit.create(_id_at(index), _multiplier(level)))
-	return CombatForce.create(units)
-
-## Le multiplicateur qu'un palier vaut, lu sur l'équilibrage des Effectifs.
 ##
-## Recalculé ici plutôt qu'obtenu en créditant de vrais `Worker` : la table balaie les
-## paliers, et faire monter huit ouvriers jusqu'au plafond pour chaque ligne demanderait de
-## rejouer la courbe de `W1` sans rien apprendre de plus.
+## Elle part de **vrais `Worker`** qu'on crédite, depuis que `F2a` a donné au `CombatUnit`
+## un profil complet. La version d'avant fabriquait ses unités à la main, ce qui était sans
+## danger tant qu'un combattant n'était qu'un multiplicateur — il y en a six maintenant, et
+## les recopier ici serait exactement la mesure qui emprunte un raccourci et finit par
+## mesurer le raccourci. Le coût que le commentaire d'origine craignait n'existe pas :
+## monter un palier est un `gain()`, pas une courbe à rejouer.
+func _force(size: int, level := 0) -> CombatForce:
+	var workers: Array[Worker] = []
+	for index in size:
+		var worker := Worker.create(_id_at(index), GIVEN_NAMES[index % GIVEN_NAMES.size()])
+		if level > 0:
+			worker.gain(_combat.combat_skill_family, level * _workforce.skill_xp_per_level)
+		workers.append(worker)
+	return Roster.create(workers).to_combat(_combat.combat_skill_family, _workforce,
+		_combat)
+
+## Le multiplicateur qu'un palier vaut. Sert à l'**affichage** de la table des pistes ;
+## ce que les unités portent vient de la projection, pas d'ici.
 func _multiplier(level: int) -> float:
 	return CombatUnit.BASE_EFFICIENCY + level * _workforce.efficiency_per_skill_level
 
@@ -361,7 +370,17 @@ func _raise(state: RunState, data: BuildingData) -> void:
 
 func _defense_of(state: RunState) -> int:
 	return InstantCombatResolver.defense_of(state.city().to_snapshot(),
-		state.roster().to_combat(_combat.combat_skill_family, _workforce), _combat)
+		state.roster().to_combat(_combat.combat_skill_family, _workforce, _combat), _combat)
+
+## Ce que cette vague passerait à ce village, **avant** de la faire tomber.
+##
+## Elle se demande au bouchon depuis F2b : la brèche a quitté le DamageReport, où elle
+## décrivait l'arithmétique de ce résolveur et non un fait du combat. Elle se prend donc
+## ici et **avant** l'assaut, la ville d'après n'étant plus celle que la vague a trouvée.
+func _breach_of(state: RunState, wave: WaveDef) -> int:
+	return InstantCombatResolver.breach_of(state.city().to_snapshot(),
+		state.roster().to_combat(_combat.combat_skill_family, _workforce, _combat), wave,
+		_combat)
 
 ## Les prénoms de ces ouvriers, tant que le roster les connaît encore. Un mort vient d'en
 ## sortir : c'est son identifiant qui reste, et c'est suffisant pour le nommer.

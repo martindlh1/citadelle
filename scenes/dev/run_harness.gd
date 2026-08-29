@@ -1057,7 +1057,7 @@ func _on_battle_pending(_wave: StringName) -> void:
 	var balance := _state().balance()
 	var city := _state().city().to_snapshot()
 	var force := _state().roster().to_combat(balance.combat.combat_skill_family,
-		balance.workforce)
+		balance.workforce, balance.combat)
 	var slots := InstantCombatResolver.slots_for(city, balance.combat)
 	_battle.show_pending(_state().pending_wave(), _state().cycle().day(),
 		InstantCombatResolver.defense_of(city, force, balance.combat),

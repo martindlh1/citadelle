@@ -54,10 +54,21 @@ static func create(city: CityState, metrics: TerrainMetrics) -> BuildingRenderer
 ## Une passe sur les bâtiments posés, à chaque pose et à chaque destruction. Une ville
 ## en compte quelques dizaines, là où le terrain en compte mille cellules : ce qui
 ## méritait une réserve chez TerrainRenderer n'en demande pas ici.
-func rebuild(city: CityState) -> void:
+## Les ancres de `hidden` ne sont **pas** dessinées.
+##
+## Ajouté à `F3a`, et générique exprès : le Combat en est le premier consommateur — un
+## bâtiment tombé pendant une bataille doit disparaître alors que la ville l'ignore encore,
+## puisque le plateau ne mute rien et que le rapport ne s'applique qu'à la fin. Le renderer
+## n'apprend pas pour autant ce qu'est une bataille : on lui donne des ancres à sauter.
+##
+## Le défaut est une liste vide, donc les cinq appelants d'avant `F3a` n'ont pas bougé.
+func rebuild(city: CityState, hidden: Array[Vector2i] = []) -> void:
 	assert(city != null, "rendu d'une ville null")
 	assert(_metrics != null, "renderer non initialisé — passer par create()")
-	var placed := city.buildings()
+	var placed: Array[PlacedBuilding] = []
+	for building in city.buildings():
+		if not hidden.has(building.anchor()):
+			placed.append(building)
 	multimesh.instance_count = _cell_count(placed)
 	var tile := _metrics.tile_size()
 	var index := 0

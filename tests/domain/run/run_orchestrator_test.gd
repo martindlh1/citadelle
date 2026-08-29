@@ -1038,7 +1038,8 @@ func test_the_same_seed_loses_the_same_people() -> void:
 func _defense(state: RunState) -> int:
 	var balance := state.balance()
 	return InstantCombatResolver.defense_of(state.city().to_snapshot(),
-		state.roster().to_combat(balance.combat.combat_skill_family, balance.workforce),
+		state.roster().to_combat(balance.combat.combat_skill_family, balance.workforce,
+			balance.combat),
 		balance.combat)
 
 ## Pose ce bâtiment et le mène à son dernier cran, hors de toute phase. Le harnais d'un
@@ -1066,6 +1067,8 @@ func _wave(power: int) -> WaveDef:
 	wave.id = &"test_wave"
 	wave.label = "Vague d'essai"
 	wave.power = power
+	wave.roster = [&"test_enemy"]
+	wave.rounds = 5
 	return wave
 
 func _open(run_seed := SEED, phases: Array[PhaseDef] = [],
@@ -1203,6 +1206,15 @@ func _combat() -> CombatBalance:
 	combat.combat_skill_family = COMBAT
 	combat.breach_per_casualty = BREACH_PER_CASUALTY
 	combat.plunder_per_breach = 1
+	combat.fighter_hit_points = 10
+	combat.fighter_damage_min = 2
+	combat.fighter_damage_max = 4
+	combat.fighter_reach = CombatStats.CONTACT
+	combat.fighter_move = 4
+	combat.fighter_climb = 1
+	combat.climb_cost = 1
+	combat.impassable_tags = [&"water"] as Array[StringName]
+	combat.spawn_margin = 3
 	return combat
 
 func _economy() -> EconomyBalance:

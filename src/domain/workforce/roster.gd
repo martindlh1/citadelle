@@ -156,9 +156,17 @@ func to_labor(balance: WorkforceBalance) -> LaborForce:
 ## l'Économie ne fait travailler que ceux que l'Assignment place.
 ##
 ## La famille traverse plutôt que d'être écrite ici : voir Worker.to_combat_unit().
-func to_combat(family: StringName, balance: WorkforceBalance) -> CombatForce:
-	assert(balance != null, "projection sans équilibrage")
+##
+## Elle reçoit **deux** blocs d'équilibrage depuis F2a, et c'est la seule fonction du
+## projet dans ce cas. Ce n'est pas une entorse : la question posée est « que vaut cet
+## ouvrier au combat ? », et personne d'autre que les Effectifs ne peut y répondre — il
+## faut sa piste, qui est à eux, et le profil d'un combattant, qui ne l'est pas. Le second
+## arrive donc par la porte que E1 a ouverte, en argument.
+func to_combat(family: StringName, workforce: WorkforceBalance,
+		combat: CombatBalance) -> CombatForce:
+	assert(workforce != null, "projection sans équilibrage des effectifs")
+	assert(combat != null, "projection sans équilibrage du combat")
 	var units: Array[CombatUnit] = []
 	for worker in present():
-		units.append(worker.to_combat_unit(family, balance))
+		units.append(worker.to_combat_unit(family, workforce, combat))
 	return CombatForce.create(units)

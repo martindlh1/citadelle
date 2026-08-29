@@ -172,7 +172,30 @@ func to_labor_unit(balance: WorkforceBalance) -> LaborUnit:
 ## lui est propre : un paysan qui n'a jamais tenu une lance vaut quand même un corps sur la
 ## ligne. DESIGN.md 3.4 assume la limite et y répond par *S'entraîner*, pas en le comptant
 ## pour rien.
-func to_combat_unit(family: StringName, balance: WorkforceBalance) -> CombatUnit:
-	assert(balance != null, "projection sans équilibrage")
+##
+## **C'est ici, et nulle part ailleurs, que la piste Combat devient des chiffres.** F2a a
+## donné au contrat un profil complet plutôt qu'un multiplicateur, et cette fonction est
+## tout ce qui les relie : le jour où un palier donnera des stats nommées, où les PV se
+## tireront à la création, ou où un équipement s'en mêlera, c'est cette dizaine de lignes
+## qui change — et le plateau, qui ne lit que le profil, ne s'en aperçoit pas.
+##
+## **La piste multiplie les dégâts et rien d'autre.** L'argument est dans CombatBalance :
+## un entraînement fait frapper plus fort, encaisser relève de X5 et de X6. Le plancher
+## comme le plafond passent par elle, sans quoi un vétéran verrait sa fourchette s'étirer
+## au lieu de se déplacer — deux vétérans identiques rendraient alors des coups plus
+## dispersés que ceux d'un bleu.
+##
+## Le combat reçoit son bloc en argument comme l'Économie reçoit le sien depuis E1. Les
+## Effectifs ne lisent donc rien qu'on ne leur ait donné, et ne connaissent du Combat que
+## le fichier de chiffres qu'on leur tend.
+func to_combat_unit(family: StringName, workforce: WorkforceBalance,
+		combat: CombatBalance) -> CombatUnit:
+	assert(workforce != null, "projection sans équilibrage des effectifs")
+	assert(combat != null, "projection sans équilibrage du combat")
 	assert(not family.is_empty(), "projection de combat sans famille")
-	return CombatUnit.create(_id, efficiency(family, balance))
+	var rank := efficiency(family, workforce)
+	return CombatUnit.create(_id, rank, CombatStats.create(
+		combat.fighter_hit_points,
+		floori(combat.fighter_damage_min * rank),
+		floori(combat.fighter_damage_max * rank),
+		combat.fighter_reach, combat.fighter_move, combat.fighter_climb))

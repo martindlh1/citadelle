@@ -2,16 +2,18 @@ class_name WaveDefTest
 extends GdUnitTestSuite
 ## Une vague, et le filet qui refuse un fichier vide.
 ##
-## Elle ne porte que trois champs, et c'est délibéré : `DESIGN.md` 3.6 garde sept questions
-## sous un `OUVERT` que `F2` tranchera. Cette suite est donc courte par construction, et le
-## restera jusque-là.
+## Elle ne portait que trois champs jusqu'à `F2b`, et c'était délibéré : `DESIGN.md` 3.6
+## gardait la forme du combat sous un `OUVERT`. Cette forme existe, donc une vague dit
+## désormais **qui vient** et **combien de temps ça dure**, et cette suite grandit d'autant.
 ##
-## Elle vérifie aussi ce que `data/waves/` contient vraiment, parce que c'est le seul
-## endroit qui le fasse — le catalogue n'a pas encore de lecteur dans le domaine, la
-## fréquence des vagues étant l'`OUVERT` de 2 que `I2` datera.
+## Elle vérifie aussi ce que `data/waves/` contient vraiment, y compris que les assaillants
+## qu'une composition nomme existent. Ce dernier contrôle double celui que `GameDatabase`
+## fait au boot, pour la raison habituelle : un `assert()` de boot ne survit pas à un export
+## release.
 
 func test_a_blank_wave_reports_all_its_fields() -> void:
-	assert_array(WaveDef.new().missing_fields()).contains(["id", "label", "power"])
+	assert_array(WaveDef.new().missing_fields()) \
+		.contains(["id", "label", "power", "roster", "rounds"])
 
 func test_a_filled_wave_reports_nothing() -> void:
 	assert_array(_wave().missing_fields()).is_empty()
@@ -32,6 +34,30 @@ func test_a_nameless_wave_is_reported() -> void:
 	wave.label = ""
 	assert_array(wave.missing_fields()).contains(["label"])
 
+## Godot n'écrit pas un tableau vide dans un `.tres`, donc « oubliée » et « délibérément
+## sans personne » y seraient indiscernables. Une vague qui n'envoie personne n'est pas une
+## vague facile, c'est un fichier qu'on a oublié de remplir. Même geste que sur
+## `CombatBalance.impassable_tags`.
+func test_a_wave_without_a_roster_is_reported() -> void:
+	var wave := _wave()
+	wave.roster = []
+	assert_array(wave.missing_fields()).contains(["roster"])
+
+## Une razzia qui repart au bout de zéro manche n'entre jamais. Le zéro est ici le défaut
+## d'un `int` que Godot omet, donc le cas à refuser.
+func test_a_wave_that_lasts_no_round_is_reported() -> void:
+	var wave := _wave()
+	wave.rounds = 0
+	assert_array(wave.missing_fields()).contains(["rounds"])
+
+## Un même type peut venir plusieurs fois, et c'est la forme retenue plutôt qu'un couple
+## (type, nombre) : l'ordre décide qui entre au milieu et qui entre sur l'aile.
+func test_a_wave_may_send_the_same_attacker_twice() -> void:
+	var wave := _wave()
+	wave.roster = [&"raider", &"raider"]
+	assert_array(wave.missing_fields()).is_empty()
+	assert_int(wave.roster.size()).is_equal(2)
+
 ## `data/waves/` n'est pas vide, et rien d'autre ne le dirait : aucun système du domaine ne
 ## lit encore ce catalogue. Sans ce cas, le dossier pourrait disparaître entier sans qu'une
 ## seule suite ne bronche.
@@ -50,9 +76,25 @@ func test_no_wave_of_data_is_left_unset() -> void:
 				% [id, ", ".join(missing)]) \
 			.is_empty()
 
+## Une composition ne nomme que des assaillants qui existent.
+##
+## `WaveDef.missing_fields()` ne peut pas le dire — une `Resource` ne lit pas l'index —,
+## donc c'est le seul cas qui l'attrape hors du boot. Sans lui, un `&"raidre"` ferait
+## entrer une vague avec un corps de moins, en silence.
+func test_every_wave_of_data_calls_known_attackers() -> void:
+	var known := GameDatabase.list_enemy_ids()
+	for id in GameDatabase.list_wave_ids():
+		for enemy in GameDatabase.get_wave(id).roster:
+			assert_bool(known.has(enemy)) \
+				.override_failure_message(
+					"data/waves/%s.tres appelle un assaillant inconnu : %s" % [id, enemy]) \
+				.is_true()
+
 func _wave() -> WaveDef:
 	var wave := WaveDef.new()
 	wave.id = &"test_wave"
 	wave.label = "Vague d'essai"
 	wave.power = 12
+	wave.roster = [&"test_enemy"]
+	wave.rounds = 5
 	return wave

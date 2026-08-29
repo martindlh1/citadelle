@@ -73,6 +73,7 @@ Les DTO échangés entre systèmes. C'est le seul endroit où deux systèmes se 
 | `Assignment` | Effectifs | Économie, Combat |
 | `LaborForce` | Effectifs | Économie |
 | `CombatForce` | Effectifs | Combat |
+| `CombatStats` | Effectifs, `src/schema/` | Combat |
 | `ProductionReport` | Économie | Effectifs (XP), adapters |
 | `DamageReport` | Combat | Ville, Effectifs, Économie, adapters |
 
@@ -132,7 +133,7 @@ systèmes ; aucun ne le connaît en retour.
 res://
 ├── addons/gdunit4/
 ├── data/                       # contenu, .tres uniquement
-│   ├── buildings/  cards/  terrain/  waves/  events/
+│   ├── buildings/  cards/  terrain/  waves/  enemies/  events/
 │   └── balance/                # tous les chiffres réglables, un seul endroit
 ├── src/
 │   ├── domain/
@@ -142,7 +143,7 @@ res://
 │   │   ├── economy/            # Ledger, ProductionResolver
 │   │   ├── workforce/          # Worker, Roster, SkillTrack, Assignment
 │   │   ├── deck/               # Deck, Hand, DraftPool
-│   │   ├── combat/             # CombatResolver (interchangeable)
+│   │   ├── combat/             # CombatBoard, Combatant, CombatMovement
 │   │   └── run/                # RunState, DayCycle, RunOrchestrator
 │   ├── schema/                 # définitions des Resource (BuildingData…)
 │   ├── adapters/
@@ -212,6 +213,20 @@ vague attend — un modèle annonçait donc sept cartes servies le jour d'une va
 les autres, ce qui n'était pas une différence de jeu mais un défaut de mesure. Les deux
 compilaient, s'alignaient, et étaient plausibles : c'est la relecture de la table contre ce
 qu'elle prétend montrer qui les a trouvés, pas un test.
+
+**Et une mesure prise au mauvais moment mesure le mauvais moment.** *(Écrit à `F2b`.)* Les
+deux familles ci-dessus portent sur *ce qu'on compte* ; celle-ci sur **quand** on le compte.
+Une table censée dire ce qu'esquiver retire à une vague a d'abord été prise à la **première**
+manche — celle où la vague entre à trois cases de la lisière et n'a encore personne à portée.
+Le chiffre était exact, la colonne alignée, le verdict formellement satisfait, et la table
+répondait à une autre question que la sienne : elle mesurait l'approche. Prise à la manche où
+la vague est le plus engagée, elle est passée de « 13 contre 11 » à « 12 contre 3 ».
+
+La parade est celle des autres : **la table choisit son moment, et l'écrit dans son titre.**
+Ici elle rejoue la bataille pour trouver la manche où le plus de cases sont annoncées, et
+imprime ce numéro. Un instant de mesure codé en dur est un raccourci comme un autre, et il se
+reconnaît à la même question — *cette table pourrait-elle rendre ce chiffre-là sans que la
+règle qu'elle prétend montrer existe ?*
 
 **Un chemin de capture qui court-circuite les gestes du joueur finit par mentir.**
 *(Écrit à `P1a`.)* La capture scriptée du harnais Run appelait `RunManager.play()` en
@@ -556,6 +571,11 @@ Tous les nombres réglables vivent dans `data/balance/*.tres`. Modifier un équi
 - Aucun nombre magique dans `domain/` : constante nommée ou champ de `Resource`
 - Préconditions par `assert()`. Les erreurs récupérables retournent un DTO `{ ok: bool, reason: StringName }`, pas un `push_error`
 - Ne jamais trier un `Array[StringName]` avec `sort()` : comparer deux `StringName` compare leurs pointeurs internes, pas leur texte. L'ordre obtenu est arbitraire, stable le temps d'une session et différent à la suivante — un piège direct pour le déterminisme. Trier par `sort_custom` sur `String(...)`.
+- **Un `enum` déclaré dans une classe doit être qualifié dans les signatures de cette classe.**
+  `static func create(side: Side)` compile, et refuse ensuite ce qu'un appelant lui passe :
+  GDScript traite le `Side` interne et le `Combatant.Side` du dehors comme deux types
+  distincts. Écrire `side: Combatant.Side` jusque dans le fichier qui déclare l'enum.
+  Constaté à `F2a`, attrapé par le parsing et invisible à la lecture.
 - **Un `Array[T]` ne s'additionne pas à un tableau littéral non typé**, et le `as Array[T]` ne rattrape rien : `VILLAGE + [&"x"] as Array[StringName]` compile et casse à l'exécution. Passer par `duplicate()` puis `append()`. Constaté à `F1`, dans un harnais — donc hors de toute suite de tests, et invisible au parsing.
 
 ---

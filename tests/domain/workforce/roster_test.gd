@@ -124,7 +124,7 @@ func test_the_roster_does_not_enforce_the_cap_itself() -> void:
 ## ces deux fonctions font en partant du même present().
 func test_the_combat_projection_carries_the_present() -> void:
 	var roster := _roster([&"ana", &"bo"])
-	assert_array(roster.to_combat(COMBAT, _balance()).fighters()) \
+	assert_array(roster.to_combat(COMBAT, _balance(), _combat()).fighters()) \
 		.contains_exactly([&"ana", &"bo"])
 
 ## Un absent ne se bat pas, comme il ne mange pas. Même ligne, même raison : la projection
@@ -132,13 +132,13 @@ func test_the_combat_projection_carries_the_present() -> void:
 func test_an_absent_worker_does_not_fight() -> void:
 	var roster := _roster([&"ana", &"bo"])
 	roster.worker(&"ana").set_present(false)
-	assert_array(roster.to_combat(COMBAT, _balance()).fighters()).contains_exactly([&"bo"])
+	assert_array(roster.to_combat(COMBAT, _balance(), _combat()).fighters()).contains_exactly([&"bo"])
 
 ## La piste Combat traverse, et c'est tout ce que le Combat reçoit d'un ouvrier.
 func test_the_combat_projection_carries_the_combat_track() -> void:
 	var roster := _roster([&"ana"])
 	roster.worker(&"ana").gain(COMBAT, 20)
-	assert_float(roster.to_combat(COMBAT, _balance()).efficiency(&"ana")).is_equal(2.0)
+	assert_float(roster.to_combat(COMBAT, _balance(), _combat()).efficiency(&"ana")).is_equal(2.0)
 
 ## **Le cas qui distingue les deux projections.** Un excellent récoltant est un combattant
 ## ordinaire : la LaborUnit répond par métier, la CombatUnit par un seul chiffre, et lire
@@ -146,7 +146,7 @@ func test_the_combat_projection_carries_the_combat_track() -> void:
 func test_a_great_harvester_is_a_plain_fighter() -> void:
 	var roster := _roster([&"ana"])
 	roster.worker(&"ana").gain(HARVEST, 20)
-	assert_float(roster.to_combat(COMBAT, _balance()).efficiency(&"ana")) \
+	assert_float(roster.to_combat(COMBAT, _balance(), _combat()).efficiency(&"ana")) \
 		.is_equal(CombatUnit.BASE_EFFICIENCY)
 
 ## La famille est un argument et non une constante : DESIGN.md 3.4 pose que la liste des
@@ -155,7 +155,50 @@ func test_a_great_harvester_is_a_plain_fighter() -> void:
 func test_the_projection_reads_the_family_it_is_given() -> void:
 	var roster := _roster([&"ana"])
 	roster.worker(&"ana").gain(&"sailing", 20)
-	assert_float(roster.to_combat(&"sailing", _balance()).efficiency(&"ana")).is_equal(2.0)
+	assert_float(roster.to_combat(&"sailing", _balance(), _combat()).efficiency(&"ana")).is_equal(2.0)
+
+# --- le profil que la projection résout ------------------------------------------------
+
+## La projection rend des **chiffres** et non un multiplicateur : c'est ce que F2a a changé
+## au contrat, pour que le plateau n'ait jamais à multiplier quoi que ce soit lui-même.
+func test_the_combat_projection_resolves_a_profile() -> void:
+	var stats := _roster([&"ana"]).to_combat(COMBAT, _balance(), _combat()).stats(&"ana")
+	assert_int(stats.hit_points()).is_equal(10)
+	assert_int(stats.damage_min()).is_equal(2)
+	assert_int(stats.damage_max()).is_equal(4)
+	assert_int(stats.reach()).is_equal(CombatStats.CONTACT)
+	assert_int(stats.move()).is_equal(5)
+
+## **La piste multiplie les dégâts, et rien d'autre.** Un entraînement fait frapper plus
+## fort ; encaisser relève de l'équipement et de la constitution, donc de X5 et de X6. Lui
+## faire multiplier les deux rendrait un vétéran deux fois meilleur sur deux axes à la
+## fois, ce qui est une courbe qu'on ne peut plus régler.
+func test_the_track_multiplies_the_blow_and_not_the_body() -> void:
+	var roster := _roster([&"ana"])
+	roster.worker(&"ana").gain(COMBAT, 20)
+	var stats := roster.to_combat(COMBAT, _balance(), _combat()).stats(&"ana")
+	assert_int(stats.damage_min()).is_equal(4)
+	assert_int(stats.damage_max()).is_equal(8)
+	assert_int(stats.hit_points()).is_equal(10)
+
+## **Le plancher et le plafond passent tous deux par la piste.** Sans le plancher, un
+## vétéran verrait sa fourchette s'**étirer** au lieu de se déplacer : ses coups seraient
+## plus dispersés que ceux d'un bleu, ce qui n'est pas ce qu'un entraînement fait.
+func test_a_veteran_range_shifts_instead_of_stretching() -> void:
+	var roster := _roster([&"ana"])
+	roster.worker(&"ana").gain(COMBAT, 20)
+	var green := roster.to_combat(COMBAT, _balance(), _combat())
+	assert_int(green.stats(&"ana").damage_max() - green.stats(&"ana").damage_min()) 		.is_equal(4)
+
+## Le rang et les chiffres sont deux choses, et le contrat porte les deux. Le cas les lit
+## côte à côte parce que c'est là que la distinction se voit : c'est le rang qui classe au
+## déploiement, et il survivra au jour où les chiffres cesseront d'en dériver.
+func test_the_projection_carries_both_the_rank_and_the_numbers() -> void:
+	var roster := _roster([&"ana"])
+	roster.worker(&"ana").gain(COMBAT, 20)
+	var force := roster.to_combat(COMBAT, _balance(), _combat())
+	assert_float(force.efficiency(&"ana")).is_equal(2.0)
+	assert_int(force.stats(&"ana").damage_max()).is_equal(8)
 
 ## Les deux valeurs de repli sont la même, et le cas l'épingle plutôt que de le supposer :
 ## CombatUnit recopie la constante de LaborUnit au lieu de l'importer, pour ne pas faire
@@ -202,6 +245,27 @@ func _city(flat: Array) -> CitySnapshot:
 		placed.append(BuildingSnapshot.create(flat[index], flat[index + 1], 0))
 		index += 2
 	return CitySnapshot.create(placed)
+
+## Le profil d'un combattant, tel que `data/balance/` le porte. Des chiffres ronds et
+## volontairement distincts les uns des autres : un test qui confondrait deux champs le
+## verrait, ce qu'une table de 3 partout laisserait passer.
+func _combat() -> CombatBalance:
+	var balance := CombatBalance.new()
+	balance.base_deployment_slots = 3
+	balance.defense_per_fighter = 2
+	balance.combat_skill_family = COMBAT
+	balance.breach_per_casualty = 6
+	balance.plunder_per_breach = 1
+	balance.fighter_hit_points = 10
+	balance.fighter_damage_min = 2
+	balance.fighter_damage_max = 4
+	balance.fighter_reach = 1
+	balance.fighter_move = 5
+	balance.fighter_climb = 1
+	balance.climb_cost = 1
+	balance.impassable_tags = [&"water"] as Array[StringName]
+	balance.spawn_margin = 3
+	return balance
 
 func _balance() -> WorkforceBalance:
 	var balance := WorkforceBalance.new()

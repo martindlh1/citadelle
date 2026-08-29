@@ -86,6 +86,34 @@ const SHOT_VIEW_FLAG := "--shot-view"
 ## jusqu'au verdict, le relance, et capture la fondation du suivant.
 const SHOT_RESTART_FLAG := "--shot-restart"
 
+## Corps à sélectionner sur le champ de bataille avant de capturer, par son rang d'entrée.
+##
+## Sixième passage par la même porte, et le cas est aussi net que le repli de `P1a` : les
+## deux voiles d'un combat — où l'on peut aller, ce qu'on peut frapper — ne s'allument
+## qu'après un clic sur une fiche. Sans ce drapeau, **la seule image qu'une capture pourrait
+## prendre d'une bataille serait celle où rien n'est sélectionné**, c'est-à-dire celle qui
+## ne montre aucune des deux choses que `F3a` ajoute.
+##
+## Un rang et non un identifiant : les corps d'une vague se nomment `raider_0`, ce qui est
+## une nomenclature de harnais et n'a aucune raison de fuir sur une ligne de commande.
+const SHOT_SELECT_FLAG := "--shot-select"
+
+## Passe la main au camp d'en face avant de capturer. Drapeau **nu**.
+##
+## Même porte encore : le tour de la vague change la couleur du bandeau, l'encre des fiches
+## et qui répond aux clics. Aucune suite de gestes automatique ne l'atteint, puisque `F2a`
+## n'a pas d'IA — c'est un état qui ne s'obtient que par un geste, comme le repli.
+const SHOT_FOES_FLAG := "--shot-foes"
+
+## Manches que l'IA de la vague joue avant de capturer. Argument entier.
+##
+## `--shot-foes` passe la main au camp d'en face **sans le faire jouer** : c'est l'état
+## d'un tour qu'on mène soi-même, et `F2b` le garde atteignable parce qu'on peut encore
+## jouer les deux camps. Celui-ci laisse l'IA agir, ce qui est l'autre valeur du même
+## interrupteur — `CLAUDE.md` demande depuis `P1a` qu'un drapeau atteigne **chacune** des
+## valeurs d'un état sur lequel une vue commute.
+const SHOT_ROUNDS_FLAG := "--shot-rounds"
+
 ## Rejoue le run entier sous chaque variante d'équilibrage et imprime ce que ça donne.
 ##
 ## Le seul drapeau de ce fichier qui ne capture pas une image, et il est ici quand même :

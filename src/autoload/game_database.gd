@@ -15,6 +15,7 @@ const CATEGORY_BUILDINGS := &"buildings"
 const CATEGORY_COMMODITIES := &"commodities"
 const CATEGORY_CARDS := &"cards"
 const CATEGORY_WAVES := &"waves"
+const CATEGORY_ENEMIES := &"enemies"
 const ID_BALANCE := &"balance"
 
 ## Catégorie -> (identifiant -> Resource).
@@ -29,8 +30,10 @@ func _ready() -> void:
 	_assert_commodities_are_complete()
 	_assert_cards_are_complete()
 	_assert_waves_are_complete()
+	_assert_enemies_are_complete()
 	_assert_resources_are_known()
 	_assert_cards_are_known()
+	_assert_enemies_are_known()
 	EventBus.database_ready.emit.call_deferred()
 
 ## Racine de l'équilibrage. Jamais null une fois le boot passé.
@@ -81,6 +84,14 @@ func get_wave(id: StringName) -> WaveDef:
 ## Identifiants de vague connus, triés.
 func list_wave_ids() -> Array[StringName]:
 	return list_ids(CATEGORY_WAVES)
+
+## Assaillant indexé, ou null si l'identifiant est inconnu.
+func get_enemy(id: StringName) -> EnemyData:
+	return get_resource(CATEGORY_ENEMIES, id) as EnemyData
+
+## Identifiants des assaillants, triés.
+func list_enemy_ids() -> Array[StringName]:
+	return list_ids(CATEGORY_ENEMIES)
 
 ## Resource indexée, ou null si la paire (catégorie, identifiant) est inconnue.
 func get_resource(category: StringName, id: StringName) -> Resource:
@@ -196,6 +207,22 @@ func _assert_waves_are_complete() -> void:
 		assert(missing.is_empty(),
 			"champs non renseignés dans data/waves/%s.tres : %s" % [id, ", ".join(missing)])
 
+## Chaque assaillant de data/enemies/ est-il exploitable ?
+##
+## Septième répétition du même balayage, et le commentaire ci-dessus vaut toujours : ce
+## n'est pas leur nombre qui déciderait de les factoriser, c'est le jour où GDScript saura
+## contraindre une classe de base de Resource sans perdre le type.
+func _assert_enemies_are_complete() -> void:
+	for id in list_enemy_ids():
+		var enemy := get_enemy(id)
+		assert(enemy != null, "data/enemies/%s.tres n'est pas une EnemyData" % id)
+		if enemy == null:
+			continue
+		var missing := enemy.missing_fields()
+		assert(missing.is_empty(),
+			"champs non renseignés dans data/enemies/%s.tres : %s"
+				% [id, ", ".join(missing)])
+
 ## Les identifiants de ressource nommés ailleurs existent-ils dans le catalogue ?
 ##
 ## C'est le seul contrôle que les Resource de src/schema/ ne peuvent pas faire
@@ -253,6 +280,25 @@ func _assert_cards_are_known() -> void:
 	for card in balance.deck.starting_deck:
 		assert(known.has(card),
 			"carte inconnue « %s » dans balance/deck_balance.tres → starting_deck" % card)
+
+## Les assaillants que les vagues nomment existent-ils ?
+##
+## Troisième contrôle croisé après les ressources et les cartes, et il est ici pour la même
+## raison qu'eux : une WaveDef ne lit pas l'index, et c'est très bien ainsi. Sans lui, un
+## &"raidre" dans une composition ferait entrer une vague avec un corps de moins, en
+## silence — le défaut exact qu'un deck de départ mal orthographié aurait eu.
+func _assert_enemies_are_known() -> void:
+	var known := list_enemy_ids()
+	if known.is_empty():
+		return
+	for id in list_wave_ids():
+		var wave := get_wave(id)
+		if wave == null:
+			continue
+		for enemy in wave.roster:
+			assert(known.has(enemy),
+				"la vague data/waves/%s.tres appelle un assaillant inconnu : %s"
+					% [id, enemy])
 
 ## Cette ressource figure-t-elle au catalogue ?
 func _assert_known(known: Array[StringName], resource: StringName, where: String) -> void:

@@ -72,6 +72,14 @@ func unit(fighter: StringName) -> CombatUnit:
 	assert(has(fighter), "combattant inconnu de la force : %s" % fighter)
 	return _by_id[fighter]
 
-## Multiplicateur de ce combattant. Précondition : has(fighter).
+## Rang de ce combattant. Précondition : has(fighter).
 func efficiency(fighter: StringName) -> float:
 	return unit(fighter).efficiency()
+
+## Ce que ce combattant vaut sur le plateau. Précondition : has(fighter).
+##
+## Un raccourci sur unit(fighter).stats(), et il a le même appelant que efficiency() a du
+## côté du déploiement : le plateau, qui ouvre une manche en lisant les chiffres de ceux
+## qu'on lui donne, et qui n'a aucune raison de traverser le CombatUnit pour ça.
+func stats(fighter: StringName) -> CombatStats:
+	return unit(fighter).stats()
