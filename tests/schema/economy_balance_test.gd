@@ -8,7 +8,8 @@ extends GdUnitTestSuite
 
 func test_a_blank_block_reports_all_its_required_fields() -> void:
 	assert_array(EconomyBalance.new().missing_fields()) \
-		.contains(["base_storage_cap", "upkeep_per_worker", "upkeep_resource"])
+		.contains(["base_storage_cap", "base_housing", "starting_population",
+			"upkeep_per_inhabitant", "upkeep_resource"])
 
 func test_a_filled_block_reports_nothing() -> void:
 	assert_array(_balance().missing_fields()).is_empty()
@@ -25,8 +26,8 @@ func test_a_missing_upkeep_resource_is_reported() -> void:
 ## seraient indiscernables.
 func test_a_zero_upkeep_is_reported() -> void:
 	var balance := _balance()
-	balance.upkeep_per_worker = 0
-	assert_array(balance.missing_fields()).contains(["upkeep_per_worker"])
+	balance.upkeep_per_inhabitant = 0
+	assert_array(balance.missing_fields()).contains(["upkeep_per_inhabitant"])
 
 ## En réserve commune, un stock d'ouverture au-dessus de la capacité serait écrêté dès
 ## le premier soir : le chiffre du .tres mentirait sur ce que le run reçoit.
@@ -56,7 +57,9 @@ func test_an_empty_starting_stock_is_legitimate() -> void:
 func _balance() -> EconomyBalance:
 	var balance := EconomyBalance.new()
 	balance.base_storage_cap = 100
-	balance.upkeep_per_worker = 1
+	balance.base_housing = 6
+	balance.starting_population = 4
+	balance.upkeep_per_inhabitant = 1
 	balance.upkeep_resource = &"food"
 	balance.starting_stock = _stock(30, 20)
 	return balance
