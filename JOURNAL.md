@@ -186,6 +186,14 @@ cardinaux tombent donc tous à dix degrés d'un angle qui aplatirait le relief �
 propriété que le réglage d'origine cherchait. Et minuit tombe pile sur le lacet que la lune
 portait en constante : elle était déjà « de l'autre côté », à un demi-tour du soleil de midi.
 
+**Le repos est le matin et non midi**, sur demande de l'humain, et c'est mieux que le
+réglage que ça remplace : un tour commence le matin, donc une journée qui se joue va du matin
+au matin. Midi rendait la course symétrique autour de son propre début — joli, et sans
+signification. La calibration de `T2` y survit, et il fallait le vérifier avant d'y toucher :
+un huitième de tour vaut 45°, donc ne change pas le reste modulo 45, et le lacet du matin
+tombe à dix degrés d'un angle qui aplatirait le relief. L'inclinaison descend de −52° à −46°,
+donc des ombres un peu plus longues — le matin se **dit** au lieu de s'écrire.
+
 **Deux sondes sont écrites, et elles impriment sur chaque capture.** La première joue deux
 journées d'affilée et donne où le soleil s'arrête à chaque quart — deux séries identiques et
 non triviales disent que la course se rejoue. La seconde échantillonne la course et donne le

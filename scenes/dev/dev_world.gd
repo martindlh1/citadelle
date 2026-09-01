@@ -122,22 +122,32 @@ const SUN_SHADOW_MARGIN := 60.0
 ## **course** possible plutôt qu'une transition : on ne peut pas traverser midi en
 ## interpolant directement de l'aube au crépuscule.
 const DAWN := 0.0
+const MORNING := 0.125
 const NOON := 0.25
 const DUSK := 0.5
 const MIDNIGHT := 0.75
 
-## Où le soleil se repose entre deux tours : **midi**, toujours le même.
+## Où le soleil se repose entre deux tours : le **matin**, toujours le même.
 ##
-## C'est un changement d'`I3b` sur `I3`, et il vaut d'être écrit parce qu'il répare deux
-## choses d'un coup. Le soleil suivait l'avancement du run — aube au premier tour, nuit au
-## vingtième —, si bien que la lumière **dérivait** sans qu'aucune règle du jeu ne le
-## demande : le tour 12 se lisait autrement que le tour 3, et la carte devenait moins
-## lisible à mesure qu'on avançait. Un repos fixe rend la carte identique à tous les tours,
-## et laisse la course dire le temps qui passe.
+## Le repos fixe est un changement d'`I3b` sur `I3`, et il répare deux choses d'un coup. Le
+## soleil suivait l'avancement du run — aube au premier tour, nuit au vingtième —, si bien
+## que la lumière **dérivait** sans qu'aucune règle du jeu ne le demande : le tour 12 se
+## lisait autrement que le tour 3, et la carte devenait moins lisible à mesure qu'on
+## avançait. Un repos fixe rend la carte identique à tous les tours, et laisse la course dire
+## le temps qui passe.
 ##
-## Midi et non le matin : c'est l'orientation calibrée à `T2`, celle dont les quatre flancs
-## d'une colonne prennent quatre valeurs différentes.
-const REST := NOON
+## **Le matin plutôt que midi**, et c'est une demande de l'humain qui vaut mieux que le
+## réglage qu'elle remplace : un tour commence le matin, donc une journée qui se joue va du
+## matin au matin. Midi rendait la course symétrique autour de son propre début, ce qui est
+## joli et ne veut rien dire — on ne commence pas sa journée au milieu.
+##
+## **La calibration de `T2` y survit**, et c'est ce qu'il fallait vérifier avant d'y toucher.
+## Le lacet du matin tombe à −170°, soit dix degrés d'un multiple de 45 — la propriété exacte
+## que `SUN_ROTATION_DEGREES` cherchait, et elle tient ici parce qu'un huitième de tour vaut
+## 45°, donc ne change pas le reste modulo 45. L'inclinaison, elle, descend de −52° à −46° :
+## un soleil un peu plus bas, des ombres un peu plus longues, ce qui **dit** le matin au lieu
+## de l'écrire. Constaté en capture avant d'être écrit ici.
+const REST := MORNING
 
 ## Profondeur sous l'horizon à laquelle la nuit est pleine, en part de la course.
 ##
@@ -229,7 +239,7 @@ func settle_at(moment: float) -> void:
 func pass_a_day(seconds := DAY_SECONDS) -> void:
 	_sweep_to(REST, seconds, true)
 
-## Fait tomber la nuit et l'y laisse : le soleil descend de midi au crépuscule puis s'éteint.
+## Fait tomber la nuit et l'y laisse : le soleil monte, culmine, se couche et s'éteint.
 ##
 ## Une demi-révolution et non une entière, parce que ce qui la déclenche est une **fin** —
 ## un run qui se termine — et qu'y répondre par un jour de plus dirait le contraire.
