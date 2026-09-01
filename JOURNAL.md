@@ -4,6 +4,176 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-09-01 — le rescope, et `R0` : la moitié du code s'en va
+
+**État : terminé.** Branche `refactor/r0-demolition`, tirée de `master`. Les trois commandes
+passent : boot sans erreur ni warning, tout `src/domain/` parse, **262 tests verts contre
+962**. Une capture.
+
+C'est le premier jalon du projet qui ne construit rien. Il en retire.
+
+### Ce que la discussion a décidé, et l'ordre dans lequel
+
+La séance a commencé par une lecture des trois documents, et par un constat que le projet
+faisait déjà sans le dire : quatre genres empilés — city-builder, roguelite, deckbuilding,
+combat tactique — dont **trois contraintes de tempo qui se doublaient** au lieu de se
+croiser. `DESIGN.md` 3.5 avait vu la moitié du problème dès `D2` et l'avait contournée en
+dédoublant le geste ; l'autre moitié n'avait jamais été posée.
+
+L'humain a tranché le périmètre : garder le city-builder de placement sur le relief, garder
+les vagues comme jalon de progression, **supprimer le combat tactique, les effectifs et le
+deckbuilding**.
+
+Trois questions ont occupé le reste, et deux ont changé la proposition d'origine.
+
+**La population, corrigée par l'humain.** Je l'avais écrite comme un pool réattribué à chaque
+tour — chaque bâtiment « réclame » son personnel. Elle est en réalité une **ressource de
+construction** : une ferme coûte 10 bois *et* 4 travailleurs, payés à l'ouverture du chantier
+et gardés à vie. C'est plus simple et c'est meilleur : il n'y a **plus rien à réattribuer**,
+le coût en main-d'œuvre tient sur la fiche du bâtiment comme son coût en bois, et un seul
+champ suffit puisque ceux qui l'ont bâti sont ceux qui y vivent.
+
+Ce que ça préserve mérite d'être noté, parce que c'était le cœur du pitch d'origine :
+« envoyer son meilleur récoltant en milice coûte deux fois » devient **« une baliste coûte
+deux bûcherons »**. La tension produire/défendre survit à la suppression des effectifs, en
+pure arithmétique, sans un seul clic d'affectation.
+
+**Le tower-defense, où ma première proposition était creuse.** J'avais proposé une vague que
+rien ne blesse — les bâtiments la ralentissent et l'usent en tombant. L'humain a demandé ce
+qui l'arrête, et il n'y avait pas de réponse : la vague mâchait jusqu'à ce que son compteur
+tombe. La version retenue a des bâtiments qui **tirent**, avec quatre chiffres et pas un de
+plus : portée, dégâts, cadence, points de vie.
+
+**Le pas de simulation, où « N tours » était le mauvais mot.** L'humain a objecté qu'une
+vague a besoin de continuité pour se regarder. La réponse est que « tour par tour » et
+« continu à l'écran » ne s'opposent pas : ce qui les sépare est la **finesse du pas**. Une
+journée est un pas grossier, une bataille un pas fin — quelques dizaines de ticks par
+seconde, une fonction pure à chaque tick, et l'écran qui interpole entre deux états. Le
+patron est celui de tous les jeux déterministes qui bougent, et il ne coûte rien ici parce
+que le domaine est déjà pur.
+
+Il rend une chose au passage : **la fin de tour redevient atomique.** Une bataille n'attend
+jamais une entrée du joueur, donc plus d'état « en attente », plus de seconde porte. C'était
+la seule raison d'être de la coupure que `DESIGN.md` 3.8 avait écrite d'avance à `F1` et que
+`I2` avait payée.
+
+### Couper depuis `master` plutôt que repartir de `E1b`
+
+L'humain a posé la question avant d'autoriser quoi que ce soit, et elle méritait une mesure
+plutôt qu'une opinion. `E1b` est à 66 commits, `master` à 192. Ce que `E1b` n'a **pas**, et
+qui n'a rien à voir avec les trois systèmes coupés : tout `domain/run/`, tout le HUD —
+`ResourceBar`, `CommodityPalette`, l'écran de fin, le bouton de pas —, `dev_shot.gd` à 57
+lignes contre 166, `dev_world.gd` à 133 contre 298, et 16 fichiers de test contre 51.
+
+L'argument décisif n'est pourtant aucun de ceux-là : **`domain/run/` et le résolveur de
+production doivent être réécrits dans les deux cas.** Revenir à `E1b`, c'est les réécrire
+depuis rien plutôt que depuis une référence qui marche.
+
+La peur du code zombie, qui est le seul bon argument d'en face, se règle par la **méthode**
+et non par le point de départ : on supprime des **dossiers entiers**, jamais des lignes. Et
+GDScript est particulièrement bon pour ça — le boot, le parsing et les tests dénoncent
+immédiatement toute référence pendante, ce que la suite de ce jalon a vérifié trois fois.
+
+### Ce que `R0` a retiré
+
+| | domaine | adapters | tests |
+|---|---|---|---|
+| Combat | 1 847 | 385 | 1 823 |
+| Effectifs | 671 | 877 | 720 |
+| Cartes | 878 | 1 007 | 1 290 |
+
+Plus tout `domain/run/` (2 361 lignes), le `ProductionResolver` et l'`UpkeepReport`, huit
+contrats, dix `Resource` de `src/schema/`, 29 `.tres`, sept harnais sur neuf, et onze suites
+de test. **Le harnais Run seul faisait 2 178 lignes.**
+
+Quatre bâtiments partent avec les systèmes qui les justifiaient — caserne, marché, atelier,
+camp d'exploration —, tous les quatre présents pour débloquer une carte ou ouvrir des places
+de déploiement.
+
+### Ce que la coupe a vérifié, et c'était l'argument du jalon
+
+**Les quatre contrats qui restent n'ont pas eu à bouger d'un mot.** `TerrainQuery`,
+`CitySnapshot`, `BuildingSnapshot` et `PlacementResult` sont sortis intacts d'une amputation
+qui a emporté la moitié du dépôt. Terrain et Construction ne connaissaient rien des systèmes
+qui les entouraient, donc il n'y avait rien à défaire — c'est ce que la règle de dépendance
+promettait depuis `I0` sans qu'on l'ait jamais éprouvée à ce point.
+
+Même constat sur les survivants : `Ledger`, `CityState`, `PlacementValidator`, `HeightGrid`,
+`CellPicker`, `TerrainGen` et tout le rendu n'ont reçu **aucune modification de code**. Trois
+d'entre eux portaient une mention d'un système coupé, et c'était dans un commentaire.
+
+### Les trois autoloads restent, même vidés
+
+`EventBus` passe de huit signaux à un, `RunManager` de quinze fonctions à trois. Ni l'un ni
+l'autre n'est supprimé, et la raison est mécanique plutôt que de design : `project.godot` les
+déclare, ce fichier appartient à l'humain, et un autoload dont le script manque casse le
+boot. C'est le seul endroit du projet où la **propriété d'un fichier décide de la forme du
+code**, et ça valait d'être écrit dans `CLAUDE.md`.
+
+Les sept signaux d'`EventBus` sont sortis par la règle qui gouverne leur entrée, appliquée à
+l'envers pour la première fois : un signal n'existe que si un système réel l'émet. `I3` et
+`V4` reposeront ceux dont ils auront besoin, avec les charges que leurs rapports porteront
+vraiment.
+
+### Ce qu'une capture a dit sans qu'on le lui demande
+
+Le harnais Construction, devenu le harnais par défaut, rend bien ses neuf bâtiments. Et
+l'image montre autre chose : **ce relief n'a ni plateau ni col.** C'est du bruit de Perlin
+uniforme sur 32×32, avec des flaques d'eau éparses — exactement ce que `DESIGN.md` 3.1
+décrit maintenant comme inutilisable, puisque le placement défensif y devient l'essence du
+jeu. `T4` n'était pas une intuition ; il se voit.
+
+### Un piège d'outil, et un piège que je me suis fabriqué
+
+**Le cache des classes globales était en retard**, et le tout premier boot du jalon a échoué
+sur des `Parse Error` dans un projet parfaitement sain. C'est le piège documenté dans
+`CLAUDE.md` : une passe `--headless --editor --quit` reconstruit le cache. Il a fallu la
+relancer après la coupe aussi, ce qui est logique — dix `class_name` avaient disparu.
+
+**Et deux patchs Python ont échoué sur des marqueurs de texte.** Le premier sur l'encodage
+d'une chaîne accentuée passée par un heredoc — la mémoire du projet le disait déjà, il faut
+passer par un fichier de script. Le second est plus instructif : j'ai découpé `README.md`
+entre deux marqueurs dont **le premier apparaissait deux fois**, si bien que `str.index()` a
+pris la mauvaise occurrence et que le fichier a gagné un bloc dupliqué au lieu d'en perdre
+un. La parade est celle qui vaut pour toutes les mesures de ce projet : **découper par
+indices trouvés dans l'ordre, jamais par un marqueur supposé unique** — et relire le
+résultat, ce qu'un `grep` sur la structure a fait tout de suite.
+
+### Ce que je n'ai pas fait
+
+Aucun ajout. `R0` est fini quand le boot est propre, que tout `src/domain/` parse et que la
+suite restante est verte — c'est tout ce que `DESIGN.md` 8 lui demande, et il n'a rien fait
+d'autre. La population n'existe pas, le tour n'existe pas, la génération est celle d'avant,
+et rien ne se joue.
+
+`data/balance/economy_balance.tres` garde `upkeep_per_worker` sous ce nom : il devient l'upkeep
+par habitant à `N1`, et le renommer ici aurait été un ajout déguisé.
+
+### Prochain jalon
+
+**`N1`** — le compteur de population et sa boucle, dans `domain/economy/`, sans un `Node`. Le
+cas de test qui porte le jalon est l'**interdit de blocage** : une partie où tout le monde est
+immobilisé et le logement plein doit rester jouable, parce que l'habitation ne coûte personne.
+
+Puis **`I3`**, le tour, qui rend le jeu jouable à nouveau — et il doit venir tôt, parce qu'un
+projet qui ne se lance pas est un projet dont on ne mesure plus rien.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien.** Aucune `.tscn` ni `project.godot` touché — ce qui est la raison pour laquelle les
+trois autoloads ont été vidés plutôt que supprimés.
+
+- **`HARNESS` vaut `&"city"`.** C'est le seul harnais qui montre encore quelque chose avec
+  `&"terrain"`. Les sept autres sont supprimés.
+- **`DESIGN.md` est entièrement réécrit.** L'ancien reste lisible dans l'historique, dernière
+  version sur `master` au commit `144689b`. Sa section **9** dit ce qui est parti et pourquoi.
+- **`CLAUDE.md` a perdu la table des contrats d'avant** — douze lignes, il en reste quatre —
+  et gagné trois anti-patterns nés du rescope, dont le premier compte : la population est un
+  **entier**, jamais une liste de gens.
+- **La branche n'est pas fusionnée** : `refactor/r0-demolition`.
+
+---
+
 ## 2026-08-28 — `F2b` : la vague décide, et une annonce engage
 
 **État : terminé**, et `F2` est fini. Sept commits sur `feat/f2b-wave-ai`, tirée de
