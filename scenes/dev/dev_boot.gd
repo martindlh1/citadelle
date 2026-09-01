@@ -13,19 +13,19 @@ extends Node
 const REPORT_MARGIN := 16.0
 
 ## Harnais à lancer. Vide = aucun, on affiche le rapport de boot.
-const HARNESS := &"battle"
+const HARNESS := &"city"
 
 ## Identifiant de harnais -> script à instancier.
+##
+## `R0` en a retiré six sur huit — Économie, Effectifs, Cartes, Combat, Bataille, HUD et
+## Run —, parce qu'ils exerçaient des systèmes qui n'existent plus. Ce qui reste est ce
+## que le rescope garde intact : le relief et la ville.
+##
+## Le Run revient à `I3`, l'Économie à `N1`, et la Bataille à `V2`. La table est faite
+## pour ça : ajouter un harnais reste un `.gd` et une ligne, jamais une scène.
 const HARNESS_SCRIPTS: Dictionary[StringName, String] = {
 	&"terrain": "res://scenes/dev/terrain_harness.gd",
 	&"city": "res://scenes/dev/city_harness.gd",
-	&"economy": "res://scenes/dev/economy_harness.gd",
-	&"workforce": "res://scenes/dev/workforce_harness.gd",
-	&"deck": "res://scenes/dev/deck_harness.gd",
-	&"run": "res://scenes/dev/run_harness.gd",
-	&"hud": "res://scenes/dev/hud_harness.gd",
-	&"combat": "res://scenes/dev/combat_harness.gd",
-	&"battle": "res://scenes/dev/battle_harness.gd",
 }
 
 ## Bascule plein écran / fenêtré, pour **tous** les harnais à la fois.

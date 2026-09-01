@@ -10,6 +10,10 @@ extends GdUnitTestSuite
 ## d'équilibrage et un test qui les fige serait cassé en permanence. Il assert en
 ## revanche qu'aucun champ n'est resté vide, ce qui attrape le cas où l'éditeur
 ## réenregistre un .tres en effaçant une valeur.
+##
+## `R0` lui a retiré les cas des quatre blocs supprimés — workforce, run, combat — sans
+## toucher aux autres : le fume-test vaut pour ce que `data/balance/` porte, et il repousse
+## un cas le jour où un bloc entre, jamais avant.
 
 const BALANCE_PATH := "res://data/balance/balance.tres"
 
@@ -55,26 +59,6 @@ func test_the_upkeep_names_a_resource() -> void:
 	var economy := (load(BALANCE_PATH) as BalanceData).economy
 	assert_str(String(economy.upkeep_resource)).is_not_empty()
 
-func test_balance_carries_a_workforce_block() -> void:
-	var balance := load(BALANCE_PATH) as BalanceData
-	assert_object(balance.workforce).is_not_null()
-	assert_object(balance.workforce).is_instanceof(WorkforceBalance)
-
-## Les deux axes de DESIGN.md 3.4 se règlent séparément, ce qui n'a de sens que si les
-## deux jeux de réglages existent. Un bloc qui n'aurait que la moitié des seuils
-## chargerait sans erreur et figerait un axe au palier 0 en silence.
-func test_both_progression_axes_are_configured() -> void:
-	var workforce := (load(BALANCE_PATH) as BalanceData).workforce
-	assert_int(workforce.skill_xp_per_level).is_greater(0)
-	assert_int(workforce.max_skill_level).is_greater(0)
-	assert_int(workforce.worker_xp_per_level).is_greater(0)
-	assert_int(workforce.max_worker_level).is_greater(0)
-
-func test_balance_carries_a_run_block() -> void:
-	var balance := load(BALANCE_PATH) as BalanceData
-	assert_object(balance.run).is_not_null()
-	assert_object(balance.run).is_instanceof(RunBalance)
-
 func test_balance_carries_a_camera_block() -> void:
 	var balance := load(BALANCE_PATH) as BalanceData
 	assert_object(balance.camera).is_not_null()
@@ -95,16 +79,3 @@ func test_a_zoom_factor_of_one_is_reported() -> void:
 	var camera := CameraBalance.new()
 	camera.zoom_factor = 1.0
 	assert_array(camera.missing_fields()).contains(["zoom_factor"])
-
-func test_balance_carries_a_combat_block() -> void:
-	var balance := load(BALANCE_PATH) as BalanceData
-	assert_object(balance.combat).is_not_null()
-	assert_object(balance.combat).is_instanceof(CombatBalance)
-
-## La famille que le combat crédite doit être nommée : DESIGN.md 3.4 interdit qu'un code
-## l'énumère, donc un champ vide ne se rattraperait nulle part. Le contrôle croisé complet
-## est celui de GameDatabase au boot ; ici on tient au moins qu'il ne soit pas vide, comme
-## pour la ressource d'upkeep.
-func test_the_combat_names_the_family_it_credits() -> void:
-	var combat := (load(BALANCE_PATH) as BalanceData).combat
-	assert_str(String(combat.combat_skill_family)).is_not_empty()

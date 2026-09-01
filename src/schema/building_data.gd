@@ -159,18 +159,6 @@ const QUARTER_TURNS := 4
 ## chantier soit une **perte** quand il tombe, et interrupted() le dit.
 @export_range(0, 100, 1) var hit_points: int
 
-## Ce qu'il ajoute aux places de déploiement du combat. Colonne **Dépl.** de
-## DESIGN.md 4.1.
-##
-## Troisième champ plat bâti sur le modèle de storage_bonus et roster_places, et le plus
-## creux des trois : douze bâtiments sur treize valent 0. Même raison de ne pas le
-## réclamer — un plafond global relevé par un bâtiment n'est pas une nature.
-##
-## C'est ce champ qui sort la caserne de la coquille où DESIGN.md 4.1 l'avait laissée, et
-## il y arrive **avant** l'action qu'elle débloquera à X3 : on la bâtira d'abord pour tenir
-## la ligne. Comme les deux autres, il ne compte que sur un bâtiment achevé.
-@export_range(0, 20, 1) var deployment_slots: int
-
 ## Ce décalage, pivoté de `turns` quarts de tour dans le sens horaire.
 ##
 ## La grille va +x vers la droite et +y vers le fond, ce que le monde reprend en +X et
@@ -266,14 +254,12 @@ func missing_fields() -> PackedStringArray:
 		missing.append("build_actions")
 	if roster_places < 0:
 		missing.append("roster_places")
-	# Le seul champ de combat réclamé : voir son docstring. defense et deployment_slots
+	# Le seul champ de défense réclamé : voir son docstring. defense
 	# sont légitimement nuls sur presque tout le catalogue.
 	if hit_points <= 0:
 		missing.append("hit_points")
 	if defense < 0:
 		missing.append("defense")
-	if deployment_slots < 0:
-		missing.append("deployment_slots")
 	missing.append_array(_economy_fields())
 	if footprint.is_empty():
 		missing.append("footprint")
