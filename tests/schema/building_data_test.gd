@@ -184,20 +184,20 @@ func test_a_building_with_a_coherent_block_reports_nothing() -> void:
 
 ## Ce que E1 vérifiait ici est parti dans ProductionBlock, et il n'en reste que la
 ## couture : ce qui manque au bloc remonte préfixé, comme TerrainData préfixe
-## « decor. ». Sans le préfixe, un « slots » nu dans le rapport de boot ne dirait pas
-## d'où il vient le jour où BuildingData portera plusieurs blocs.
+## « decor. ». Sans le préfixe, un « yield_per_turn » nu dans le rapport de boot ne dirait
+## pas d'où il vient le jour où BuildingData portera plusieurs blocs.
 func test_an_incomplete_block_is_reported_under_its_prefix() -> void:
 	var building := _producer()
-	building.production.skill_family = &""
-	assert_array(building.missing_fields()).contains(["production.skill_family"])
+	building.production.yield_per_turn = {} as Dictionary[StringName, int]
+	assert_array(building.missing_fields()).contains(["production.yield_per_turn"])
 
 ## Et le préfixe descend jusqu'aux lignes de rendement, qui portent déjà un point.
 func test_a_bad_yield_line_keeps_both_levels_of_prefix() -> void:
 	var building := _producer()
-	var per_slot: Dictionary[StringName, int] = {}
-	per_slot[&"wood"] = -2
-	building.production.yield_per_slot = per_slot
-	assert_array(building.missing_fields()).contains(["production.yield_per_slot.wood"])
+	var per_turn: Dictionary[StringName, int] = {}
+	per_turn[&"wood"] = -2
+	building.production.yield_per_turn = per_turn
+	assert_array(building.missing_fields()).contains(["production.yield_per_turn.wood"])
 
 ## Une ligne de coût à zéro ne veut rien dire : on l'omet. L'écrire est une faute de
 ## contenu, pas une gratuité.
@@ -208,25 +208,42 @@ func test_a_null_cost_line_is_reported() -> void:
 	building.cost = cost
 	assert_array(building.missing_fields()).contains(["cost.wood"])
 
-## Les places de roster suivent la doctrine de storage_bonus et non celle du zéro :
-## douze bâtiments sur treize ne logent personne, et les réclamer refuserait de démarrer
-## sur des données correctes.
+## Le logement suit la doctrine de storage_bonus et non celle du zéro : la plupart des
+## bâtiments ne logent personne, et le réclamer refuserait de démarrer sur des données
+## correctes.
 func test_a_building_that_houses_nobody_is_complete() -> void:
 	var building := _building(_l_shape())
-	assert_int(building.roster_places).is_equal(0)
+	assert_int(building.housing).is_equal(0)
 	assert_array(building.missing_fields()).is_empty()
 
 func test_a_house_carries_its_places() -> void:
 	var building := _building(_l_shape())
-	building.roster_places = 2
+	building.housing = 2
 	assert_array(building.missing_fields()).is_empty()
 
-## Elles remontent sous leur propre nom et non sous un préfixe économique : c'est un
-## chiffre des Effectifs, et les ranger avec le coût ferait mentir le rapport.
+## Il remonte sous son propre nom et non sous un préfixe économique : les ranger avec le
+## coût ferait mentir le rapport.
 func test_negative_places_are_reported_under_their_own_name() -> void:
 	var building := _building(_l_shape())
-	building.roster_places = -1
-	assert_array(building.missing_fields()).contains(["roster_places"])
+	building.housing = -1
+	assert_array(building.missing_fields()).contains(["housing"])
+
+## Le coût en travailleurs suit la même doctrine que le logement : une palissade n'en
+## immobilise aucun, et zéro y est une valeur de contenu parfaitement légitime. Ce qui est
+## refusé est le négatif, qui rendrait des bras au lieu d'en prendre.
+##
+## Ce que ce fichier ne peut **pas** vérifier, et c'est la question que CLAUDE.md fait poser
+## avant tout missing_fields() : qu'il existe quelque part un bâtiment qui loge sans coûter
+## de bras. Une BuildingData ne voit qu'elle-même, donc la règle vit dans GameDatabase.
+func test_a_building_that_commits_nobody_is_complete() -> void:
+	var building := _building(_l_shape())
+	assert_int(building.workers).is_equal(0)
+	assert_array(building.missing_fields()).is_empty()
+
+func test_negative_workers_are_reported() -> void:
+	var building := _building(_l_shape())
+	building.workers = -1
+	assert_array(building.missing_fields()).contains(["workers"])
 
 ## La défense rejoint la même doctrine à F1 : la plupart des bâtiments ne défendent rien.
 ## Le cas est écrit pour que personne ne la réclame en croyant corriger un oubli.
@@ -294,15 +311,35 @@ func test_at_least_one_building_of_data_declares_a_site() -> void:
 		.override_failure_message("aucun bâtiment de data/buildings/ ne déclare de chantier") \
 		.is_not_empty()
 
-## Un producteur cohérent : deux postes, un rendement, une famille.
+## L'interdit de blocage de DESIGN.md 3.4, vérifié sur la data réelle.
+##
+## GameDatabase le tient déjà au boot, et ce cas ne le double pas pour rien : un `assert()`
+## est retiré d'un export, alors qu'une suite de tests tourne toujours en débogage. La règle
+## est trop coûteuse à perdre pour ne reposer que sur la première des deux — un catalogue
+## qui la violerait rendrait une partie **définitivement** injouable, sans rien casser ni
+## rien signaler.
+##
+## Ce qu'il exige est faible exprès : *au moins un* bâtiment qui loge sans coûter de bras.
+## Un manoir cher en travailleurs resterait légitime à côté.
+func test_at_least_one_shelter_costs_no_workers() -> void:
+	var free_shelters: Array[String] = []
+	for file in DirAccess.get_files_at(BUILDING_ROOT):
+		if file.get_extension() != "tres":
+			continue
+		var building := load("%s/%s" % [BUILDING_ROOT, file]) as BuildingData
+		if building != null and building.housing > 0 and building.workers == 0:
+			free_shelters.append(file.get_basename())
+	assert_array(free_shelters) 		.override_failure_message(
+			"aucun bâtiment de data/buildings/ ne loge sans coûter de travailleur : "
+			+ "une partie dont tout le monde est immobilisé ne pourrait plus rien bâtir") 		.is_not_empty()
+
+## Un producteur cohérent : un rendement par tour, et c'est tout ce que N1 lui demande.
 func _producer() -> BuildingData:
 	var building := _building(_l_shape())
 	var block := ProductionBlock.new()
-	block.slots = 2
-	var per_slot: Dictionary[StringName, int] = {}
-	per_slot[&"wood"] = 2
-	block.yield_per_slot = per_slot
-	block.skill_family = &"harvest"
+	var per_turn: Dictionary[StringName, int] = {}
+	per_turn[&"wood"] = 2
+	block.yield_per_turn = per_turn
 	building.production = block
 	return building
 

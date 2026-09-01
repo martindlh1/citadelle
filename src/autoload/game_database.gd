@@ -26,6 +26,7 @@ func _ready() -> void:
 	_assert_buildings_are_complete()
 	_assert_commodities_are_complete()
 	_assert_resources_are_known()
+	_assert_a_shelter_is_free()
 	EventBus.database_ready.emit.call_deferred()
 
 ## Racine de l'équilibrage. Jamais null une fois le boot passé.
@@ -156,10 +157,45 @@ func _assert_resources_are_known() -> void:
 			_assert_known(known, resource, "buildings/%s.tres → cost" % id)
 		if not building.produces():
 			continue
-		for resource in building.production.yield_per_slot:
+		for resource in building.production.yield_per_turn:
 			_assert_known(known, resource,
-				"buildings/%s.tres → production.yield_per_slot" % id)
+				"buildings/%s.tres → production.yield_per_turn" % id)
 ## Cette ressource figure-t-elle au catalogue ?
+## Existe-t-il un bâtiment qui loge sans coûter de travailleur ?
+##
+## C'est **l'interdit de blocage** de DESIGN.md 3.4, et c'est le seul contrôle du boot qui
+## protège une règle de jeu plutôt qu'un champ de data.
+##
+## Sans lui, une partie peut mourir debout : tous les habitants immobilisés dans des
+## bâtiments, le logement plein, donc plus un bras libre pour ouvrir un chantier et plus une
+## place pour faire venir quelqu'un. Rien ne plante — le joueur clique et rien ne se passe,
+## pour toujours.
+##
+## La soupape est l'habitation gratuite en bras : tant qu'il reste du bois et une case
+## plate, on relève le plafond, la population repart, les bras reviennent. Encore faut-il
+## qu'un tel bâtiment existe dans le catalogue, et c'est cette ligne qui le garantit.
+##
+## Il est ici et non dans BuildingData.missing_fields() parce qu'une BuildingData ne voit
+## qu'elle-même : elle ne peut pas savoir qu'un *autre* bâtiment offre la sortie. C'est la
+## question que CLAUDE.md fait poser avant tout missing_fields() — *cette Resource a-t-elle
+## sous les yeux tout ce que la règle regarde ?* —, et la réponse est non, donc la règle
+## monte d'un cran. Même partage que la règle du tour perdu, montée de PhaseDef à RunBalance
+## dans le jeu d'avant.
+##
+## Il ne réclame pas que **tout** bâtiment qui loge soit gratuit : un manoir cher en bras
+## resterait légitime. Un seul suffit à garder la porte ouverte.
+func _assert_a_shelter_is_free() -> void:
+	var ids := list_building_ids()
+	if ids.is_empty():
+		return
+	for id in ids:
+		var building := get_building(id)
+		if building != null and building.housing > 0 and building.workers == 0:
+			return
+	assert(false,
+		"aucun bâtiment de data/buildings/ ne loge sans coûter de travailleur : "
+		+ "une partie dont tout le monde est immobilisé ne pourrait plus rien bâtir")
+
 func _assert_known(known: Array[StringName], resource: StringName, where: String) -> void:
 	if known.has(resource):
 		return
