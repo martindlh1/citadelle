@@ -127,6 +127,21 @@ commuter sur un état, vérifier **d'abord** qu'un drapeau atteint chacune de se
 importée par le prochain scan de l'éditeur, qui lui colle un `.png.import` à ranger
 ensuite. Un chemin absolu hors de `res://` évite le ménage.
 
+Le harnais Terrain, lui, a **la revue de seeds** — le pendant de la chronique du Run, et ce
+que `DESIGN.md` 3.1 demande à `T4` en toutes lettres :
+
+```bash
+"$GODOT_BIN" --headless --path . -- --harness terrain --survey
+```
+
+Elle tire deux cents brouillons et imprime leur distribution — accès, plateau, assises,
+gisements, distance de la lisière — plus le décompte des rejets **par motif**, parce que c'est
+le nom qui sert : « deposits, deposits, deposits » désigne le chiffre à tourner, là où « onze
+rejets » ne désigne rien. Elle mesure les brouillons **avant** rejet, et le dit : une
+distribution prise après serait bonne par construction, donc muette. Deux lignes à part
+disent ce que le jeu reçoit vraiment, et elles viennent de la boucle que `generate()` emprunte
+plutôt que d'une copie.
+
 La capture du harnais Terrain imprime aussi une sonde : elle reprojette la cellule
 désignée vers l'écran, retire un rayon depuis cette position comme le ferait la souris,
 et dit si les deux tombent sur la même cellule. C'est le seul contrôle du raccord entre

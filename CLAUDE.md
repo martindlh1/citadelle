@@ -610,6 +610,37 @@ geste est possible, faute de quoi elle avale les clics en silence.
 
 **Une vue sur laquelle on clique porte `MOUSE_FILTER_STOP`**, à l'inverse des vues de lecture, qui laissent passer en `IGNORE` pour que le curseur de cellule continue de piocher dessous. Le geste tombe alors dans le `gui_input` de la vue et n'atteint jamais `_unhandled_input` du harnais, ce qui est exactement le partage voulu — sans quoi un clic sur une fiche jouerait aussi la carte tenue sur la case cachée derrière.
 
+### Génération de terrain — structure d'abord
+
+*(Écrit à `T4`.)* `TerrainGen` pose une **mesa** : un plateau central, une plaine plus basse,
+et des rampes en marches pour seules montées. Le bruit ne fait que décorer ce que la structure
+a déjà décidé.
+
+**Une garantie structurelle vaut mieux qu'une garantie vérifiée**, et c'est la décision qui
+porte le jalon. La plaine est bruitée dans une amplitude **bornée sous le seuil d'enjambée**,
+donc aucun bruit ne peut ouvrir un accès que personne n'a voulu — ce n'est pas contrôlé, c'est
+impossible. Ce qui reste contrôlé est ce que la structure ne peut pas tenir seule : un étang
+qui coupe le pied d'une rampe, un rocher qui la bouche, un plateau sans gisement.
+`TerrainGenBalance.missing_fields()` refuse au boot un réglage où la plaine toucherait le
+plateau, ce qui est le même geste que le bloc `production` nullable — rendre la cohérence
+structurelle au lieu de vérifiée.
+
+**Le vérificateur ne sait rien du générateur.** `MapAudit` retrouve le plateau par un
+parcours, compte les accès en marchant depuis la lisière, et mesure la place à bâtir en
+essayant d'y poser une empreinte. C'est la condition pour qu'il **vérifie** au lieu de
+répéter : un audit à qui l'on dirait « j'ai creusé trois rampes » rendrait trois accès sur une
+carte dont deux se touchent. C'est la règle des tables, transposée à un contrôle.
+
+**Un seuil qui n'a jamais refusé se vérifie en le faisant refuser.** Trois des quatre
+promesses sont des **planchers** — taille du plateau, surface bâtissable, gisements — et elles
+ne mordent pas sur les réglages du jour : c'est leur métier, elles protègent d'une molette
+tournée demain. Elles ont donc été serrées une fois exprès, et la revue est passée de 14
+rejets sur 200 à 185 : elles refusent. La quatrième, la fourchette d'accès, est le vrai filtre.
+
+**Un `Array` alloué dans une boucle de grille se paie au million.** `is_area_buildable()`
+fabriquait ses cellules ; l'audit lui pose mille questions par carte et deux cents fois par
+revue. Le balayage direct rend les mêmes réponses.
+
 ### Sélection de cellule
 
 **Pas de collider, pas de physique.** Raycast analytique en DDA sur la grille de hauteurs, implémenté dans `domain/terrain/cell_picker.gd` comme fonction pure :

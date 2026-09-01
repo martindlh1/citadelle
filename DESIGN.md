@@ -187,6 +187,34 @@ est ce qui ne peut pas donner de garantie. Et la génération **se vérifie elle
 compte ses corridors d'approche par un parcours de grille, mesure sa surface plate, et
 **rejette le seed** s'il ne tient pas ses promesses.
 
+*La forme retenue à `T4` est une **mesa**, et elle mérite d'être nommée parce que le document
+laissait le choix ouvert.* Un plateau central surélevé, une plaine plus basse tout autour, et
+des **rampes** taillées en marches franchissables pour seules montées. C'est la lecture qui
+rend littérale la phrase ci-dessus — le relief *fabrique* les goulots — et elle a une
+propriété qu'aucune autre n'avait : la plaine est bruitée dans une amplitude **bornée sous le
+seuil d'enjambée**, si bien qu'aucun bruit ne peut ouvrir un accès que personne n'a voulu. La
+garantie des accès n'est pas vérifiée après coup, elle est **structurelle** — et c'est
+`TerrainGenBalance` qui la tient, en refusant au boot un réglage où la plaine toucherait le
+plateau.
+
+Ce qui reste vérifié l'est donc vraiment, et c'est la décoration qui le met en jeu : un étang
+qui coupe le pied d'une rampe, deux rochers qui la bouchent, un plateau où aucun gisement
+n'est tombé. Mesuré sur deux cents seeds, **quatorze brouillons sur deux cents** sont rejetés,
+tous pour la même raison — deux rampes qui se sont rejointes en un seul col.
+
+**La franchissabilité entre en data au même jalon.** La colonne *Franchissable* du tableau
+ci-dessus n'existait nulle part ailleurs que dans ce document ; elle est maintenant un champ
+de `TerrainData`, à côté de la constructibilité et **distinct d'elle**. Les six terrains
+répondent aujourd'hui la même chose aux deux questions, ce qui est précisément pourquoi il
+fallait deux champs : une franchissabilité déduite se serait trompée en silence le jour d'un
+marécage.
+
+**`OUVERT`** — où vit la hauteur d'enjambée. Elle est dans `TerrainGenBalance` parce que la
+génération en est le seul lecteur : elle y taille ses rampes et y compte ses accès. `V1`
+donnera la sienne à une vague, et le jour où les deux doivent être le même chiffre, le champ
+déménage. Inventer maintenant un bloc commun pour un consommateur qui n'existe pas est ce que
+ce projet refuse depuis toujours.
+
 L'aléatoire reste entier partout ailleurs : où sont les accès, comment le relief se plisse,
 où tombent les gisements et les forêts, à quoi ressemble le pourtour.
 

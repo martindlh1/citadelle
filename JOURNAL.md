@@ -4,6 +4,209 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-09-01 — `T4` : la mesa, et deux défauts qu'aucune image ne montrait
+
+**État : terminé.** Branche `feat/t4-terrain-gen`, tirée de **`feat/n2-population-view`** et
+non de `master` — `N2` n'est pas encore fusionnée, et travailler sur un arbre sans le HUD du
+jalon précédent aurait fait mentir toutes les captures. Les quatre commandes passent : boot
+sans erreur ni warning, tout `src/domain/` parse, tout `src/adapters/` et `scenes/dev/` aussi,
+et **431 tests verts contre 400**. Deux captures, une revue de deux cents seeds, et une sonde
+ASCII jetable sans laquelle rien de ce qui suit n'aurait été trouvé.
+
+`TerrainGen` cesse d'espérer. C'est ce que `DESIGN.md` 3.1 lui demande depuis le rescope, et
+la phrase qui porte le jalon est de lui : « bruiter puis espérer est ce qui ne peut pas donner
+de garantie ».
+
+### La forme retenue : une mesa
+
+Le document laissait le choix ouvert — il demandait un plateau central, des accès bornés, une
+surface plate, et ne disait pas **par quoi** le plateau est isolé. La réponse retenue est la
+plus littérale : un plateau surélevé, une plaine plus basse tout autour, et des **rampes**
+taillées en marches franchissables pour seules montées.
+
+Elle a une propriété qu'aucune autre n'avait, et c'est elle qui a décidé. La plaine est
+bruitée dans une amplitude **bornée sous le seuil d'enjambée** ; il devient alors impossible
+qu'un bruit ouvre un accès que personne n'a voulu. La garantie des accès n'est pas vérifiée
+après coup, elle est **structurelle** — et c'est `TerrainGenBalance.missing_fields()` qui la
+tient, en refusant au boot un réglage où la plaine toucherait le plateau.
+
+C'est le geste du bloc `production` nullable de `E1b`, transposé : rendre une cohérence
+**structurelle** au lieu de vérifiée. Le jour où l'on voudra une plaine qui touche le plateau,
+c'est le contrôle qui se desserre, pas la génération qui se met à espérer.
+
+### Le vérificateur ne sait rien du générateur, et c'est tout son intérêt
+
+`MapAudit` retrouve le plateau par un parcours, compte les accès en marchant depuis la
+lisière, et mesure la place à bâtir en essayant d'y poser une empreinte 2x2. Il ne reçoit que
+la carte et une cellule de repère.
+
+C'est la règle des tables appliquée à un contrôle. Un audit à qui la génération dirait « j'ai
+creusé trois rampes » rendrait trois accès sur une carte dont deux rampes se sont rejointes,
+ou dont une est bouchée par un rocher — il répéterait au lieu de vérifier. Et le rejet du seed
+n'a de sens que si le juge est indépendant de l'accusé.
+
+**Il sert deux fois, et c'est ce qui en fait une classe** plutôt que trois fonctions privées :
+la génération l'appelle pour rejeter, le harnais pour imprimer une distribution. Les deux
+lisent le même rapport, ce qui est la seule façon d'être sûr que la table décrit les cartes
+qu'on joue.
+
+### Deux défauts que seule une carte imprimée en chiffres montrait
+
+Ils sont de la même famille et méritent d'être notés ensemble, parce que cette famille est
+neuve : **une capture d'un relief ne dit pas si l'on peut y marcher.**
+
+**L'eau demandée en part se comportait en seuil.** `water_share` valait 0,12 et la génération
+comparait le bruit à ce chiffre — ce qui paraît la même chose et ne l'est pas : un bruit
+simplex se serre autour de sa moyenne, si bien que « douze pour cent » rendait **zéro** case
+d'eau sur mille. Le champ portait un nom de proportion et faisait autre chose. On classe
+maintenant les cases de plaine par leur bruit et l'on noie les plus basses, ce qui rend au
+champ le sens qu'il annonce.
+
+**Et une rampe en diagonale s'écrasait elle-même.** Une rampe passe par des cases d'angle, ses
+voies se chevauchent d'un cran à l'autre, et « le dernier qui écrit gagne » veut alors dire
+que le cran **bas** efface le cran haut. L'escalier perdait une marche, donc devenait une
+marche de deux crans, donc infranchissable. La rampe était parfaitement dessinée à l'écran,
+elle ne se montait pas, et l'audit rendait « un accès de moins » sans que rien ne dise
+pourquoi. Deux des cinq crans disparaissaient ainsi.
+
+Le correctif est de **planifier toutes les rampes avant de les poser et de garder le plus
+haut**, ce qui rend l'escalier monotone par construction : il n'y a plus à vérifier qu'une
+rampe se monte. Une rampe est devenue au passage un **remblai** et jamais une tranchée — elle
+ne descend rien de ce qui était là, donc elle n'entame pas le plateau et comble l'étang
+qu'elle traverse.
+
+Aucun des deux ne se voyait sur une capture, et les deux se lisaient d'un coup sur une carte
+imprimée en chiffres. **Une sonde ASCII jetable, trente lignes, lancée sous `-s` : c'est
+l'instrument du jalon**, au même titre que la revue de seeds. Le relief se regarde en image ;
+ce qui s'y marche se lit en nombres.
+
+*Un troisième défaut de la même veine, trouvé en même temps : une rampe large de deux n'en
+faisait qu'une. Les voies étaient étalées sur la perpendiculaire réelle, et sur une diagonale
+un décalage d'un demi-pas arrondit sur la même cellule. Elle se dessinait, elle se montait,
+elle était simplement deux fois plus fragile qu'annoncé.*
+
+### La franchissabilité entre en data
+
+`TerrainData` gagne un `walk`, réclamé comme son `build`. C'est la colonne **Franchissable**
+du tableau de `DESIGN.md` 3.1, qui existait dans le document et nulle part ailleurs.
+
+**Deux champs et non une déduction**, alors que les cinq terrains de `data/` répondent la même
+chose aux deux questions. C'est précisément pourquoi il en fallait deux : une franchissabilité
+déduite de la constructibilité aurait passé la suite entière et se serait trompée en silence
+le jour d'un marécage — qu'on traverse et sur quoi l'on ne bâtit pas. Un cas de test tient
+cette distinction en fabriquant le marécage.
+
+`TerrainQuery` gagne `is_walkable()` pour ce que la case est, et `can_step()` pour ce que le
+marcheur peut enjamber. La hauteur d'enjambée arrive **en argument** : ce n'est pas le terrain
+qui grimpe. Elle vit dans `TerrainGenBalance` en attendant `V1`, parce que la génération en est
+aujourd'hui le seul lecteur.
+
+### Ce que la revue de deux cents seeds a rendu
+
+`--survey` tire deux cents brouillons et imprime leur distribution. Sur les réglages du jour :
+
+```
+  accès      0:1  1:13  2:77  3:75  4:34
+  plateau    min  133  méd  148  max  165 cases bâtissables
+  assises    min  403  méd  463  max  529 emplacements 2x2
+  gisements  min    3  méd    9  max   16 sur le plateau
+  lisière    min   -1  méd   10  max   15 pas jusqu'au plateau
+  rejets     14/200 brouillons — accesses_too_few 14
+  retenues   200/200 seeds, 1.08 essai(s) en moyenne, 3 au pire
+```
+
+**Elle mesure les brouillons et le dit**, parce qu'une distribution prise après rejet serait
+bonne par construction, donc muette. Les deux dernières lignes disent séparément ce que le jeu
+reçoit — et elles viennent de `TerrainGen.accepted_attempt()`, c'est-à-dire de la boucle que
+`generate()` emprunte, jamais d'une copie écrite dans le harnais. Une boucle recopiée aurait
+mesuré la copie, sous la forme la plus perfide du raccourci que `CLAUDE.md` nomme depuis
+`F1` : les deux auraient été justes le jour où on les a écrites.
+
+C'est cette table qui a **placé les seuils**, et l'ordre compte — les promesses ont été
+laissées lâches pendant l'écriture, mesurées, puis serrées. Trois d'entre elles sont des
+**planchers** — taille du plateau, surface bâtissable, gisements — et elles ne mordent pas sur
+les réglages du jour : c'est leur métier, elles protègent d'une molette tournée demain. La
+quatrième, la fourchette d'accès, est le vrai filtre, et c'est elle qui rejette les quatorze.
+
+**Un plancher qui ne refuse jamais se vérifie en le faisant refuser**, et c'est `N1` qui a
+laissé cette règle au projet. Les trois ont donc été serrés une fois exprès : la revue est
+passée de 14 rejets sur 200 à **185**, et 28 seeds n'ont plus rien trouvé en 24 essais. Ils
+refusent, et la table nomme lesquels.
+
+*Un piège de mesure évité de justesse : `min_accesses` et `max_accesses` sont **à la fois**
+l'intervalle dans lequel la génération tire son nombre de rampes et celui que l'audit exige.
+Laissés lâches « pour mesurer d'abord », ils ont fait creuser jusqu'à trente-deux rampes. Un
+champ de promesse qui est aussi une entrée ne se desserre pas impunément.*
+
+### Le relief ne se voyait pas, et c'est un défaut de jalon
+
+La première mesa était juste en chiffres et **invisible en image** : trois crans à 0,25 de
+haut sur une carte de trente-deux cases, sous une forêt qui couvrait aussi le plateau. Pour un
+jalon dont toute la thèse est que le relief *est* la carte de tower-defense, une carte qui se
+lit comme une plaine est un échec, quoi qu'en dise l'audit.
+
+Trois chiffres de `data/balance/` l'ont réglé, et c'est le bon endroit : le plateau monte à 6
+au lieu de 4, le cran passe de 0,25 à 0,35 — le premier réglage de `T2` qui bouge depuis
+`T2` —, et la forêt s'arrête un cran sous le plateau. Le dernier fait le plus gros du travail :
+un plateau **dégagé** se lit comme une table, et il dit du même coup où l'on bâtit.
+
+### `--harness`, et pourquoi il fallait l'ajouter maintenant
+
+La revue vit chez le harnais Terrain alors que le harnais par défaut est le Run. La mesure du
+jalon n'était donc atteignable qu'en éditant une constante et en relançant — c'est-à-dire, en
+pratique, jamais.
+
+C'est la phrase que `P1a` a laissée au projet, appliquée un cran plus haut : **un état
+qu'aucune ligne de commande ne peut atteindre est un état que personne ne regardera**, et un
+harnais est un état comme un autre. Six lignes dans le pivot de boot, et `HARNESS` reste ce
+qu'il était pour le travail à la souris.
+
+### Ce que je n'ai pas fait
+
+**Pas de `ore`.** `DESIGN.md` 3.1 décrit un Filon à côté du Gisement ; il n'existe pas en data,
+et il n'a toujours aucun lecteur — la production est plate depuis `I3`, et c'est l'adjacence de
+`C3` qui lira un tag de terrain pour la première fois. `MapAudit.DEPOSIT_TAGS` l'attend en un
+mot.
+
+**Aucun contrat n'entre dans `contracts/`**, et la table y reste à quatre lignes pour le
+quatrième jalon d'affilée. `MapReport` vit dans `domain/terrain/` : la génération le produit et
+le consomme, le harnais le lit, et aucun **second système du domaine** ne le franchit. Le jour
+où les Vagues voudront connaître les cols avant de choisir par où entrer, il déménagera.
+
+**Pas de marquage des cols à l'écran.** Le harnais les imprime en clair et la surbrillance en
+désigne un ; les peindre tous demanderait une passe de rendu, et rien dans ce jalon ne
+l'exige.
+
+**Aucun chiffre n'est vraiment équilibré.** Le rayon du plateau, la densité des étangs, la
+part de forêt et la hauteur de la mesa sont des points de départ, choisis pour que la carte se
+lise. C'est `B1`, et `--survey` est l'instrument qu'il réclamera.
+
+### Prochain jalon
+
+**`V1`** — le chemin. `DESIGN.md` 8 le place juste après `T4`, et la raison est maintenant
+visible en capture : les cols existent, donc un chemin veut dire quelque chose. Il héritera de
+`is_walkable()` et de `can_step()`, qui ont été écrits pour lui autant que pour l'audit — et
+la hauteur d'enjambée déménagera le jour où une vague aura la sienne.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien.** Aucune `.tscn` ni `project.godot` touché.
+
+- **`HARNESS` vaut toujours `&"run"`**, et `--harness terrain` suffit désormais pour la revue.
+- **Deux drapeaux neufs** : `--harness <id>` choisit le harnais, `--survey` tire deux cents
+  cartes et imprime leur distribution.
+- **Les cinq `.tres` de terrain gagnent un `walk`.**
+- **`data/balance/terrain_gen_balance.tres` est refait** : `min_height` et `max_height`
+  disparaissent — l'amplitude du relief est devenue une conséquence de la structure — et
+  onze champs entrent, dont les quatre promesses.
+- **`data/balance/terrain_balance.tres` change son `step_height`**, de 0,25 à 0,35. C'est le
+  premier réglage de `T2` qui bouge depuis `T2`, et il bouge parce que `T4` fait du relief un
+  élément de jeu et non plus un décor.
+- **La branche est tirée de `feat/n2-population-view`** et non de `master` : `N2` n'est pas
+  fusionnée. Les fusionner dans l'ordre.
+
+---
+
 ## 2026-09-01 — `N2` : la fiche avant le clic, et un recouvrement que seule une sonde voyait
 
 **État : terminé.** Branche `feat/n2-population-view`, tirée de `master` après la fusion de
