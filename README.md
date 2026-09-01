@@ -65,9 +65,14 @@ Un harnais qui affiche quelque chose ne se vérifie ni au parsing ni aux tests :
 faut le regarder. Les harnais graphiques acceptent donc une capture en ligne de
 commande, qui rend une image puis quitte.
 
-C'est le harnais désigné par `HARNESS` qui répond. Les drapeaux sont les mêmes pour
-tous — ils vivent dans `scenes/dev/dev_shot.gd`, en un seul endroit, pour que la même
-commande marche partout.
+C'est le harnais désigné par `HARNESS` qui répond, **ou celui que `--harness` nomme**. Les
+drapeaux sont les mêmes pour tous — ils vivent dans `scenes/dev/dev_shot.gd`, en un seul
+endroit, pour que la même commande marche partout.
+
+`--harness` est entré à `T4`, et pour la raison qui a fait naître tous les autres : la revue
+de deux cents seeds vit chez le harnais Terrain alors que le défaut est le Run, donc la
+mesure du jalon n'était atteignable qu'en éditant une constante et en relançant — c'est-à-dire
+en pratique jamais. **Un harnais est un état comme un autre.**
 
 ```bash
 "$GODOT_BIN" --path . --resolution 1280x720 -- --shot /tmp/rendu.png --shot-turns 1 --shot-hover 16,16
@@ -78,6 +83,7 @@ obligatoire ; les autres sont optionnels :
 
 | Drapeau | Effet |
 |---|---|
+| `--harness id` | harnais à lancer, par-dessus `HARNESS` — `terrain`, `city` ou `run` |
 | `--shot chemin.png` | rend une image puis quitte |
 | `--shot-hover x,y` | cellule à désigner. À défaut, le centre de la carte |
 | `--shot-turns n` | quarts de tour appliqués à la **caméra** |
@@ -86,6 +92,7 @@ obligatoire ; les autres sont optionnels :
 | `--shot-select n` | bâtiment à choisir, numéroté comme au clavier *(harnais Run)* |
 | `--shot-unfounded` | ne pose pas le Cœur : capture l'écran de fondation *(harnais Run)* |
 | `--shot-sun f` | moment du cycle solaire : 0 aube, 0.25 midi, 0.5 crépuscule, 0.75 nuit *(harnais Run)* |
+| `--survey` | génère 200 cartes sans écran et imprime leur distribution, puis quitte *(harnais Terrain)* |
 | `--chronicle` | rejoue le run entier sans écran et imprime la table, puis quitte *(harnais Run)* |
 
 `--shot-hover` a une valeur par défaut plutôt que rien, parce qu'une capture qui ne

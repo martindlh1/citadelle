@@ -51,6 +51,9 @@ var _seed := FIRST_SEED
 func _ready() -> void:
 	var balance := GameDatabase.get_balance()
 	_metrics = TerrainMetrics.from_balance(balance.terrain)
+	if DevShot.has_flag(DevShot.SURVEY_FLAG):
+		_write_survey()
+		return
 	var grid := _generate(FIRST_SEED)
 	_world = DevWorld.create(grid, _metrics, balance)
 	add_child(_world)
@@ -91,12 +94,34 @@ func _report(grid: HeightGrid) -> String:
 	var params := GameDatabase.get_balance().terrain_gen
 	var lines := PackedStringArray()
 	lines.append("Terrain — seed %d, %d x %d" % [_seed, grid.size().x, grid.size().y])
-	lines.append("hauteurs %d..%d, nappe à %d"
-		% [params.min_height, params.max_height, params.water_level])
+	lines.append("plaine %d..%d, plateau à %d, nappe à %d, enjambée %d" % [
+		params.lowland_height, params.lowland_ceiling(), params.plateau_height,
+		params.water_level, params.max_climb])
+	lines.append("")
+	lines.append(_audit_block(grid, params))
 	lines.append("")
 	lines.append(_terrain_tally(grid))
 	lines.append("")
 	lines.append(_height_tally(grid))
+	return "\n".join(lines)
+
+## Ce que l'audit dit de cette carte, et les cols qu'il a trouvés.
+##
+## Les entrées sont nommées en clair : c'est la seule ligne de tout le projet qui désigne un
+## **col**, et le mot n'a de sens qu'attaché à des cases. Une carte s'y relit — on va voir
+## si ces cases-là sont bien les rampes qu'on voit à l'écran.
+func _audit_block(grid: HeightGrid, params: TerrainGenBalance) -> String:
+	var report := MapAudit.inspect(grid.to_query(),
+		TerrainGen.centre_of(grid.size()), params.max_climb)
+	var lines := PackedStringArray()
+	lines.append("Audit")
+	lines.append("  plateau  %4d cases dont %d bâtissables, %d gisement(s)"
+		% [report.shelf(), report.plateau(), report.deposits()])
+	lines.append("  accès    %4d   %s" % [report.accesses(), report.entries()])
+	lines.append("  assises  %4d   lisière à %d pas" % [report.pads(), report.edge_distance()])
+	var missing := MapAudit.shortcomings(report, params)
+	lines.append("  promesses %s" % ("tenues" if missing.is_empty()
+		else "MANQUÉES : %s" % ", ".join(missing)))
 	return "\n".join(lines)
 
 ## Ce que le curseur désigne, en une ligne.
@@ -144,6 +169,142 @@ func _height_tally(grid: HeightGrid) -> String:
 		var count: int = counts[height]
 		lines.append("  %3d %5d  %s" % [height, count, "#".repeat(count * HISTOGRAM_WIDTH / total)])
 	return "\n".join(lines)
+
+# --- la revue de seeds ------------------------------------------------------
+
+## Nombre de seeds parcourus par `--survey`. Celui que DESIGN.md 3.1 nomme.
+const SURVEY_SEEDS := 200
+
+## Accès énumérés dans l'histogramme avant qu'une colonne ne ramasse le reste.
+const SURVEY_ACCESS_BUCKETS := 7
+
+## Génère beaucoup de cartes sans écran et imprime ce qu'elles valent.
+##
+## **Ce que cette table doit montrer** : que la structure de `T4` tient ses promesses sur
+## autre chose qu'un seed bien choisi, et **à quel prix**. Une promesse que rien ne rejette
+## jamais est un seuil trop lâche — elle ne protège de rien ; une promesse qui rejette la
+## moitié des brouillons est soit trop serrée, soit le signe que la structure ne fait pas ce
+## qu'on croit. C'est la colonne des rejets qui porte le jalon, pas les moyennes.
+##
+## **Ce qu'elle ne montre pas** : si une carte est *agréable* à jouer. Aucun chiffre ici ne
+## dit qu'un col est au bon endroit ni qu'un plateau a une forme intéressante — ça se regarde
+## en capture, une carte à la fois. La table dit qu'une carte est **jouable**, ce qui est le
+## plancher et non l'objectif.
+##
+## **Elle mesure les brouillons, pas les cartes retenues**, et c'est délibéré : une
+## distribution prise après rejet serait bonne par construction, donc muette. Les deux
+## dernières lignes disent séparément ce que le jeu reçoit — combien d'essais il faut, et
+## si un seed a fini par ne rien rendre du tout.
+func _write_survey() -> void:
+	# La revue ne monte ni plateau ni caméra, et `quit()` ne prend effet qu'en fin d'image :
+	# sans ce coupe-circuit, `_process` tourne une fois sur un monde qui n'existe pas et
+	# noie la table sous deux erreurs de script.
+	set_process(false)
+	var params := GameDatabase.get_balance().terrain_gen
+	var size := params.map_size
+	var centre := TerrainGen.centre_of(size)
+	print("[terrain_harness] revue de %d seeds — %d x %d, plateau à %d sur une plaine %d..%d"
+		% [SURVEY_SEEDS, size.x, size.y, params.plateau_height, params.lowland_height,
+			params.lowland_ceiling()])
+	print("  Les chiffres portent sur les BROUILLONS, avant tout rejet : une distribution")
+	print("  mesurée après rejet serait bonne par construction, donc sans intérêt.")
+
+	var accesses: Dictionary[int, int] = {}
+	var plateaus: Array[int] = []
+	var pads: Array[int] = []
+	var deposits: Array[int] = []
+	var depths: Array[int] = []
+	var refusals: Dictionary[String, int] = {}
+	var refused := 0
+	for index in SURVEY_SEEDS:
+		var run_seed := FIRST_SEED + index
+		var grid := TerrainGen.draft(TerrainGen.seed_for(run_seed, 0), size, params)
+		var report := MapAudit.inspect(grid.to_query(), centre, params.max_climb)
+		accesses[report.accesses()] = accesses.get(report.accesses(), 0) + 1
+		plateaus.append(report.plateau())
+		pads.append(report.pads())
+		deposits.append(report.deposits())
+		depths.append(report.edge_distance())
+		var missing := MapAudit.shortcomings(report, params)
+		if missing.is_empty():
+			continue
+		refused += 1
+		for reason in missing:
+			refusals[reason] = refusals.get(reason, 0) + 1
+
+	print("  accès      %s" % _access_histogram(accesses))
+	print("  plateau    %s cases bâtissables" % _spread(plateaus))
+	print("  assises    %s emplacements 2x2" % _spread(pads))
+	print("  gisements  %s sur le plateau" % _spread(deposits))
+	print("  lisière    %s pas jusqu'au plateau (−1 : plateau injoignable)" % _spread(depths))
+	print("  rejets     %d/%d brouillons — %s"
+		% [refused, SURVEY_SEEDS, _refusal_tally(refusals)])
+	_survey_the_kept(params, size)
+	print("[terrain_harness] la table dit que les cartes sont jouables, pas qu'elles sont")
+	print("[terrain_harness] bonnes — ça se regarde en capture, une carte à la fois.")
+	get_tree().quit(OK)
+
+## Ce que le jeu reçoit vraiment : combien d'essais coûte une carte, et s'il en manque.
+##
+## Le compte vient de `TerrainGen.accepted_attempt()`, c'est-à-dire de **la boucle que
+## `generate()` emprunte**, et non d'une copie écrite ici. Une boucle recopiée aurait mesuré
+## la copie, ce qui est le raccourci que `CLAUDE.md` nomme depuis `F1` — et sous sa forme la
+## plus perfide, puisque les deux auraient été justes le jour où on les a écrites.
+func _survey_the_kept(params: TerrainGenBalance, size: Vector2i) -> void:
+	var spent := 0
+	var worst := 0
+	var lost := 0
+	for index in SURVEY_SEEDS:
+		var attempt := TerrainGen.accepted_attempt(FIRST_SEED + index, size, params)
+		if attempt < 0:
+			lost += 1
+			continue
+		spent += attempt + 1
+		worst = maxi(worst, attempt + 1)
+	var kept := SURVEY_SEEDS - lost
+	print("  retenues   %d/%d seeds, %.2f essai(s) en moyenne, %d au pire"
+		% [kept, SURVEY_SEEDS, float(spent) / float(maxi(kept, 1)), worst])
+
+## Combien de cartes par nombre d'accès, avec la borne des promesses en clair.
+func _access_histogram(counts: Dictionary[int, int]) -> String:
+	var parts := PackedStringArray()
+	var tail := 0
+	for value in counts:
+		if value >= SURVEY_ACCESS_BUCKETS:
+			tail += counts[value]
+	for value in SURVEY_ACCESS_BUCKETS:
+		parts.append("%d:%d" % [value, counts.get(value, 0)])
+	if tail > 0:
+		parts.append("%d+:%d" % [SURVEY_ACCESS_BUCKETS, tail])
+	return "  ".join(parts)
+
+## Le plus bas, la médiane et le plus haut d'une série. Copie triée : l'appelant garde
+## la sienne dans l'ordre où il l'a remplie.
+func _spread(values: Array[int]) -> String:
+	if values.is_empty():
+		return "—"
+	var sorted := values.duplicate()
+	sorted.sort()
+	return "min %4d  méd %4d  max %4d" % [sorted[0], sorted[sorted.size() / 2],
+		sorted[sorted.size() - 1]]
+
+## Les motifs de rejet, du plus fréquent au moins fréquent.
+##
+## Par motif et non en total, parce que c'est le **nom** qui sert : « deposits, deposits,
+## deposits » désigne le chiffre à tourner, là où « onze rejets » ne désigne rien.
+func _refusal_tally(refusals: Dictionary[String, int]) -> String:
+	if refusals.is_empty():
+		return "aucun"
+	var reasons: Array[String] = []
+	reasons.assign(refusals.keys())
+	reasons.sort_custom(func(first: String, second: String) -> bool:
+		if refusals[first] != refusals[second]:
+			return refusals[first] > refusals[second]
+		return first < second)
+	var parts := PackedStringArray()
+	for reason in reasons:
+		parts.append("%s %d" % [reason, refusals[reason]])
+	return ", ".join(parts)
 
 func _cell_count(grid: HeightGrid) -> int:
 	return grid.size().x * grid.size().y

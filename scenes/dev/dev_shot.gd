@@ -25,6 +25,17 @@ extends RefCounted
 ## La phrase qui les fait naître, elle, ne bouge pas : **un état qu'aucune capture ne peut
 ## atteindre est un état que personne ne regardera.**
 
+## Harnais à lancer, par-dessus la constante `HARNESS` de `dev_boot.gd`.
+##
+## Il entre à `T4` pour une raison qui vaudra pour tous les jalons suivants : la revue de
+## deux cents seeds vit chez le harnais Terrain, alors que le harnais par défaut est celui du
+## Run — donc la mesure du jalon n'était atteignable qu'en éditant une constante et en
+## relançant, ce qui revient à dire que personne ne la lancerait. C'est la phrase de ce
+## fichier appliquée un cran plus haut : **un état qu'aucune ligne de commande ne peut
+## atteindre est un état que personne ne regardera**, et un harnais est un état comme un
+## autre.
+const HARNESS_FLAG := "--harness"
+
 ## Déclenche une capture vers ce chemin, puis quitte.
 const SHOT_FLAG := "--shot"
 
@@ -86,6 +97,16 @@ const SHOT_SELECT_FLAG := "--shot-select"
 ## lettre — quand une vue se met à commuter sur un état, vérifier d'abord qu'un drapeau
 ## atteint chacune de ses valeurs.
 const SHOT_UNFOUNDED_FLAG := "--shot-unfounded"
+
+## Génère un grand nombre de cartes sans écran et imprime leur distribution, puis quitte.
+## Drapeau **nu**.
+##
+## C'est ce que `DESIGN.md` 3.1 demande à `T4` en toutes lettres — « un harnais génère deux
+## cents seeds et imprime la distribution des accès, de la surface plate et de la distance
+## lisière → Cœur » —, et c'est le pendant de `--chronicle` pour le Terrain : le seul contrôle
+## qui regarde la génération sur autre chose qu'une carte. Un seed bien choisi ne dit rien
+## d'un générateur ; deux cents disent s'il tient ses promesses et à quel prix.
+const SURVEY_FLAG := "--survey"
 
 ## Rejoue le run entier sans écran et imprime ce que ça donne, tour par tour. Drapeau **nu**.
 ##

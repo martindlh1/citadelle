@@ -93,16 +93,33 @@ static func generate(run_seed: int, size: Vector2i, params: TerrainGenBalance) -
 	assert(params != null, "réglages de génération null")
 	assert(params.missing_fields().is_empty(),
 		"réglages de génération inexploitables : %s" % ", ".join(params.missing_fields()))
+	var attempt := accepted_attempt(run_seed, size, params)
+	if attempt < 0:
+		assert(false, "aucune carte jouable en %d essais sur le seed %d — réglages de %s"
+			% [params.max_attempts, run_seed, "data/balance/terrain_gen_balance.tres"])
+		return draft(seed_for(run_seed, params.max_attempts - 1), size, params)
+	return draft(seed_for(run_seed, attempt), size, params)
+
+## Le rang de l'essai que generate() retient, ou -1 si aucun ne tient ses promesses.
+##
+## **La boucle de rejet est ici et nulle part ailleurs.** `generate()` s'en sert pour rendre
+## une carte, le harnais pour compter combien d'essais elle coûte : deux besoins, une seule
+## écriture. Une boucle recopiée dans le harnais aurait mesuré la copie — c'est le raccourci
+## que `CLAUDE.md` nomme depuis `F1`, et il se serait présenté sous sa forme la plus
+## trompeuse, puisque les deux boucles auraient été justes le jour où on les a écrites.
+##
+## Le prix est un brouillon de plus, redessiné par `generate()` une fois le rang connu. C'est
+## une carte de mille cellules ; ce que ça achète est qu'une table ne puisse pas diverger de
+## ce que le jeu joue.
+static func accepted_attempt(run_seed: int, size: Vector2i,
+		params: TerrainGenBalance) -> int:
 	var centre := centre_of(size)
-	var grid: HeightGrid = null
 	for attempt in params.max_attempts:
-		grid = draft(seed_for(run_seed, attempt), size, params)
+		var grid := draft(seed_for(run_seed, attempt), size, params)
 		var report := MapAudit.inspect(grid.to_query(), centre, params.max_climb)
 		if MapAudit.shortcomings(report, params).is_empty():
-			return grid
-	assert(false, "aucune carte jouable en %d essais sur le seed %d — réglages de %s"
-		% [params.max_attempts, run_seed, "data/balance/terrain_gen_balance.tres"])
-	return grid
+			return attempt
+	return -1
 
 ## Une carte, **sans audit ni rejet**. C'est ce que `generate()` essaie.
 ##

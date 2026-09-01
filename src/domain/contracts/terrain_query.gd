@@ -86,9 +86,14 @@ func has_tag(cell: Vector2i, tag: StringName) -> bool:
 func is_area_buildable(area: Rect2i) -> bool:
 	if not _encloses(area):
 		return false
-	for cell in _cells_of(area):
-		if not terrain_at(cell).is_buildable():
-			return false
+	# Balayage direct plutôt que par un tableau de cellules : l'audit de T4 pose cette
+	# question mille fois par carte et deux cents fois par revue, et un tableau alloué à
+	# chaque appel s'y comptait en dizaines de millions. La sémantique ne bouge pas d'un
+	# pouce, et le helper qui les fabriquait n'avait plus d'appelant.
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			if not terrain_at(Vector2i(x, y)).is_buildable():
+				return false
 	return true
 
 ## Toutes les cellules de la zone sont-elles à la même hauteur ?
@@ -104,10 +109,11 @@ func height_span(area: Rect2i) -> int:
 	assert(_encloses(area), "zone hors grille : %s dans %s" % [area, size()])
 	var lowest := height_at(area.position)
 	var highest := lowest
-	for cell in _cells_of(area):
-		var height := height_at(cell)
-		lowest = mini(lowest, height)
-		highest = maxi(highest, height)
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var height := height_at(Vector2i(x, y))
+			lowest = mini(lowest, height)
+			highest = maxi(highest, height)
 	return highest - lowest
 
 ## La zone est-elle non vide et entièrement contenue dans la grille ?
@@ -115,12 +121,3 @@ func _encloses(area: Rect2i) -> bool:
 	if area.size.x <= 0 or area.size.y <= 0:
 		return false
 	return Rect2i(Vector2i.ZERO, size()).encloses(area)
-
-## Cellules de la zone, balayées en x puis en y. Ordre stable : le déterminisme de
-## tout ce qui itère sur une zone en dépend.
-func _cells_of(area: Rect2i) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
-	for y in range(area.position.y, area.end.y):
-		for x in range(area.position.x, area.end.x):
-			cells.append(Vector2i(x, y))
-	return cells
