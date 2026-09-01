@@ -9,7 +9,11 @@ Décisions prises en cours de route, la plus récente en haut.
 **État : terminé.** Branche `feat/i3-turn`, tirée de `master` après la fusion de `N1`. Les
 **quatre** commandes passent — la quatrième est née dans ce jalon, voir plus bas : boot sans
 erreur ni warning, tout `src/domain/` parse, tout `src/adapters/` et `scenes/dev/` aussi, et
-**391 tests verts contre 296**. Une capture, et une chronique de run.
+**390 tests verts contre 296**. Des captures, deux sondes, et une chronique de run.
+
+*Deux décisions de l'humain sont arrivées en cours de jalon et sont intégrées ici plutôt que
+dans une entrée à part : la **file de chantiers est supprimée**, et le **cycle du jour**
+change de forme. Les deux sont racontées plus bas.*
 
 Le jeu se relance. C'est ce que `DESIGN.md` 8 demande à ce jalon, et rien d'autre : « un
 projet qui ne se lance pas est un projet dont on ne mesure plus rien ».
@@ -90,19 +94,29 @@ bâtiment gratuit *existe*, pas qu'on puisse le *bâtir*. Il a fallu un tour jou
 la différence se voie. Corrigé au boot et dans la suite, et **vérifié en le faisant échouer**
 plutôt qu'en le regardant passer.
 
-### Le blocage a une seconde forme, découverte en la jouant
+### La file de chantiers est supprimée
 
-`N1` avait prouvé la soupape en calculant un plan d'occupation ; `I3` l'a jouée, et en a
-trouvé une autre.
+*(Décidé par l'humain après avoir vu le jalon tourner.)* Le rescope avait posé **deux**
+régulateurs — les travailleurs disent ce que le village peut posséder, la file ce qu'il peut
+faire à la fois. Le second est retiré, et l'argument est celui qui a fait couper le reste :
+il **doublait** le premier au lieu de le croiser. Ce qu'un village mène de front est déjà ce
+que ses bras autorisent, puisqu'un chantier les immobilise à son ouverture ; un plafond de
+plus posait la même question deux fois, et devenait la contrainte réelle dès qu'il mordait.
 
-La file de chantiers peut se boucher là où les bras ne bouchaient pas. Trois chantiers
-endormis après une famine gardent leurs emplacements **pour toujours** — un chantier endormi
-n'avance pas, donc il ne se libère jamais —, et il n'en reste aucun pour ouvrir l'habitation
-qui débloquerait tout.
+**La chronique l'a dit sans qu'on le lui demande.** La même politique bête qui mourait de
+faim au douzième tour survit maintenant les vingt et gagne : le village monte à treize
+habitants, redescend à huit, et s'y tient. La file était bien ce qui mordait.
 
-La sortie existait déjà : c'est la **démolition**, et c'est son troisième usage. Elle rend
-des cellules, elle rend des bras, et elle libère un emplacement. Aucune règle n'a été
-ajoutée ; `DESIGN.md` 3.4 gagne le paragraphe qui empêchera d'en réinventer une.
+Ce que ça change et qui est écrit dans `DESIGN.md` 2 : un bâtiment gratuit en bras —
+l'habitation, la palissade — n'est plus borné que par la ressource et la place au sol. On
+peut en ouvrir dix d'un coup avec le bois et les cases. C'est cohérent avec un pitch dont la
+contrainte est spatiale, et c'est un chiffre de `B1` si c'est trop permissif.
+
+Une découverte du jalon part avec elle. Le blocage avait une **seconde forme** — des
+chantiers endormis gardant leurs emplacements pour toujours, y compris contre l'habitation
+qui aurait tout débloqué — et elle n'existe plus faute d'emplacements. Ce qui survit est la
+moitié qui ne lui devait rien : l'habitation est gratuite en bras mais **pas en bois**, donc
+la démolition reste la seconde soupape, et un cas de test la garde.
 
 ### Ce que la capture a trouvé
 
@@ -134,11 +148,81 @@ relevée après la résolution, si bien qu'un chantier d'un tour s'ouvrait et s'
 même ligne : elle affichait 0 pendant que le village bâtissait une cabane par tour. Elle est
 maintenant relevée avant, et la table le dit dans son en-tête.
 
-Ce qu'elle donne aujourd'hui, sur les chiffres de `data/balance/` : le village monte à huit
-habitants au quatrième tour, la famine commence au cinquième, et le run est perdu au
-douzième. Une ferme rend trois nourritures et coûte quatre bras, quand huit habitants en
-mangent huit. **C'est un vrai résultat d'équilibrage, et il est pour `B1`** — la chronique
-dit où la boucle casse, elle ne dit pas si le jeu est bon.
+Ce qu'elle a donné d'abord, du temps de la file : le village montait à huit habitants au
+quatrième tour, la famine commençait au cinquième, et le run était perdu au douzième. C'est
+ce chiffre qui a motivé la suppression de la file — et une fois celle-ci partie, la même
+politique survit les vingt tours et gagne avec 265 points. **La chronique dit où la boucle
+casse ; elle ne dit pas si le jeu est bon**, et la politique reste bête, donc ces chiffres
+sont un plancher.
+
+### Le soleil fait un tour à chaque tour, et deux défauts qu'aucune capture ne voyait
+
+*(Second retour de l'humain.)* La lumière suivait l'avancement du run — aube au premier tour,
+nuit au vingtième —, si bien qu'elle **dérivait** sans qu'aucune règle du jeu ne le demande :
+le tour 12 se lisait autrement que le tour 3, et la carte devenait moins lisible à mesure
+qu'on jouait. Elle se repose maintenant **toujours à midi**, l'orientation calibrée à `T2`,
+et c'est un tour de soleil complet à chaque tour passé qui dit qu'un jour est passé.
+
+Les deux défauts de la première version méritent d'être notés ensemble, parce qu'ils sont de
+la même famille et que cette famille est neuve pour le projet : **une capture ne dit rien
+d'un mouvement.**
+
+**La course ne se jouait qu'au premier jour.** Elle visait un moment absolu, et le compteur
+n'était pas replié : le premier tour menait le soleil à 1,25, les suivants lui demandaient
+d'aller là où il était déjà. Rien ne plantait, rien ne compilait de travers, et les quatre
+captures du cycle étaient **chacune juste** — une image fixe ne dit rien d'un mouvement
+absent.
+
+**Et la nuit tombait d'un coup.** Passer du soleil à la lune n'est pas qu'une baisse
+d'intensité : la lumière **vire de plus de cent trente degrés**, et l'étaler sur un dixième
+de la course se voit comme un à-coup quand tous les autres dixièmes sont doux. Élargir le
+fondu n'y faisait presque rien — un virage de 135° doit bien se faire quelque part. Le
+correctif est d'arrêter de virer : le lacet fait un **tour complet à vitesse constante**, et
+la lune est le même luminaire arrivé de l'autre côté.
+
+La calibration de `T2` en sort intacte, par une coïncidence qui vaut d'être écrite : −125
+vaut 10 modulo 45, et ajouter des quarts de tour ne change pas ce reste. Les quatre moments
+cardinaux tombent donc tous à dix degrés d'un angle qui aplatirait le relief — exactement la
+propriété que le réglage d'origine cherchait. Et minuit tombe pile sur le lacet que la lune
+portait en constante : elle était déjà « de l'autre côté », à un demi-tour du soleil de midi.
+
+**Deux sondes sont écrites, et elles impriment sur chaque capture.** La première joue deux
+journées d'affilée et donne où le soleil s'arrête à chaque quart — deux séries identiques et
+non triviales disent que la course se rejoue. La seconde échantillonne la course et donne le
+pire écart angulaire à côté du pas moyen : **48,8° contre 5,0° avant, 4,7° après**.
+
+Et vérifier la première en refaisant le bug a corrigé le **diagnostic** autant que le
+contrôle : la cible absolue était inoffensive à elle seule, c'est le repli manquant qui était
+la cause. J'avais écrit l'explication à l'envers avant de la vérifier.
+
+### La transition devient le verrou, et il n'y en aura qu'un
+
+*(Troisième retour de l'humain, et le plus structurant.)* On pouvait poser un bâtiment pendant
+que la course jouait. « Purement décorative » ne veut pas dire sans conséquence : un geste
+posé pendant une transition arrive dans un état que le joueur **ne regarde pas encore** — il
+pose sur une ville qu'il n'a pas vue, et découvre les deux ensemble.
+
+Une transition est donc **le moment où le plateau parle et où le joueur se tait**, et
+l'humain a demandé qu'on l'instaure maintenant pour tout ce qui viendra. Trois décisions
+tiennent dedans :
+
+**Le verrou est un adapter, jamais un état du domaine.** `DESIGN.md` 3.5 vient de refermer la
+coupure d'attente que l'ancien jeu avait dû écrire — « la fin de tour reste atomique » — et
+la rouvrir parce qu'une animation dure trois secondes serait la rouvrir pour une raison
+encore plus faible. Le domaine ignore qu'un écran existe.
+
+**Il est unique**, porté par `DevWorld`, et `V3` y déclarera sa bataille plutôt que d'inventer
+le sien. Deux verrous à tenir d'accord divergent, et celui qu'on oublie laisse passer les
+gestes en silence.
+
+**Il vit dans `_unhandled_input` et non dans les fonctions de geste**, parce que c'est un
+verrou d'**entrée** : la chronique et les captures empruntent les mêmes gestes et n'ont
+aucune raison d'attendre une animation qu'elles ne regardent pas. Et il n'interdit que
+d'agir — la caméra continue de tourner, puisque regarder est ce qu'on demande.
+
+La sonde dit les deux bouts, et le second compte plus : `verrou posé … verrou levé`, deux
+fois. **Un verrou qui se poserait sans se lever bloquerait la partie pour de bon**, sans rien
+signaler et sans qu'aucune image ne le montre.
 
 ### Trois résidus nettoyés au passage
 
@@ -189,13 +273,15 @@ sur des cartes qui n'ont pas de cols. La capture de ce jalon le redit — le rel
 
 - **`HARNESS` vaut désormais `&"run"`**, et le harnais Run est le défaut. `&"terrain"` et
   `&"city"` restent dans la table.
-- **Deux drapeaux de capture neufs** : `--shot-passes n` résout des tours avant l'image,
-  `--chronicle` rejoue le run entier sans écran et imprime la table. Dix autres, morts depuis
-  `R0`, sont retirés de `dev_shot.gd` — ils l'étaient déjà du README.
+- **Trois drapeaux de capture neufs** : `--shot-passes n` résout des tours avant l'image,
+  `--shot-sun f` pose le soleil où l'on veut dans son cycle, et `--chronicle` rejoue le run
+  entier sans écran et imprime la table. Dix autres, morts depuis `R0`, sont retirés de
+  `dev_shot.gd` — ils l'étaient déjà du README.
+- **`data/balance/run_balance.tres` n'a plus de `build_slots`.**
 - **Neuf `.tres` de bâtiment ont changé** : `build_actions` s'appelle `site_turns`, et la
   palissade perd sa `defense`.
 - **`data/balance/run_balance.tres` est neuf**, et `balance.tres` gagne sa cinquième ligne.
-- **La branche n'est pas fusionnée** : `feat/i3-turn`, six commits.
+- **La branche n'est pas fusionnée** : `feat/i3-turn`, neuf commits.
 
 ---
 

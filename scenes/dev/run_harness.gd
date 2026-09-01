@@ -120,7 +120,19 @@ func _process(_delta_seconds: float) -> void:
 	_label.text = _report()
 	_bar.show_ledger(_state().ledger(), _delta)
 
+## Aucun geste pendant qu'une transition joue.
+##
+## Le refus est **ici et non dans les fonctions de geste**, et la distinction compte : c'est
+## un verrou d'**entrée**, pas une règle. Une résolution scriptée — la chronique, une
+## capture — emprunte les mêmes fonctions de geste et n'a aucune raison d'attendre une
+## animation qu'elle ne regarde pas. Le poser plus bas bloquerait les deux.
+##
+## Il ne mange que ce qui lui est destiné : la caméra vit sous `DevWorld` et voit l'entrée
+## avant ce nœud, donc on peut continuer de tourner et de zoomer pendant qu'un jour passe.
+## C'est voulu — la transition interdit d'**agir**, pas de regarder.
 func _unhandled_input(event: InputEvent) -> void:
+	if _world.is_in_transition():
+		return
 	if event is InputEventMouseButton:
 		_handle_mouse_button(event as InputEventMouseButton)
 	elif event is InputEventKey:
@@ -289,7 +301,13 @@ func _header_line() -> String:
 	var size := _grid.size()
 	if state.is_over():
 		return "Run — seed %d, %d x %d   %s" % [SEED, size.x, size.y, _verdict_line()]
+	# Une vue qui invite à un geste doit demander si le geste est possible : pendant une
+	# transition il ne l'est pas, et l'écran doit le dire plutôt que d'avaler les clics en
+	# silence. C'est la règle que `I2b` a payée sur une main affichée à pleine encre dans
+	# une phase qui n'autorisait rien.
 	var stage := "à fonder" if state.awaits_its_heart() else "en cours"
+	if _world.is_in_transition():
+		stage = "le jour passe…"
 	return "Run — seed %d, %d x %d   tour %d/%d, %s" % [
 		SEED, size.x, size.y, state.turn(), state.balance().run.turns, stage]
 
@@ -615,6 +633,12 @@ func _corner(view: Control, horizontal: Control.SizeFlags,
 ## 0.00, 0.25` — disent que la course tourne et se rejoue ; une seconde série figée sur
 ## `0.25` serait le bug, à la lecture.
 ##
+## Elle dit aussi le **verrou de transition** aux deux bouts de chaque journée, et la seconde
+## moitié compte plus que la première : un verrou qui se poserait sans se lever bloquerait la
+## partie pour de bon, sans rien signaler et sans qu'aucune image ne le montre. Un verrou qui
+## ne se lève jamais et une course qui ne part pas se ressemblent d'ailleurs parfaitement de
+## l'extérieur — c'est la même question sous deux angles.
+##
 ## Elle passe par `pass_a_day()`, la fonction que le tour appelle vraiment. Un scripteur qui
 ## emprunte un autre chemin mesure cet autre chemin : `P1a` a payé trois jalons pour cette
 ## phrase.
@@ -623,9 +647,11 @@ func _probe_the_sun() -> String:
 	for _day in 2:
 		var quarters := PackedStringArray()
 		_world.pass_a_day()
+		quarters.append("verrou %s" % ("posé" if _world.is_in_transition() else "ABSENT"))
 		for _quarter in 4:
 			_world.step_the_course(DevWorld.DAY_SECONDS / 4.0)
 			quarters.append("%.2f" % _world.moment())
+		quarters.append("verrou %s" % ("levé" if not _world.is_in_transition() else "COINCÉ"))
 		days.append("[%s]" % ", ".join(quarters))
 	return "soleil : deux journées jouées d'affilée, %s" % " puis ".join(days)
 

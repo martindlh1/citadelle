@@ -585,6 +585,27 @@ donc il n'y a ni état « en attente », ni seconde porte, ni bataille à repren
 seule chose qui rendait nécessaire la coupure que l'ancien jeu avait dû écrire, et elle se
 défait.
 
+#### Le joueur ne joue pas pendant qu'une animation joue
+
+*(Posé à `I3b`, sur la course du soleil, et valable pour tout ce qui viendra.)* « Purement
+décorative » ne veut pas dire « sans conséquence ». Un geste posé pendant qu'une transition
+se joue arrive dans un état que le joueur **ne regarde pas encore** : il pose un bâtiment sur
+une ville qu'il n'a pas vue, et découvre les deux ensemble. Rien ne casse — le domaine répond
+correctement — mais l'écran a menti par omission.
+
+Une transition est donc **le moment où le plateau parle et où le joueur se tait**. Elle
+interdit d'agir, jamais de regarder : la caméra continue de tourner et de zoomer, parce que
+regarder est précisément ce qu'on demande.
+
+**Et c'est un verrou d'adapter, jamais un état du domaine.** Y remettre une attente parce
+qu'une animation dure trois secondes rouvrirait la coupure que le paragraphe ci-dessus vient
+de refermer, et pour une raison encore plus faible. Le domaine ignore qu'un écran existe ;
+c'est l'écran qui sait quand il n'a pas fini de parler.
+
+Il y a **un seul** verrou, et les animations s'y déclarent au lieu d'inventer le leur : deux
+verrous à tenir d'accord finissent par diverger, et celui qu'on oublie laisse passer les
+gestes en silence. La bataille de `V3` prendra le même.
+
 #### Le vocabulaire de défense, et il est volontairement minuscule
 
 Un bâtiment de défense porte **quatre chiffres** :

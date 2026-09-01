@@ -236,6 +236,27 @@ func pass_a_day(seconds := DAY_SECONDS) -> void:
 func fall_to_night(seconds := DAY_SECONDS) -> void:
 	_sweep_to(MIDNIGHT, seconds, false)
 
+## Une transition est-elle en cours ?
+##
+## **C'est le moment où le plateau parle et où le joueur se tait**, et c'est le seul verrou
+## d'entrée du projet. Un geste posé pendant qu'une animation joue arrive dans un état que le
+## joueur ne regarde pas encore : il pose un bâtiment sur une ville qu'il n'a pas vue, et
+## découvre les deux ensemble. Rien ne casse — le domaine répond correctement, la course
+## n'est que décor — mais l'écran a menti par omission.
+##
+## Il est ici, dans un adapter, et **jamais dans le domaine**. `DESIGN.md` 3.5 : « la fin de
+## tour reste atomique — il n'y a ni état d'attente, ni seconde porte ». C'était la seule
+## chose qui rendait nécessaire la coupure que le jeu d'avant avait dû écrire, et le rescope
+## l'a défaite ; y remettre une attente parce qu'une **animation** dure trois secondes serait
+## la rouvrir pour une raison encore plus faible. Le domaine ignore qu'un écran existe.
+##
+## Aujourd'hui la seule transition est la course du soleil. `V3` en ajoutera une — une
+## bataille qui se regarde —, et elle se déclarera **ici** plutôt que d'inventer son propre
+## verrou : deux verrous à tenir d'accord finissent par diverger, et celui qui serait oublié
+## laisserait passer les gestes en silence.
+func is_in_transition() -> bool:
+	return _slide != null and _slide.is_valid() and _slide.is_running()
+
 ## Où le soleil se trouve dans son cycle, dans [0, 1[.
 ##
 ## Lu par la sonde de capture, et par elle seule : rien de ce qui se dessine n'a de raison de

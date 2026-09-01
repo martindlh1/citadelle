@@ -206,6 +206,27 @@ les autres, ce qui n'était pas une différence de jeu mais un défaut de mesure
 compilaient, s'alignaient, et étaient plausibles : c'est la relecture de la table contre ce
 qu'elle prétend montrer qui les a trouvés, pas un test.
 
+**Une capture ne dit rien d'un mouvement.** *(Écrit à `I3b`.)* Toute la doctrine ci-dessous
+porte sur des **tables** et sur des **images fixes**, et elle a un angle mort que le premier
+jalon d'animation a trouvé du premier coup : deux défauts d'une course de soleil ont survécu
+à quatre captures, chacune parfaitement juste.
+
+Le premier était que **la course ne se rejouait pas** — elle ne partait qu'au premier jour.
+Une image dit où une chose est ; elle ne dit rien d'un mouvement **absent**. Le second était
+qu'elle **sautait** au passage à la nuit, parce que la lumière y virait de cent trente degrés
+en un dixième du parcours : chaque point du cycle était juste isolément, c'est le **chemin
+entre eux** qui ne l'était pas.
+
+La parade est celle des tables, transposée : **une animation se sonde, pas se regarde.** Une
+sonde la joue deux fois et imprime où elle s'arrête à chaque quart — deux séries identiques
+et non triviales disent qu'elle se rejoue. Une autre l'échantillonne et imprime le **pire
+pas** à côté du pas moyen — deux nombres du même ordre disent qu'elle est régulière. Les deux
+tiennent en quinze lignes et rendent un chiffre là où il n'y avait qu'un ressenti.
+
+Corollaire, appris en refaisant le bug pour vérifier que la sonde le voyait : **vérifier un
+contrôle corrige aussi le diagnostic.** Le défaut demandait deux moitiés à la fois, et j'avais
+nommé la mauvaise comme cause avant de l'éprouver.
+
 **Une table dont le pilote ne joue jamais la règle ne montre pas cette règle.** *(Écrit à
 `I3`.)* Les trois paragraphes ci-dessus portent sur *ce qu'on compte* et sur *quand*.
 Celui-ci porte sur **qui joue** — car dès qu'une table est produite par une politique
@@ -512,6 +533,26 @@ appartient à ce qui suit.** Un `EventBus` rend l'ordre des lignes trompeur, par
 partie de la suite s'exécute au milieu de l'appel. Le symptôme est muet — rien ne plante,
 rien ne compile de travers, une vue ne s'affiche simplement jamais —, donc il ne se voit
 qu'en capture.
+
+**Une transition verrouille les gestes, et il n'y en a qu'une.** *(Écrit à `I3b`.)* Une
+animation qui dure — la course du soleil entre deux tours, la bataille de `V3` — est un
+moment où le plateau parle. Un clic qui passe pendant qu'elle joue pose un bâtiment sur une
+ville que le joueur n'a pas encore vue : rien ne casse, et l'écran ment par omission.
+
+Trois choses à tenir, et chacune a coûté une réflexion :
+
+- **Le verrou est unique**, porté par `DevWorld`, et toute animation s'y déclare. Deux
+  verrous à tenir d'accord divergent, et celui qu'on oublie laisse passer les gestes sans
+  rien dire.
+- **Il vit dans `_unhandled_input` et non dans les fonctions de geste.** C'est un verrou
+  d'entrée, pas une règle : une chronique ou une capture emprunte les mêmes gestes et n'a
+  aucune raison d'attendre une animation qu'elle ne regarde pas. Le poser plus bas bloquerait
+  les deux.
+- **Il n'interdit que d'agir.** La caméra vit sous le plateau et voit l'entrée avant le
+  harnais, donc on continue de tourner et de zoomer — regarder est ce qu'on demande.
+
+Et il se dit à l'écran, par la règle d'`I2b` : une vue qui invite à un geste demande si le
+geste est possible, faute de quoi elle avale les clics en silence.
 
 **Une vue sur laquelle on clique porte `MOUSE_FILTER_STOP`**, à l'inverse des vues de lecture, qui laissent passer en `IGNORE` pour que le curseur de cellule continue de piocher dessous. Le geste tombe alors dans le `gui_input` de la vue et n'atteint jamais `_unhandled_input` du harnais, ce qui est exactement le partage voulu — sans quoi un clic sur une fiche jouerait aussi la carte tenue sur la case cachée derrière.
 
