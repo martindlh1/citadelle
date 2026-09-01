@@ -81,15 +81,23 @@ branche : **les quatre qui restent n'ont pas eu à bouger d'un mot.** Terrain et
 ne connaissaient rien des systèmes qui les entouraient, donc rien à défaire — ce que la
 règle de dépendance promettait sans qu'on l'ait jamais éprouvée à ce point.
 
-**Ce que les jalons à venir y remettront, et à quelle condition.** `ProductionReport`
-revient avec `N1`, `PopulationState` avec lui, et un rapport de bataille avec `V2`. Aucun
-n'entre avant que **deux systèmes du domaine** le franchissent vraiment : c'est la règle qui
-a fait attendre `CombatForce` jusqu'à `F1`, et elle vaut d'autant plus au sortir d'une coupe
-où l'on est tenté de redessiner d'avance ce qu'on vient de perdre.
+**Ce que les jalons à venir y remettront, et à quelle condition.** Aucun n'entre avant que
+**deux systèmes du domaine** le franchisse vraiment : c'est la règle qui a fait attendre
+`CombatForce` jusqu'à `F1`, et elle vaut d'autant plus au sortir d'une coupe où l'on est
+tenté de redessiner d'avance ce qu'on vient de perdre.
 
-L'Économie voit le relief, et c'est la conséquence de `DESIGN.md` 3.3 : le rendement d'une
-case dépend de son tag, donc le résolveur doit pouvoir le lire. Il voit le contrat, jamais
-la grille.
+**Ce document annonçait `ProductionReport` pour `N1`, puis `I3` ; les deux l'ont refusé, et
+la table est toujours à quatre lignes.** Il va de l'Économie à `domain/run/`, et
+`domain/run/` a le droit de tout lire ; les adapters lisent le domaine, c'est leur métier.
+Ni l'un ni l'autre n'est un second système. Même sort pour `StaffingPlan`, `UpkeepReport`,
+`PlayResult`, `TurnReport` et `RunOutcome` : cinq DTO nés en deux jalons, aucun dans
+`contracts/`. Le premier qui y entrera pour de bon est un rapport de bataille, à `V2`.
+
+**L'Économie ne voit pas le relief, et c'est `I3` qui l'a retiré.** Ce paragraphe disait le
+contraire, sur la foi de `DESIGN.md` 3.3 : le rendement d'une case dépendait de son tag
+parce qu'on pouvait jouer une carte **à cru** dessus. Ce geste est parti avec les cartes. Le
+relief reviendra à `C3`, avec l'adjacence qui le lit — un argument qui survit à son
+mécanisme est un champ ajouté d'avance sous un autre nom.
 
 **Un rapport reste chez son système tant qu'aucun autre ne le franchit.** `PickResult`
 vit dans `domain/terrain/`. Le critère est un second **système du domaine**, pas un adapter :
@@ -118,7 +126,8 @@ res://
 │   │   ├── contracts/          # DTO inter-systèmes
 │   │   ├── terrain/            # HeightGrid, TerrainGen, CellPicker
 │   │   ├── city/               # CityState, PlacementValidator
-│   │   └── economy/            # Ledger, Population, Staffing, Upkeep  (le résolveur à I3)
+│   │   ├── economy/            # Ledger, Population, Staffing, Upkeep, Production, CityLimits
+│   │   └── run/                # RunState, RunOrchestrator, TurnReport, RunOutcome
 │   ├── schema/                 # définitions des Resource (BuildingData…)
 │   ├── adapters/
 │   │   ├── terrain/  city/  hud/
@@ -133,8 +142,8 @@ res://
 
 **Ce que `R0` a retiré, et où ça revient.** `domain/deck/`, `domain/workforce/`,
 `domain/combat/` et leurs adapters sont supprimés définitivement *(cf. `DESIGN.md` 9)*.
-`domain/run/` est vide et revient à `I3` ; `data/waves/` et `data/enemies/` reviennent à
-`V4` sous une autre forme. `data/cards/` ne revient pas.
+`domain/run/` est **réécrit depuis `I3`**, à cinq fichiers contre onze ; `data/waves/` et
+`data/enemies/` reviennent à `V4` sous une autre forme. `data/cards/` ne revient pas.
 
 Trois dossiers du plan d'origine n'ont jamais existé et n'existeront pas : `data/events/`
 attend le système `HORS MVP` de `DESIGN.md` 3.6, `scenes/game/` et `scenes/ui/` attendent
@@ -196,6 +205,22 @@ vague attend — un modèle annonçait donc sept cartes servies le jour d'une va
 les autres, ce qui n'était pas une différence de jeu mais un défaut de mesure. Les deux
 compilaient, s'alignaient, et étaient plausibles : c'est la relecture de la table contre ce
 qu'elle prétend montrer qui les a trouvés, pas un test.
+
+**Une table dont le pilote ne joue jamais la règle ne montre pas cette règle.** *(Écrit à
+`I3`.)* Les trois paragraphes ci-dessus portent sur *ce qu'on compte* et sur *quand*.
+Celui-ci porte sur **qui joue** — car dès qu'une table est produite par une politique
+scriptée, cette politique fait partie de l'instrument.
+
+La chronique du run rejoue une partie entière et imprime une ligne par tour. Sa première
+politique vidait la file de chantiers avec le premier bâtiment acceptable, si bien qu'elle
+enchaînait les cabanes de bûcheron et **n'ouvrait jamais une ferme**. Le tableau qui en
+sortait était parfaitement aligné, toutes ses colonnes bougeaient, il finissait sur une
+défaite plausible par famine — et la moitié nourriture de la boucle n'y était **jamais
+jouée**. La même table serait sortie d'un jeu où les fermes n'existent pas.
+
+Le test est celui des autres, appliqué au pilote : *cette politique emprunte-t-elle chaque
+chemin que la table prétend montrer ?* La parade a été de la rendre plus bête, pas plus
+maligne — un bâtiment de la liste par tour, au lieu de vider la file avec le premier.
 
 **Et une mesure prise au mauvais moment mesure le mauvais moment.** *(Écrit à `F2b`.)* Les
 deux familles ci-dessus portent sur *ce qu'on compte* ; celle-ci sur **quand** on le compte.
@@ -262,8 +287,8 @@ Aucune tâche n'est terminée tant que ces trois commandes ne passent pas. Les l
 
 ```bash
 # 1. Boot réel — instancie les autoloads et charge la scène principale.
-#    Seule passe qui résout les identifiants d'autoload, donc seule à valider
-#    src/autoload/, src/adapters/ et scenes/dev/.
+#    Seule passe qui résout les identifiants d'autoload. Elle ne valide que ce que le
+#    harnais ACTIF référence — voir la commande 4 pour le reste.
 godot --headless --quit --path .
 
 # 2. Parsing des scripts que le boot n'atteint pas — tout src/domain/.
@@ -275,7 +300,27 @@ done
 
 # 3. Suite de tests du domaine
 addons/gdUnit4/runtest.sh -a tests --headless --ignoreHeadlessMode
+
+# 4. Références pendantes hors du domaine — src/adapters/, src/schema/, scenes/dev/.
+#    Les autoloads sont filtrés parce que --check-only ne sait pas les résoudre ;
+#    tout le reste doit sortir propre.
+for f in $(find src/adapters src/schema scenes/dev -name '*.gd'); do
+  godot --headless --path . --check-only -s "res://$f" 2>&1 \
+    | grep -E 'Could not find type|not declared in the current scope' \
+    | grep -vE '"(GameDatabase|EventBus|RunManager)"'
+done
 ```
+
+**La quatrième est entrée à `I3`, et elle a une histoire.** Deux fichiers ne compilaient plus
+depuis `R0` sans qu'aucune des trois autres ne puisse le dire : un harnais orphelin que
+`HARNESS_SCRIPTS` ne nommait plus, et une fonction de `ResourceBar` qui prenait un
+`PhaseReport` supprimé. La commande 1 ne charge que ce qu'un harnais **actif** référence, et
+la commande 2 ne balaie que `src/domain/`. Il restait donc un angle mort de la taille de
+`src/adapters/`, et il a duré deux jalons.
+
+La leçon générale vaut au-delà de ces deux fichiers : **un contrôle de parsing qui ne balaie
+qu'un dossier laisse un angle mort de la taille des autres.** `R0` avait pourtant raison de
+dire que GDScript dénonce toute référence pendante — encore faut-il qu'on lui demande.
 
 Huit pièges constatés en 4.7.2, à ne pas réapprendre :
 
@@ -298,7 +343,7 @@ Si la sortie contient une erreur ou un warning de script, la tâche n'est pas fi
 |---|---|
 | `EventBus` | Signaux typés globaux. Aucune logique, aucun état. Couche adapter uniquement — le domaine ne le connaît pas. |
 | `GameDatabase` | Charge et indexe les `.tres` de `data/` au boot, par (catégorie, identifiant) où la catégorie est le sous-dossier. `get_balance()`, `get_resource(category, id)`, `list_ids(category)`, `list_categories()`. Les accesseurs typés par système — `get_building(id)` et consorts — s'ajoutent avec le système concerné. |
-| `RunManager` | Possède le `RunState` courant et publie les résultats du domaine sur `EventBus`. C'est l'unique pont domaine → adapters. **Coquille depuis `R0`** — `I3` le remplit à nouveau. |
+| `RunManager` | Possède le `RunState` courant et publie les résultats du domaine sur `EventBus`. C'est l'unique pont domaine → adapters. Quatre gestes depuis `I3` : fonder, bâtir, démolir, passer le tour. |
 
 Le bus transporte des DTO immuables. Jamais une référence mutable sur un état du domaine.
 
@@ -307,6 +352,11 @@ ce fichier appartient à l'humain : un autoload dont le script manque casse le b
 donc ramené `EventBus` à un seul signal et `RunManager` à un état possédé, plutôt que de les
 supprimer. C'est la seule contrainte du projet où la propriété d'un fichier décide de la
 forme du code.
+
+**`I3` n'a reposé qu'un signal**, et le compte mérite d'être noté parce que le jeu d'avant en
+avait huit pour moins de choses : un tour se résout d'un bloc, donc il n'y a qu'un moment à
+annoncer. `run_ended` n'est pas revenu — `TurnReport` porte déjà l'issue, et aucun auditeur
+ne la demanderait ailleurs. La règle d'entrée s'applique aussi à ce qui *semble* évident.
 
 ---
 
@@ -493,10 +543,15 @@ L'occlusion par le relief est un problème connu du système Terrain. V1 : la ro
 
 ### La journée en phases n'existe plus
 
-*(Écrit à `R0`.)* `DayCycle`, `PhaseDef` et `RunBalance` sont supprimés. Une journée en
+*(Écrit à `R0`, complété à `I3`.)* `DayCycle` et `PhaseDef` sont supprimés. Une journée en
 phases existait parce que deux gestes différents — poser une carte, y envoyer des ouvriers —
 demandaient chacun leur moment ; le rescope n'en laisse qu'un. **Une journée est un tour**,
-et `I3` l'écrit.
+et `I3` l'a écrit : `RunOrchestrator.end_turn()` applique la séquence de `DESIGN.md` 2 d'un
+bloc, sans état d'attente ni seconde porte.
+
+`RunBalance` est revenu à `I3`, sous le même nom et sans une ligne de l'ancien : ni liste de
+phases, ni nom de moment, ni report de main. Il porte la durée du run, le bâtiment
+d'ouverture, la file de chantiers et le barème du score.
 
 Ce qui survit de cette section est la doctrine qui l'a produite, et elle vaut pour ce qui
 vient : **aucun nom de moment ne s'écrit en dur**, ni dans le domaine, ni dans les adapters,
@@ -562,7 +617,8 @@ Tous les nombres réglables vivent dans `data/balance/*.tres`. Modifier un équi
 
 - Tout `src/domain/` est testé. `src/adapters/` ne l'est pas.
 - Les tests instancient le domaine directement, sans arbre de scène ni `.tscn`.
-- Priorité : `CellPicker`, `PlacementValidator`, `TerrainGen` (ses garanties, `T4`), `Population` (`N1`), le chemin d'une vague (`V1`).
+- Priorité : `CellPicker`, `PlacementValidator`, `TerrainGen` (ses garanties, `T4`), `Population` (`N1`), **la résolution d'un tour** (`I3`), le chemin d'une vague (`V1`).
+- **Un cas de test vérifie sa propre prémisse plutôt que de la supposer.** Un montage qui se trompe rend un cas qui passe en prouvant autre chose — `N1` l'a payé sur un `site_turns` confondu avec une orientation, et `I3` en a écrit six par prudence. La forme est un `assert` de montage porteur d'un `override_failure_message` qui dit « le cas ne prouve rien ».
 - Un bug d'équilibrage se reproduit avec un seed et une séquence d'actions → en faire un cas de test.
 
 ---

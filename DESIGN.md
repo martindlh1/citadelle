@@ -264,8 +264,16 @@ générée, pas dans l'abstrait.
 
 ### 3.3 Économie
 
-> **Contrat** — `TerrainQuery` + `CitySnapshot` + `PopulationState` → `ProductionReport`.
-> Ne connaît ni la grille ni les `Node` : tout lui est fourni.
+> **Contrat** — `CitySnapshot` + `PopulationState` → `ProductionReport`. Ne connaît ni la
+> grille ni les `Node` : tout lui est fourni.
+
+*Ce contrat portait un `TerrainQuery` jusqu'à `I3`, et il l'a perdu là.* Le relief y était
+parce que le jeu d'avant laissait jouer une carte **à cru** sur une case, auquel cas le tag
+de cette case décidait du rendement ; ce geste n'existe plus. Un bâtiment rend son bloc, et
+rien dans le résolveur ne pourrait aujourd'hui faire quoi que ce soit d'un relief — le
+passer serait un champ ajouté d'avance, avec en prime une signature qui ment sur ce qu'elle
+lit. **Le relief revient dans l'Économie à `C3`**, avec l'adjacence, qui est son premier
+consommateur réel.
 
 **Conservé** : le `Ledger` en **réserve commune** — les cent unités sont partagées entre
 toutes les ressources, remplir de bois c'est renoncer à stocker de la pierre —, l'écrêtage
@@ -417,6 +425,24 @@ lui — ils y avaient un emploi, pas un tombeau. Sans cette règle, une vague qu
 fermes coûterait la production *et* douze habitants *et* la capacité de reconstruire, ce qui
 est une cascade que le joueur ne peut plus rattraper. Seules la famine et la perte d'un toit
 tuent.
+
+#### Le blocage a une seconde forme, et la même sortie
+
+*(Trouvé à `I3`, en jouant l'interdit ci-dessus dans un vrai tour.)* La soupape de
+l'habitation gratuite répond au manque de **bras**. Elle ne répond pas au manque
+d'**emplacements** : des chantiers endormis après une famine gardent leurs places dans la
+file de 3.2 pour toujours — un chantier endormi n'avance pas, donc il ne se libère jamais —,
+et il n'en reste aucune pour ouvrir l'habitation qui débloquerait tout.
+
+La sortie est la **démolition**, et c'est son troisième usage : elle rend des cellules, elle
+rend des bras, et elle libère un emplacement. Aucune règle n'est à ajouter — ce paragraphe
+existe pour qu'on ne réinvente pas une soupape là où il y en a déjà une.
+
+Ce que le cas apprend au-delà de lui-même : **une soupape se joue, elle ne se déclare pas**,
+et cela vaut aussi des contrôles qui la gardent. Celui du boot vérifiait qu'un bâtiment
+gratuit en bras *existe*, pas qu'on puisse le *bâtir* — le Cœur le satisfaisait à lui seul
+alors qu'il est posé une fois et jamais reconstruit. Il a fallu un tour jouable pour que la
+différence se voie.
 
 **`OUVERT`** — pouvoir réordonner les priorités, donc décider qui s'éteint. C'est le bout
 pointu de l'affectation, donc c'est refusé pour l'instant. Si le manque se fait sentir en
@@ -673,6 +699,12 @@ Il n'y a plus de cartes, donc plus de verbes. Un tour offre :
 
 Les trois premiers se disputent la **file de chantiers** *(cf. 3.2)*. C'est tout le tempo du
 jeu, et il tient en une ligne de ce tableau.
+
+**Le Cœur n'est dans aucune de ces lignes.** Il se **fonde** — c'est l'étape de 2, avant le
+premier tour —, et il ne se bâtit ni ne se démolit ensuite. Les deux refus sont la même
+phrase : le porter dans *Bâtir* en ferait le meilleur bâtiment du jeu à répétition, gratuit,
+sans chantier et logeant quatre personnes ; le porter dans *Démolir* donnerait un bouton
+« perdre la partie » sans confirmation, puisque 5 fait du Cœur détruit une défaite.
 
 **Le terrassement redevient central, et il redevient jouable.** Il avait été retiré du deck
 parce que son sens — monter ou descendre — ne s'affichait nulle part sur une carte à jouer.

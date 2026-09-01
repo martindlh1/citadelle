@@ -4,6 +4,201 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-09-01 — `I3` : le tour, et deux fichiers qui ne compilaient plus depuis `R0`
+
+**État : terminé.** Branche `feat/i3-turn`, tirée de `master` après la fusion de `N1`. Les
+**quatre** commandes passent — la quatrième est née dans ce jalon, voir plus bas : boot sans
+erreur ni warning, tout `src/domain/` parse, tout `src/adapters/` et `scenes/dev/` aussi, et
+**391 tests verts contre 296**. Une capture, et une chronique de run.
+
+Le jeu se relance. C'est ce que `DESIGN.md` 8 demande à ce jalon, et rien d'autre : « un
+projet qui ne se lance pas est un projet dont on ne mesure plus rien ».
+
+### Ce que le jalon livre
+
+Cinq fichiers dans `domain/run/` — 948 lignes contre les 2 361 que `R0` avait retirées —,
+trois dans `domain/economy/`, un bloc d'équilibrage, un autoload rerempli et un harnais.
+
+`RunOrchestrator` **a rétréci de moitié**, et c'est la mesure du rescope plus que celle du
+jalon : 691 lignes avant `R0`, la moitié aujourd'hui. Il orchestrait cinq systèmes, il en
+orchestre trois ; il connaissait deux sortes de résolution — une phase qui produit, une
+journée qui coûte —, il n'en connaît qu'une.
+
+**Ce qu'il n'a plus à faire du tout est le vrai gain du modèle de `N1`.** Il n'y a *rien à
+réaffecter*. Les bras d'un bâtiment sont payés à l'ouverture de son chantier et y restent, le
+sommeil est un calcul que `Staffing` refait à la demande — si bien qu'un bâtiment démoli rend
+ses bras **sans qu'une ligne du code ne le dise**, et qu'un village qui repeuple le fait sans
+qu'on l'ordonne. Les deux se lisent à ce que le fichier ne contient pas.
+
+### Trois décisions de forme, et pourquoi
+
+**Aucun DTO n'entre dans `contracts/`**, et la table y reste à quatre lignes pour le
+deuxième jalon d'affilée. `CLAUDE.md` annonçait `ProductionReport` pour `N1` puis pour `I3` ;
+les deux l'ont refusé par le même critère — il va de l'Économie à `domain/run/`, et
+`domain/run/` a le droit de tout lire. Cinq DTO sont nés en deux jalons, aucun n'a franchi
+de frontière. Le document a été corrigé plutôt que la règle.
+
+**Le résolveur de production ne reçoit pas de `TerrainQuery`**, contre ce que `DESIGN.md` 3.3
+écrivait. Le relief était dans ce contrat parce que le jeu d'avant laissait jouer une carte
+**à cru** sur une case, auquel cas le tag décidait du rendement ; ce geste est parti avec les
+cartes. Le passer aujourd'hui serait un champ ajouté d'avance avec, en prime, une signature
+qui ment sur ce qu'elle lit. Il reviendra à `C3` avec l'adjacence, qui le lira. *(Tranché
+avec l'humain avant d'écrire ; `DESIGN.md` 3.3 est corrigé dans le même commit.)*
+
+**`CityLimits` est un fichier pour deux fonctions de quatre lignes**, et c'est leur raison
+commune qui le justifie plutôt que leur longueur. `N1` avait écrit que `Ledger` et
+`Population` sont deux plafonds bâtis sur le même modèle ; ce fichier est l'endroit où cette
+symétrie est visible, et les séparer la rendrait invisible. Aucun des deux ne pouvait vivre
+chez celui qu'il plafonne — `Population` ne connaît pas les bâtiments, et c'est une frontière
+que son propre docstring défend.
+
+### Deux fichiers qui ne compilaient plus depuis `R0`
+
+C'est le résultat le plus utile du jalon, et il n'était pas au programme.
+
+`scenes/dev/economy_harness.gd` n'était dans aucune table de harnais et référençait six
+classes supprimées. `ResourceBar.delta_of()` prenait un `PhaseReport`, classe partie avec la
+journée en phases. **Aucune des trois commandes de vérification ne pouvait le dire** : le
+boot ne charge que ce qu'un harnais *actif* référence, et la passe de parsing ne balaie que
+`src/domain/`. Il restait un angle mort de la taille de `src/adapters/`, et il a duré deux
+jalons.
+
+D'où une **quatrième commande**, qui balaie `src/adapters/`, `src/schema/` et `scenes/dev/`
+en filtrant les trois autoloads que `--check-only` ne sait pas résoudre. Elle sort propre
+depuis. La leçon générale vaut au-delà de ces deux fichiers : **un contrôle de parsing qui ne
+balaie qu'un dossier laisse un angle mort de la taille des autres.** `R0` avait raison de
+dire que GDScript dénonce toute référence pendante — encore faut-il le lui demander.
+
+Un troisième résidu était du même bois sans être une panne : `dev_shot.gd` déclarait encore
+les dix drapeaux de capture que `R0` avait retirés du README. Le code et la documentation se
+contredisaient, et rien ne pouvait le signaler — ce fichier n'a ni test ni écran.
+
+### Le garde-fou de `N1` avait un trou, et il fallait un tour pour le voir
+
+`GameDatabase` refuse au boot un catalogue où aucun bâtiment ne loge sans coûter de bras.
+C'est l'interdit de blocage de `DESIGN.md` 3.4, et il comptait le **Cœur** parmi les
+soupapes : housing 4, workers 0, il satisfaisait le contrôle à lui seul.
+
+Or le Cœur est posé **une fois**, à la fondation, et aucun geste du jeu n'en bâtit un second.
+La soupape qu'il semblait offrir ne s'ouvre jamais. Le contrôle aurait donc laissé passer un
+catalogue où l'habitation coûte des bras, c'est-à-dire exactement la partie mortellement
+bloquée qu'il existe pour interdire.
+
+C'est **la règle qu'il protège, appliquée à lui-même** : `N1` a écrit qu'une soupape se joue
+et ne se déclare pas, et le contrôle y était soumis sans qu'on le voie — il vérifiait qu'un
+bâtiment gratuit *existe*, pas qu'on puisse le *bâtir*. Il a fallu un tour jouable pour que
+la différence se voie. Corrigé au boot et dans la suite, et **vérifié en le faisant échouer**
+plutôt qu'en le regardant passer.
+
+### Le blocage a une seconde forme, découverte en la jouant
+
+`N1` avait prouvé la soupape en calculant un plan d'occupation ; `I3` l'a jouée, et en a
+trouvé une autre.
+
+La file de chantiers peut se boucher là où les bras ne bouchaient pas. Trois chantiers
+endormis après une famine gardent leurs emplacements **pour toujours** — un chantier endormi
+n'avance pas, donc il ne se libère jamais —, et il n'en reste aucun pour ouvrir l'habitation
+qui débloquerait tout.
+
+La sortie existait déjà : c'est la **démolition**, et c'est son troisième usage. Elle rend
+des cellules, elle rend des bras, et elle libère un emplacement. Aucune règle n'a été
+ajoutée ; `DESIGN.md` 3.4 gagne le paragraphe qui empêchera d'en réinventer une.
+
+### Ce que la capture a trouvé
+
+Le catalogue du harnais liste tous les bâtiments de `data/`, Cœur compris — et le domaine
+**acceptait** d'en ouvrir un second. Gratuit, sans chantier, quarante points de vie et quatre
+places de logement : le meilleur bâtiment du jeu, à répétition, et le refus d'une seconde
+fondation devenait décoratif. `open_site()` le refuse maintenant, avec la même raison que la
+démolition — le Cœur se **fonde**, il ne se bâtit ni ne se démolit.
+
+### La chronique, et ses deux tables fausses avant la bonne
+
+`--chronicle` revient et rejoue le run entier sans écran. C'est le seul contrôle du projet
+qui joue la boucle complète sur la data réelle : ni le parsing ni les tests n'enchaînent
+vingt tours.
+
+**Deux versions de sa table étaient fausses**, chacune d'une famille que `CLAUDE.md` nomme
+déjà — et aucune des deux n'aurait été trouvée sans la relire contre ce qu'elle prétend
+montrer.
+
+La première venait du **pilote**, ce qui est une nuance neuve. La politique vidait la file
+avec le premier bâtiment acceptable, donc enchaînait les cabanes de bûcheron et n'ouvrait
+jamais une ferme. Le tableau était aligné, toutes ses colonnes bougeaient, il finissait sur
+une défaite plausible par famine — et **la moitié nourriture de la boucle n'y était jamais
+jouée**. La même table serait sortie d'un jeu où les fermes n'existent pas. Corrigée en
+rendant la politique plus bête : un bâtiment de la liste par tour.
+
+La seconde était un défaut de **moment**, la famille de `F2b`. La colonne des chantiers était
+relevée après la résolution, si bien qu'un chantier d'un tour s'ouvrait et s'achevait dans la
+même ligne : elle affichait 0 pendant que le village bâtissait une cabane par tour. Elle est
+maintenant relevée avant, et la table le dit dans son en-tête.
+
+Ce qu'elle donne aujourd'hui, sur les chiffres de `data/balance/` : le village monte à huit
+habitants au quatrième tour, la famine commence au cinquième, et le run est perdu au
+douzième. Une ferme rend trois nourritures et coûte quatre bras, quand huit habitants en
+mangent huit. **C'est un vrai résultat d'équilibrage, et il est pour `B1`** — la chronique
+dit où la boucle casse, elle ne dit pas si le jeu est bon.
+
+### Trois résidus nettoyés au passage
+
+`build_actions` devient **`site_turns`** : le champ comptait les actions *Construire* d'un
+deck supprimé, c'est-à-dire « autant de cartes qu'il faudra piocher ». Même geste que
+`upkeep_per_worker` → `upkeep_per_inhabitant` à `N1` — le chiffre est le même, ce qu'il
+compte a changé de nature.
+
+`BuildingData.defense` est supprimé. `DESIGN.md` 4.1 le retire de la palissade depuis le
+rescope, et aucun système ne le lisait. Ce qui le remplace — portée, dégâts, cadence — arrive
+à `V2`, avec le système qui le lit.
+
+Et le harnais de l'Économie ne revient pas. Ce qu'il montrait — le repas, la famine, la
+réserve qui se remplit — se montre dans un tour, ce qui est le seul endroit où ces chiffres
+veulent dire quelque chose.
+
+### Ce que je n'ai pas fait
+
+**Pas de vague, pas de calendrier.** `DESIGN.md` 8 date la vague de `V1` à `V4`, et l'étape
+`e` de la séquence est laissée en commentaire à l'endroit où elle s'insérera. Un champ de
+calendrier écrit aujourd'hui obligerait à deviner sa forme.
+
+**Pas de vue de population.** C'est `N2` : effectif, immobilisés, disponibles, places, et
+lesquels dorment. `I3` les imprime en texte dans son rapport, `N2` les dessinera.
+
+**Pas d'écran de fin.** Il est parti avec le harnais Run à `R0`. Le verdict et ses quatre
+termes s'affichent en texte ; un vrai écran appartient à `M1`, qui est une `.tscn`.
+
+**Aucun chiffre n'est équilibré.** `turns = 20`, `build_slots = 3` et les quatre poids du
+score sont des points de départ, et la chronique dit déjà que la nourriture ne suit pas.
+C'est `B1`.
+
+### Prochain jalon
+
+**`N2`** — ce qu'on voit de la population. Le tour existe, donc les chiffres ont enfin un
+endroit où vouloir dire quelque chose : effectif, immobilisés, disponibles, places restantes,
+et lesquels des bâtiments dorment. La `ResourceBar` et la `CommodityPalette` servent telles
+quelles, et le coût en bras s'affiche sur la fiche d'un bâtiment avant qu'on le pose — le
+rapport texte du harnais le porte déjà, il faut le dessiner.
+
+Puis **`T4`**, la génération garantie, qui doit venir avant `V1` : on ne teste pas un pathing
+sur des cartes qui n'ont pas de cols. La capture de ce jalon le redit — le relief du seed
+1234 est du bruit uniforme, sans plateau ni goulot.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien.** Aucune `.tscn` ni `project.godot` touché.
+
+- **`HARNESS` vaut désormais `&"run"`**, et le harnais Run est le défaut. `&"terrain"` et
+  `&"city"` restent dans la table.
+- **Deux drapeaux de capture neufs** : `--shot-passes n` résout des tours avant l'image,
+  `--chronicle` rejoue le run entier sans écran et imprime la table. Dix autres, morts depuis
+  `R0`, sont retirés de `dev_shot.gd` — ils l'étaient déjà du README.
+- **Neuf `.tres` de bâtiment ont changé** : `build_actions` s'appelle `site_turns`, et la
+  palissade perd sa `defense`.
+- **`data/balance/run_balance.tres` est neuf**, et `balance.tres` gagne sa cinquième ligne.
+- **La branche n'est pas fusionnée** : `feat/i3-turn`, six commits.
+
+---
+
 ## 2026-09-01 — `N1` : la population, et la règle que la spécification n'avait pas
 
 **État : terminé.** Branche `feat/n1-population`, tirée de `master` après la fusion de `R0`.
