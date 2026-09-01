@@ -207,7 +207,7 @@ ne suggère où les mettre.
   `class_name` de `src/adapters/hud/` : le cache de classes globales n'est écrit que par le
   scan de l'éditeur, et la commande 4 échouait sur `HudStyle` avant elle. Le piège est déjà
   dans `CLAUDE.md` ; il s'est simplement présenté.
-- **La branche n'est pas fusionnée** : `feat/n2-population-view`, quatre commits.
+- **La branche n'est pas fusionnée** : `feat/n2-population-view`, six commits.
 
 ---
 
