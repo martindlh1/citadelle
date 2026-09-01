@@ -703,6 +703,12 @@ qui tire, « où poser ma tour » n'a qu'une réponse. Deux portées et deux cad
 vrai choix — la tour couvre un col de près et vite, la baliste tient un axe de loin et
 lentement.
 
+**Les noms de la première colonne sont dans `data/` depuis `N2`**, et c'est le seul endroit de
+ce document dont le contenu ait été recopié dans un `.tres`. Ils n'y étaient pas, si bien
+qu'un écran qui nommait un bâtiment affichait son identifiant interne — `lumberjack_hut` sur
+la fiche que 3.4 réclame « lisible avant de poser ». Même partage que pour les ressources
+depuis `E2` : un identifiant sert le code, un libellé sert l'écran.
+
 **Quatre bâtiments ont disparu** : caserne, marché, atelier, camp d'exploration. Ils
 existaient tous les quatre pour débloquer une carte ou ouvrir des places de déploiement,
 c'est-à-dire pour des systèmes supprimés. La colonne **Débloque**, jamais entrée en data,
