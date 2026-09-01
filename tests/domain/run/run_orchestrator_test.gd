@@ -63,11 +63,10 @@ func _economy(food := 20, wood := 50, housing := 6, population := 4,
 	economy.starting_stock = stock
 	return economy
 
-func _run(turns := 20, slots := 3) -> RunBalance:
+func _run(turns := 20) -> RunBalance:
 	var run := RunBalance.new()
 	run.turns = turns
 	run.starting_building = &"heart"
-	run.build_slots = slots
 	run.score_per_resource = 1
 	run.score_per_building = 5
 	run.score_per_inhabitant = 10
@@ -213,15 +212,21 @@ func test_a_site_on_an_occupied_cell_is_refused() -> void:
 	var result := RunOrchestrator.open_site(state, &"hut", A)
 	assert_str(String(result.reason())).is_equal("occupied")
 
-## La file de DESIGN.md 3.2 n'existe que par ce refus : sans lui, le second régulateur du
-## rescope serait un champ de data que rien ne consulte.
-func test_a_full_build_queue_refuses_the_next_site() -> void:
-	_balance = _make_balance(_economy(), _run(20, 2))
+## Rien ne borne le nombre de chantiers ouverts **en dehors des bras**, depuis que la file de
+## chantiers est retirée. Le cas est écrit à l'endroit où le refus vivait, pour que personne
+## ne la réintroduise en croyant corriger un oubli : un bâtiment gratuit en bras s'ouvre
+## autant de fois que la réserve et la place au sol le permettent.
+func test_nothing_but_hands_limits_how_many_sites_are_open() -> void:
+	# Assez de bois pour quatre habitations : le cas parle des bras, et une réserve trop
+	# courte le ferait passer sur le mauvais refus.
+	_balance = _make_balance(_economy(20, 80), _run())
 	var state := _founded()
-	assert_bool(RunOrchestrator.open_site(state, &"hut", A).is_ok()).is_true()
-	assert_bool(RunOrchestrator.open_site(state, &"house", B).is_ok()).is_true()
-	var result := RunOrchestrator.open_site(state, &"house", C)
-	assert_str(String(result.reason())).is_equal("no_build_slot")
+	for cell in [A, B, C, D]:
+		assert_bool(RunOrchestrator.open_site(state, &"house", cell).is_ok()) \
+			.override_failure_message("l'habitation en %s a été refusée" % cell) \
+			.is_true()
+	assert_int(state.open_sites()).is_equal(4)
+	assert_int(state.staffing().committed()).is_equal(0)
 
 func test_a_village_without_free_hands_cannot_open_a_site() -> void:
 	var state := _founded()
@@ -515,27 +520,27 @@ func test_a_village_with_every_hand_taken_and_no_bed_can_still_be_unblocked() ->
 	assert_int(state.people().headcount()).is_greater(8)
 	assert_int(state.staffing().available()).is_greater(0)
 
-## Le blocage a une **seconde forme**, et I3 la découvre : la file peut se boucher là où les
-## bras ne bouchaient pas. Trois chantiers endormis après une famine occupent leurs
-## emplacements pour toujours — pas même l'habitation gratuite ne peut plus s'ouvrir.
-##
-## La sortie est la seconde soupape de DESIGN.md 3.4, et c'est son troisième usage :
-## démolir libère un emplacement en même temps que des bras.
-func test_a_queue_jammed_by_dormant_sites_reopens_by_demolishing() -> void:
-	_balance = _make_balance(_economy(40, 60, 6, 4), _run(20, 1))
+## La **seconde soupape** de DESIGN.md 3.4, et elle compte parce que la première ne suffit
+## pas toujours : l'habitation est gratuite en bras mais pas en bois. Un village dont tous les
+## bras sont pris et dont la réserve ne couvre plus une habitation n'a qu'une sortie, et c'est
+## de démolir.
+func test_demolishing_is_the_way_out_when_the_free_shelter_is_unaffordable() -> void:
+	_balance = _make_balance(_economy(40, 10, 4, 4), _run())
 	var state := _founded()
-	RunOrchestrator.open_site(state, &"farm", A)
-	state.people().shrink(2)
+	state.people().grow(4)
+	for cell in [A, B, C, D]:
+		RunOrchestrator.open_site(state, &"hut", cell)
 
-	var report := RunOrchestrator.end_turn(state)
-	assert_array(report.stalled()) \
-		.override_failure_message("le chantier n'est pas endormi : le cas ne prouve rien") \
-		.is_equal([A])
-	assert_str(String(RunOrchestrator.open_site(state, &"house", B).reason())) \
-		.is_equal("no_build_slot")
+	assert_int(state.staffing().available()) \
+		.override_failure_message("il reste des bras : le cas ne prouve rien") \
+		.is_equal(0)
+	assert_str(String(RunOrchestrator.open_site(state, &"house", Vector2i(3, 5)).reason())) \
+		.override_failure_message("l'habitation était payable : le cas ne prouve rien") \
+		.is_equal("not_enough_resources")
 
 	RunOrchestrator.demolish(state, A)
-	assert_bool(RunOrchestrator.open_site(state, &"house", B).is_ok()).is_true()
+	assert_int(state.staffing().available()).is_equal(2)
+	assert_bool(RunOrchestrator.open_site(state, &"hut", Vector2i(3, 5)).is_ok()).is_true()
 
 # --- la fin d'un run ---------------------------------------------------------
 

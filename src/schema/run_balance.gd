@@ -1,7 +1,7 @@
 class_name RunBalance
 extends Resource
-## Réglages du run : combien de tours il dure, par quoi il commence, combien de chantiers
-## tiennent de front, et ce qu'il vaut à la fin.
+## Réglages du run : combien de tours il dure, par quoi il commence, et ce qu'il vaut à la
+## fin.
 ##
 ## Cinquième bloc de BalanceData, et le seul qui décide d'un **tempo**. Le bloc du même nom
 ## existait avant R0 et portait la forme d'une journée en phases ; celui-ci n'en garde rien,
@@ -12,6 +12,11 @@ extends Resource
 ## moment, aucune liste de phases, aucun calendrier de vagues. Les deux premiers n'ont plus
 ## d'objet ; le troisième est daté de V4, qui écrira la vague qui tombe à sa date. Un champ
 ## ajouté d'avance oblige à deviner sa forme.
+##
+## Il a porté un `build_slots` le temps d'un jalon — la file de chantiers de DESIGN.md 2 —,
+## et il l'a perdu dans le même. Ce que le village peut mener de front est déjà ce que ses
+## bras autorisent, puisqu'un chantier les immobilise à son ouverture : un second plafond
+## posait la même question deux fois.
 ##
 ## Aucun @export ne porte de défaut, pour la raison exposée dans terrain_balance.gd.
 
@@ -33,21 +38,6 @@ extends Resource
 ## l'inverse de tous les autres ; que le bâtiment nommé existe l'est en revanche, à
 ## l'ouverture du run.
 @export var starting_building: StringName
-
-## Chantiers qui peuvent être ouverts **en même temps**.
-##
-## La file de chantiers de DESIGN.md 3.2, et c'est l'un des deux régulateurs qui remplacent
-## la main de cartes et le pool d'ouvriers supprimés. Les deux ne se doublent pas, parce
-## qu'ils ne répondent pas à la même question : les travailleurs disent ce que le village
-## peut **posséder**, la file ce qu'il peut **faire à la fois**.
-##
-## Elle mord surtout au lendemain d'une vague, quand il faut choisir entre réparer et
-## grandir — c'est la seule raison de la garder à côté des travailleurs. À I3 seul *Bâtir*
-## s'y dispute une place ; C5 y met le terrassement et C6 la réparation, sans qu'une ligne
-## d'ici ne change.
-##
-## Un emplacement est pris de l'ouverture du chantier à son achèvement, jamais au tour près.
-@export_range(1, 10, 1) var build_slots: int
 
 ## Points de score par unité restée en réserve.
 ##
@@ -104,8 +94,6 @@ func missing_fields() -> PackedStringArray:
 	var missing := PackedStringArray()
 	if turns <= 0:
 		missing.append("turns")
-	if build_slots <= 0:
-		missing.append("build_slots")
 	if score_per_resource <= 0 and score_per_building <= 0 \
 			and score_per_inhabitant <= 0 and score_per_heart_hit_point <= 0:
 		missing.append("score.none_counts")

@@ -16,7 +16,6 @@ func _balance() -> RunBalance:
 	var balance := RunBalance.new()
 	balance.turns = 20
 	balance.starting_building = &"heart"
-	balance.build_slots = 3
 	balance.score_per_resource = 1
 	balance.score_per_building = 5
 	balance.score_per_inhabitant = 10
@@ -32,15 +31,6 @@ func test_a_run_without_turns_is_reported() -> void:
 	var balance := _balance()
 	balance.turns = 0
 	assert_array(balance.missing_fields()).contains(["turns"])
-
-## Une file à zéro emplacement est un village qui ne peut plus rien bâtir, pour toujours —
-## le même genre de partie morte debout que l'interdit de blocage de N1 empêche par
-## ailleurs. Godot n'écrivant jamais un 0 dans un .tres, l'oubli et le choix y seraient
-## indiscernables sans ce cas.
-func test_a_run_without_a_single_build_slot_is_reported() -> void:
-	var balance := _balance()
-	balance.build_slots = 0
-	assert_array(balance.missing_fields()).contains(["build_slots"])
 
 # --- ce qui a le droit d'être vide -------------------------------------------
 

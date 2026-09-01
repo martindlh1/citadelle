@@ -52,7 +52,6 @@ func _run(starting_building := &"heart") -> RunBalance:
 	var run := RunBalance.new()
 	run.turns = RUN_TURNS
 	run.starting_building = starting_building
-	run.build_slots = 3
 	run.score_per_resource = 1
 	run.score_per_building = 5
 	run.score_per_inhabitant = 10
@@ -183,8 +182,8 @@ func test_a_map_where_nothing_fits_suggests_nothing() -> void:
 
 # --- ce que le run compte ----------------------------------------------------
 
-## La file de DESIGN.md 3.2 borne ce compte, et la comparaison se fait chez l'orchestrateur :
-## compter est une projection, plafonner est une règle.
+## Plus rien ne borne ce compte depuis que la file de chantiers est retirée : c'est une
+## lecture d'écran, et ce sont les bras qui plafonnent, à l'ouverture.
 func test_open_sites_counts_what_is_not_finished_yet() -> void:
 	var state := _open()
 	state.city().place(state.terrain(), state.building(&"heart"), Vector2i(0, 0))

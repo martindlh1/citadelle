@@ -78,11 +78,11 @@ static func found(state: RunState, cell: Vector2i, turns := 0) -> PlayResult:
 ## pas — sans quoi il serait le meilleur bâtiment du jeu à répétition, gratuit, sans chantier
 ## et logeant quatre personnes, et le refus d'une seconde fondation deviendrait décoratif.
 ##
-## **Six refus, et un seul remonte.** L'ordre est une décision : les portes d'état d'abord,
-## puis la **carte**, puis les trois coûts dans l'ordre où DESIGN.md 4.2 les énumère. La
-## carte passe avant les coûts parce que c'est elle qu'un joueur corrige en bougeant la
-## souris, et parce que le fantôme de C2 l'affiche déjà — une réponse qui contredirait la
-## couleur du fantôme serait pire qu'une réponse incomplète.
+## **Cinq refus, et un seul remonte.** L'ordre est une décision : les portes d'état d'abord,
+## puis la **carte**, puis les deux coûts. La carte passe avant les coûts parce que c'est
+## elle qu'un joueur corrige en bougeant la souris, et parce que le fantôme de C2 l'affiche
+## déjà — une réponse qui contredirait la couleur du fantôme serait pire qu'une réponse
+## incomplète.
 static func open_site(state: RunState, id: StringName, cell: Vector2i,
 		turns := 0) -> PlayResult:
 	assert(state != null, "chantier ouvert sans run")
@@ -99,8 +99,6 @@ static func open_site(state: RunState, id: StringName, cell: Vector2i,
 		turns)
 	if not placement.is_ok():
 		return PlayResult.refused(placement.reason())
-	if state.open_sites() >= state.balance().run.build_slots:
-		return PlayResult.refused(PlayResult.REASON_NO_BUILD_SLOT)
 	if not _has_the_hands(state, data):
 		return PlayResult.refused(PlayResult.REASON_NOT_ENOUGH_WORKERS)
 	if not state.ledger().can_afford(data.cost):
@@ -116,11 +114,9 @@ static func open_site(state: RunState, id: StringName, cell: Vector2i,
 ## (DESIGN.md 4.2). Les bras reviennent sans qu'une ligne le dise, pour la raison exposée
 ## sur open_site() : ils n'étaient nulle part, ils étaient comptés.
 ##
-## **C'est la seconde soupape de DESIGN.md 3.4, et I3 lui en découvre un troisième usage.**
-## Elle rendait déjà des bras à un village dont tout le monde est immobilisé ; elle est aussi
-## le seul geste qui **libère un emplacement de file**. Un village dont les trois chantiers
-## dorment après une famine ne peut plus rien ouvrir — pas même l'habitation gratuite en
-## bras, faute d'emplacement — et c'est en démolissant qu'il repart. Un cas de test le tient.
+## **C'est la seconde soupape de DESIGN.md 3.4.** Elle rend des bras à un village dont tout
+## le monde est immobilisé, ce qui est la sortie de secours quand l'habitation gratuite ne
+## suffit pas — parce qu'il n'y a plus de bois, ou plus de case plate.
 ##
 ## Elle ne rend rien mais peut **coûter** : abattre une habitation ou un entrepôt abaisse un
 ## plafond, et ce qui dépassait s'en va. Les deux pertes sont mesurées ici, avant et après,

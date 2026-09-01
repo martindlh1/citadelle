@@ -101,9 +101,7 @@ func _report() -> String:
 	lines.append("  terrain.step_height = %s" % terrain.step_height)
 	lines.append("")
 	lines.append("RunManager.is_running() = %s" % RunManager.is_running())
-	lines.append("  run.turns = %d, run.build_slots = %d"
-		% [GameDatabase.get_balance().run.turns,
-			GameDatabase.get_balance().run.build_slots])
+	lines.append("  run.turns = %d" % GameDatabase.get_balance().run.turns)
 	lines.append("")
 	lines.append("Aucun harnais actif — renseigner HARNESS dans scenes/dev/dev_boot.gd.")
 	return "\n".join(lines)

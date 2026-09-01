@@ -212,7 +212,7 @@ Celui-ci porte sur **qui joue** — car dès qu'une table est produite par une p
 scriptée, cette politique fait partie de l'instrument.
 
 La chronique du run rejoue une partie entière et imprime une ligne par tour. Sa première
-politique vidait la file de chantiers avec le premier bâtiment acceptable, si bien qu'elle
+politique ouvrait autant de fois que possible le premier bâtiment acceptable, si bien qu'elle
 enchaînait les cabanes de bûcheron et **n'ouvrait jamais une ferme**. Le tableau qui en
 sortait était parfaitement aligné, toutes ses colonnes bougeaient, il finissait sur une
 défaite plausible par famine — et la moitié nourriture de la boucle n'y était **jamais
@@ -551,7 +551,8 @@ bloc, sans état d'attente ni seconde porte.
 
 `RunBalance` est revenu à `I3`, sous le même nom et sans une ligne de l'ancien : ni liste de
 phases, ni nom de moment, ni report de main. Il porte la durée du run, le bâtiment
-d'ouverture, la file de chantiers et le barème du score.
+d'ouverture et le barème du score — la file de chantiers y a vécu le temps du jalon avant
+d'être retirée, parce qu'elle doublait le budget de bras au lieu de le croiser.
 
 Ce qui survit de cette section est la doctrine qui l'a produite, et elle vaut pour ce qui
 vient : **aucun nom de moment ne s'écrit en dur**, ni dans le domaine, ni dans les adapters,

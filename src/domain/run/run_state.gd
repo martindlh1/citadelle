@@ -15,10 +15,8 @@ extends RefCounted
 ## rejoue sur **les chiffres avec lesquels il s'est ouvert**.
 ##
 ## Il ne contient **aucune règle**. Ouvrir, projeter, compter ce qui est ouvert : ce qui
-## décide appartient à RunOrchestrator, ce qui calcule aux résolveurs. La frontière se lit
-## sur deux voisines — open_sites() compte les chantiers, et c'est l'orchestrateur qui les
-## compare à build_slots ; suggested_heart_anchor() propose une case, et c'est
-## l'orchestrateur qui décide si on la prend.
+## décide appartient à RunOrchestrator, ce qui calcule aux résolveurs. La frontière se lit sur
+## suggested_heart_anchor(), qui propose une case sans décider qu'on la prenne.
 ##
 ## ---
 ##
@@ -176,8 +174,9 @@ func advance_turn() -> void:
 
 ## Chantiers ouverts, c'est-à-dire posés et pas encore achevés.
 ##
-## C'est ce que la file de DESIGN.md 3.2 borne, et la comparaison à build_slots se fait chez
-## l'orchestrateur : compter est une projection, plafonner est une règle.
+## Plus rien ne le borne depuis que la file de chantiers est retirée : ce que le village mène
+## de front est ce que ses bras autorisent, et ce plafond-là est déjà tenu à l'ouverture.
+## C'est donc une pure lecture d'écran — combien de choses sont en train de se bâtir.
 ##
 ## Il passe par les PlacedBuilding et non par un CitySnapshot : la question se pose à chaque
 ## image dans un HUD, et projeter la ville entière pour compter serait une allocation par

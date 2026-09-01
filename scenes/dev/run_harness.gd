@@ -321,8 +321,7 @@ func _population_line() -> String:
 func _sites_block() -> String:
 	var state := _state()
 	var lines := PackedStringArray()
-	lines.append("Chantiers %d/%d emplacement(s)" % [state.open_sites(),
-		state.balance().run.build_slots])
+	lines.append("Chantiers %d ouvert(s)" % state.open_sites())
 	var listed := 0
 	var hidden := 0
 	for building in state.city().buildings():
@@ -427,8 +426,8 @@ func _hovered_site() -> String:
 ## harnais et non par le domaine en direct. C'est la règle que `P1a` a payée : un scripteur
 ## qui court-circuite les gestes finit par mesurer autre chose que ce que le joueur fait.
 func _write_chronicle() -> void:
-	print("[run_harness] chronique — seed %d, %d tours, %d emplacement(s) de chantier"
-		% [SEED, _state().balance().run.turns, _state().balance().run.build_slots])
+	print("[run_harness] chronique — seed %d, %d tours"
+		% [SEED, _state().balance().run.turns])
 	print("[run_harness] politique : %s, au premier emplacement accepté" % ", ".join(
 		Array(CHRONICLE_POLICY).map(func(id: StringName) -> String: return String(id))))
 	_place_at(_state().suggested_heart_anchor())

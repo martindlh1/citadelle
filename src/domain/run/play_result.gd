@@ -9,8 +9,8 @@ extends RefCounted
 ## ---
 ##
 ## **Il prolonge PlacementResult au lieu de le doubler**, et c'est ce qui rend ses raisons
-## composables. Ouvrir un chantier demande quatre questions à quatre systèmes — la carte,
-## la file, les bras, la bourse — et la première a déjà ses réponses écrites. Elles
+## composables. Ouvrir un chantier demande trois questions à trois systèmes — la carte, les
+## bras, la bourse — et la première a déjà ses réponses écrites. Elles
 ## traversent ce DTO **telles quelles**, parce que la raison de PlacementResult est un
 ## StringName et non un enum, et c'est exactement ce que son docstring annonçait : « une
 ## raison qui s'ajoute plus tard — INSUFFICIENT_RESOURCES le jour où l'orchestrateur compose
@@ -40,12 +40,6 @@ const REASON_RUN_OVER := &"run_over"
 
 ## Le catalogue ne connaît pas ce bâtiment.
 const REASON_UNKNOWN_BUILDING := &"unknown_building"
-
-## Tous les emplacements de la file de chantiers sont pris.
-##
-## C'est le refus qui **fait exister la file** de DESIGN.md 3.2. Sans lui, le second
-## régulateur du rescope serait un champ de data que rien ne consulte.
-const REASON_NO_BUILD_SLOT := &"no_build_slot"
 
 ## Le village n'a pas assez de bras libres pour ce chantier.
 ##

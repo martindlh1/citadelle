@@ -6,7 +6,6 @@
 script = ExtResource("1_run_balance")
 turns = 20
 starting_building = &"heart"
-build_slots = 3
 score_per_resource = 1
 score_per_building = 5
 score_per_inhabitant = 10

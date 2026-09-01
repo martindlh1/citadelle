@@ -15,7 +15,6 @@ const TURN := 12
 func _balance() -> RunBalance:
 	var balance := RunBalance.new()
 	balance.turns = 20
-	balance.build_slots = 3
 	balance.score_per_resource = 1
 	balance.score_per_building = 10
 	balance.score_per_inhabitant = 100
