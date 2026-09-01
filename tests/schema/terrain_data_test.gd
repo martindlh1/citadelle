@@ -56,12 +56,22 @@ func test_the_unset_colour_sentinel_is_what_a_fresh_terrain_carries() -> void:
 			% [blank.color, TerrainData.UNSET_COLOR]) \
 		.is_true()
 
-## Un terrain construit en code n'a rien de renseigné, et les trois champs
+## Un terrain construit en code n'a rien de renseigné, et les quatre champs
 ## obligatoires se signalent — la couleur comprise, ce qui prouve que la sentinelle
 ## ne se contente pas d'exister.
-func test_a_blank_terrain_reports_all_three_required_fields() -> void:
+func test_a_blank_terrain_reports_all_its_required_fields() -> void:
 	var missing := TerrainData.new().missing_fields()
-	assert_array(missing).contains(["id", "build", "color"])
+	assert_array(missing).contains(["id", "build", "walk", "color"])
+
+## **Les deux verdicts sont deux champs**, et ce cas est ce qui l'épingle : un terrain qui
+## déclare sa constructibilité et rien d'autre reste incomplet. Sans lui, une
+## franchissabilité déduite de `build` passerait la suite entière — les cinq terrains de
+## `data/` répondent la même chose aux deux questions.
+func test_declaring_where_one_builds_says_nothing_of_where_one_walks() -> void:
+	var terrain := TerrainData.new()
+	terrain.build = TerrainData.Build.ALLOWED
+	assert_bool(terrain.is_walkable()).is_false()
+	assert_array(terrain.missing_fields()).contains(["walk"])
 
 ## Une couleur posée sort de la liste des manquants.
 func test_a_colour_once_set_stops_being_reported() -> void:
