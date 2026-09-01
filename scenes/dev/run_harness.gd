@@ -160,7 +160,7 @@ func _process(_delta_seconds: float) -> void:
 	var city := _state().city().to_snapshot()
 	_bar.show_ledger(_state().ledger(), _delta)
 	_people.show_people(_state().people(),
-		Staffing.resolve(city, _state().people().headcount()), _state().city())
+		Staffing.resolve(city, _state().people().headcount()))
 	_show_card(city)
 
 ## Aucun geste pendant qu'une transition joue.
@@ -429,7 +429,47 @@ func _sites_block() -> String:
 			building.anchor(), building.progress(), building.data().site_turns])
 	if hidden > 0:
 		lines.append("    … et %d autre(s)" % hidden)
+	lines.append(_sleep_line())
 	return "\n".join(lines)
+
+## Ce qui dort, par **nature** de bâtiment.
+##
+## Il est ici et non dans `PopulationBar` parce que ce n'est pas de la même nature que ce
+## qu'elle montre : elle tient un compteur — tant de bras pris, tant de libres, tant de places
+## —, alors qu'une liste d'endormis nomme des choses posées sur la carte. C'est aussi
+## pourquoi le vrai « lesquels ? » est sur le plateau, qui les éteint en couleur : une ligne de
+## texte peut dire *combien* et *de quel genre*, elle ne peut pas désigner une case.
+##
+## Par nature et non par ancre, et c'est la règle que `I2` a laissée au projet : un joueur
+## corrige « cette ferme dort, il me manque un toit », pas « (17, 12) dort ». Les endormis
+## sont debout, donc les chercher dans la ville est sûr — l'inverse du piège de `I2`, qui
+## portait sur des morts qu'un rapport retire avant de le rendre.
+##
+## L'ordre est celui de pose, donc celui dans lequel le village s'est éteint : la première
+## nature nommée est la plus ancienne à avoir cédé, ce qui est l'information la plus lourde de
+## la ligne. Un tri alphabétique l'aurait perdue.
+func _sleep_line() -> String:
+	var asleep := _state().staffing().asleep()
+	if asleep.is_empty():
+		return "Aucun bâtiment en sommeil."
+	var counts: Dictionary[String, int] = {}
+	for anchor in asleep:
+		var building := _state().city().building_at(anchor)
+		# Une ancre que la ville ne porte plus : impossible sur un plan fraîchement résolu,
+		# et pas une raison de faire tomber un rapport si ça arrivait un jour.
+		var kind := "?" if building == null else building.data().label
+		counts[kind] = counts.get(kind, 0) + 1
+	var parts := PackedStringArray()
+	var hidden := 0
+	for kind in counts:
+		if parts.size() >= LISTED:
+			hidden += counts[kind]
+			continue
+		parts.append("%d %s" % [counts[kind], kind])
+	var text := "En sommeil : %s" % ", ".join(parts)
+	if hidden > 0:
+		text += " (+%d)" % hidden
+	return text
 
 ## Le raccourci clavier de chaque bâtiment, et **rien d'autre**.
 ##

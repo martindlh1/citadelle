@@ -44,9 +44,9 @@ const SITE_COLOR := Color(0.62, 0.60, 0.55, 1.0)
 ##
 ## **C'est la seule réponse honnête à « lesquels dorment ? »** de `DESIGN.md` 3.3. La phrase
 ## qu'un joueur doit pouvoir se dire est « cette ferme dort, il me manque un toit », et
-## « cette » désigne une case : la lire dans un HUD sous forme de coordonnées demanderait de
-## chercher sur la carte ce que la carte peut montrer elle-même. Le panneau dit combien et de
-## quelle nature, le plateau dit lesquels.
+## « cette » désigne une case : la lire ailleurs sous forme de coordonnées demanderait de
+## chercher sur la carte ce que la carte peut montrer elle-même. Un texte dit combien et de
+## quelle nature, le plateau seul dit **lesquels**.
 const SLEEP_COLOR := Color(0.34, 0.38, 0.50, 1.0)
 const SLEEP_MIX := 0.62
 
