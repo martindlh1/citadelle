@@ -177,6 +177,15 @@ où les Vagues voudront connaître les cols avant de choisir par où entrer, il 
 désigne un ; les peindre tous demanderait une passe de rendu, et rien dans ce jalon ne
 l'exige.
 
+**Et la politique de la chronique n'a pas appris le plateau**, ce qui se voit en capture : elle
+pose ses bâtiments dans le coin de la carte, en pleine plaine, parce qu'elle balaie depuis
+(0, 0). Ce n'est pas encore un mensonge — la chronique mesure la boucle économique, et
+l'Économie ne voit pas le relief —, et c'est d'ailleurs pourquoi elle rend **exactement les
+mêmes 265 points** qu'avant `T4` sur une carte entièrement refaite : la meilleure confirmation
+possible de ce que `I3` avait écrit. Ça le deviendra à `V4`, le jour où bâtir hors du plateau
+voudra dire se faire manger. C'est la règle que `CLAUDE.md` tient depuis `I3` — une table dont
+le pilote ne joue jamais la règle ne montre pas cette règle —, et elle attend son jalon.
+
 **Aucun chiffre n'est vraiment équilibré.** Le rayon du plateau, la densité des étangs, la
 part de forêt et la hauteur de la mesa sont des points de départ, choisis pour que la carte se
 lise. C'est `B1`, et `--survey` est l'instrument qu'il réclamera.
@@ -203,7 +212,8 @@ la hauteur d'enjambée déménagera le jour où une vague aura la sienne.
   premier réglage de `T2` qui bouge depuis `T2`, et il bouge parce que `T4` fait du relief un
   élément de jeu et non plus un décor.
 - **La branche est tirée de `feat/n2-population-view`** et non de `master` : `N2` n'est pas
-  fusionnée. Les fusionner dans l'ordre.
+  fusionnée. Les fusionner dans l'ordre, `N2` puis `T4`.
+- **La branche n'est pas fusionnée** : `feat/t4-terrain-gen`, six commits.
 
 ---
 
