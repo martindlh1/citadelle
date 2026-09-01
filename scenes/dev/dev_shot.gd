@@ -40,6 +40,29 @@ const SHOT_HOVER_FLAG := "--shot-hover"
 ## concernent pas.
 const SHOT_ROTATE_FLAG := "--shot-rotate"
 
+## Tours à résoudre avant de capturer. Lu par les harnais qui savent résoudre ; les autres
+## l'ignorent, comme ils ignorent déjà les drapeaux qui ne les concernent pas.
+##
+## Il rend à `I3` ce que `--shot-evenings` faisait pour la journée en phases, et il existe
+## pour la même raison : un rapport de fin de tour est du texte fabriqué à la main, donc
+## exactement le genre de code que ni le parsing ni les tests ne regardent. Sans lui, le
+## chemin de résolution du harnais Run ne serait emprunté par aucun contrôle, et toute
+## capture montrerait un village qu'on vient de fonder.
+const SHOT_PASSES_FLAG := "--shot-passes"
+
+## Rejoue le run entier sans écran et imprime ce que ça donne, tour par tour. Drapeau **nu**.
+##
+## Le seul drapeau de ce fichier qui ne capture pas une image, et il est ici quand même :
+## `DevShot` est l'unique endroit du projet qui lise la ligne de commande, et un second
+## lecteur serait un second endroit où l'on écrit `OS.get_cmdline_user_args()`.
+##
+## Il vient du jeu d'avant, où il arbitrait deux modèles de journée, et `I3` le rend pour la
+## même raison exactement : c'est le seul contrôle qui joue la boucle entière sur la data
+## réelle, là où le parsing et les tests n'en jouent jamais vingt tours d'affilée. Il
+## n'arbitre rien, et le rapport le dit en toutes lettres — la politique qu'il joue est
+## bête, donc ses chiffres sont un plancher et non une partie bien jouée.
+const CHRONICLE_FLAG := "--chronicle"
+
 ## Images laissées passer avant de capturer. La première ne porte encore ni le tampon
 ## d'instances téléversé ni la lumière, et rendrait un cadre vide.
 const WARMUP_FRAMES := 3

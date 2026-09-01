@@ -32,6 +32,21 @@ extends PanelContainer
 ## Les chiffres sont des constantes nommées et non de l'équilibrage — une largeur de
 ## jauge est de la mise en forme, et `data/balance/` est réservé aux questions ouvertes
 ## de `DESIGN.md`.
+##
+## ---
+##
+## **`I3` lui retire `delta_of()`**, et l'annotation qu'elle composait se mesure maintenant
+## avant/après chez l'appelant. La fonction était un résidu que `R0` avait laissé passer :
+## elle prenait un `PhaseReport`, classe supprimée avec la journée en phases, si bien que ce
+## fichier **ne compilait plus** — sans que rien ne le dise, puisque le boot ne le chargeait
+## plus et que le contrôle de parsing ne balaie que `src/domain/`.
+##
+## Elle ne revient pas sous une autre forme, et c'est un gain plutôt qu'une perte : elle
+## recomposait ce que la réserve avait changé à partir de deux champs d'un rapport, quand la
+## réserve elle-même pouvait être lue deux fois. `CLAUDE.md` nomme ce raccourci depuis `F1` —
+## **une mesure qui emprunte un chemin plus court mesure le chemin plus court** —, et le cas
+## était réel : une somme « entré moins mangé » ignore l'écrêtage d'un entrepôt démoli, donc
+## affiche un delta qui ne recolle pas au chiffre juste à côté de lui.
 
 ## Largeur de la jauge, en pixels. Le segment de chaque ressource s'y taille au prorata.
 const GAUGE_WIDTH := 260
@@ -128,29 +143,6 @@ func show_ledger(ledger: Ledger, delta: Dictionary[StringName, int] = {}) -> voi
 		_swatches[id].color = swatch
 		_show_delta(id, delta.get(id, 0))
 	_show_gauge(ledger)
-
-## Ce que la réserve a visiblement gagné ou perdu pendant cette phase.
-##
-## Une soustraction de deux choses que les rapports disent déjà — ce qui est entré en
-## réserve, moins ce que la journée a mangé quand elle s'est fermée — et non une règle :
-## la réserve fait foi, ceci n'est qu'une annotation posée à côté d'un chiffre.
-##
-## L'identifiant de l'upkeep est un argument et non un `&"food"` écrit ici : le
-## `EconomyBalance` le porte précisément pour qu'aucun code ne le nomme, et une barre de
-## ressources n'est pas l'endroit où cette discipline commencerait à céder.
-static func delta_of(report: PhaseReport,
-		upkeep_resource: StringName) -> Dictionary[StringName, int]:
-	var delta: Dictionary[StringName, int] = {}
-	var stored := report.production().stored()
-	for id in stored:
-		delta[id] = stored[id]
-	if report.closes_the_day():
-		var eaten := report.day_report().upkeep().consumed()
-		delta[upkeep_resource] = delta.get(upkeep_resource, 0) - eaten
-	for id in delta.keys():
-		if delta[id] == 0:
-			delta.erase(id)
-	return delta
 
 # --- La mise à jour ---------------------------------------------------------------------
 

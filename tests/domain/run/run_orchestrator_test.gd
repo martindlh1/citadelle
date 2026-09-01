@@ -193,6 +193,16 @@ func test_opening_a_site_pays_its_resources_and_takes_its_hands_at_once() -> voi
 	assert_int(state.staffing().available()).is_equal(0)
 	assert_int(state.open_sites()).is_equal(1)
 
+## Le Cœur se fonde, il ne se bâtit pas. Il est gratuit, sans chantier, et loge quatre
+## personnes : pouvoir en poser un second en ferait le meilleur bâtiment du jeu, et rendrait
+## décoratif le refus d'une seconde fondation. Trouvé en capture, sur un catalogue de harnais
+## qui le proposait au clic comme les autres.
+func test_a_second_heart_cannot_be_built() -> void:
+	var state := _founded()
+	var result := RunOrchestrator.open_site(state, &"heart", A)
+	assert_str(String(result.reason())).is_equal("the_heart")
+	assert_int(state.city().count()).is_equal(1)
+
 func test_an_unknown_building_is_refused() -> void:
 	var result := RunOrchestrator.open_site(_founded(), &"cathedral", A)
 	assert_str(String(result.reason())).is_equal("unknown_building")

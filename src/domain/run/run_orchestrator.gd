@@ -74,7 +74,11 @@ static func found(state: RunState, cell: Vector2i, turns := 0) -> PlayResult:
 ## ville, donc Staffing le compte, donc les bras sont pris. Ils reviendront de la même
 ## façon — en cessant d'être comptés — quand il sera démoli ou détruit.
 ##
-## **Cinq refus, et un seul remonte.** L'ordre est une décision : les portes d'état d'abord,
+## **Le bâtiment d'ouverture n'est pas de son ressort.** Le Cœur se fonde, il ne se bâtit
+## pas — sans quoi il serait le meilleur bâtiment du jeu à répétition, gratuit, sans chantier
+## et logeant quatre personnes, et le refus d'une seconde fondation deviendrait décoratif.
+##
+## **Six refus, et un seul remonte.** L'ordre est une décision : les portes d'état d'abord,
 ## puis la **carte**, puis les trois coûts dans l'ordre où DESIGN.md 4.2 les énumère. La
 ## carte passe avant les coûts parce que c'est elle qu'un joueur corrige en bougeant la
 ## souris, et parce que le fantôme de C2 l'affiche déjà — une réponse qui contredirait la
@@ -89,6 +93,8 @@ static func open_site(state: RunState, id: StringName, cell: Vector2i,
 	var data := state.building(id)
 	if data == null:
 		return PlayResult.refused(PlayResult.REASON_UNKNOWN_BUILDING)
+	if id == state.balance().run.starting_building:
+		return PlayResult.refused(PlayResult.REASON_THE_HEART)
 	var placement := PlacementValidator.validate(state.city(), state.terrain(), data, cell,
 		turns)
 	if not placement.is_ok():

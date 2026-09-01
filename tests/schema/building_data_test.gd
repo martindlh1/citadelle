@@ -302,17 +302,42 @@ func test_at_least_one_building_of_data_declares_a_site() -> void:
 ##
 ## Ce qu'il exige est faible exprès : *au moins un* bâtiment qui loge sans coûter de bras.
 ## Un manoir cher en travailleurs resterait légitime à côté.
-func test_at_least_one_shelter_costs_no_workers() -> void:
+##
+## **Le bâtiment d'ouverture est écarté depuis I3.** Le Cœur loge quatre personnes et ne
+## coûte aucun bras, donc il satisfaisait ce cas à lui seul — mais il est posé une fois, à
+## la fondation, et aucun geste du jeu n'en bâtit un second. La soupape qu'il semblait
+## offrir ne s'ouvre jamais, si bien que le cas serait passé sur un catalogue où
+## l'habitation coûte des bras, c'est-à-dire sur exactement la partie bloquée qu'il existe
+## pour interdire. C'est la même famille de défaut que la règle qu'il protège : **une
+## soupape se joue, elle ne se déclare pas** — et il aura fallu un tour jouable pour que la
+## différence se voie.
+func test_at_least_one_buildable_shelter_costs_no_workers() -> void:
+	var balance := load("res://data/balance/balance.tres") as BalanceData
+	var opener := String(balance.run.starting_building)
 	var free_shelters: Array[String] = []
 	for file in DirAccess.get_files_at(BUILDING_ROOT):
-		if file.get_extension() != "tres":
+		if file.get_extension() != "tres" or file.get_basename() == opener:
 			continue
 		var building := load("%s/%s" % [BUILDING_ROOT, file]) as BuildingData
 		if building != null and building.housing > 0 and building.workers == 0:
 			free_shelters.append(file.get_basename())
-	assert_array(free_shelters) 		.override_failure_message(
-			"aucun bâtiment de data/buildings/ ne loge sans coûter de travailleur : "
-			+ "une partie dont tout le monde est immobilisé ne pourrait plus rien bâtir") 		.is_not_empty()
+	assert_array(free_shelters) \
+		.override_failure_message(
+			"aucun bâtiment constructible de data/buildings/ ne loge sans coûter de "
+			+ "travailleur : une partie dont tout le monde est immobilisé ne pourrait "
+			+ "plus rien bâtir") \
+		.is_not_empty()
+
+## Le bâtiment d'ouverture est bien celui que le cas ci-dessus écarte, et il est bien
+## gratuit en bras. Sans cette vérification, un starting_building mal orthographié
+## n'écarterait rien et le trou se refermerait tout seul sans qu'on le sache.
+func test_the_starting_building_is_the_one_the_shelter_rule_skips() -> void:
+	var balance := load("res://data/balance/balance.tres") as BalanceData
+	var opener := balance.run.starting_building
+	var heart := load("%s/%s.tres" % [BUILDING_ROOT, opener]) as BuildingData
+	assert_object(heart).is_not_null()
+	assert_int(heart.workers).is_equal(0)
+	assert_int(heart.housing).is_greater(0)
 
 ## Un producteur cohérent : un rendement par tour, et c'est tout ce que N1 lui demande.
 func _producer() -> BuildingData:

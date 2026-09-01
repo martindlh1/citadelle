@@ -184,16 +184,33 @@ func _assert_resources_are_known() -> void:
 ##
 ## Il ne réclame pas que **tout** bâtiment qui loge soit gratuit : un manoir cher en bras
 ## resterait légitime. Un seul suffit à garder la porte ouverte.
+##
+## **Le bâtiment d'ouverture ne compte pas**, et c'est `I3` qui l'a trouvé en rendant le run
+## jouable. Le Cœur loge quatre personnes et ne coûte aucun bras, donc il satisfaisait ce
+## contrôle à lui seul — mais il est **posé une fois, à la fondation**, et aucun geste du
+## jeu ne permet d'en bâtir un second. La soupape qu'il semblait offrir ne s'ouvre jamais.
+## Le garde-fou de `N1` aurait donc laissé passer un catalogue où l'habitation coûte des
+## bras, c'est-à-dire exactement la partie mortellement bloquée qu'il existe pour interdire.
+##
+## C'est la même famille de défaut que la règle qu'il protège : **une soupape se joue, elle
+## ne se déclare pas.** `N1` l'avait écrit du mécanisme, et le contrôle lui-même y était
+## soumis sans qu'on le voie — il vérifiait qu'un bâtiment gratuit *existe*, pas qu'on
+## puisse le *bâtir*. Il fallait un tour pour que la différence se voie.
 func _assert_a_shelter_is_free() -> void:
 	var ids := list_building_ids()
 	if ids.is_empty():
 		return
+	var balance := get_balance()
+	var opener := &"" if balance == null or balance.run == null \
+		else balance.run.starting_building
 	for id in ids:
+		if id == opener:
+			continue
 		var building := get_building(id)
 		if building != null and building.housing > 0 and building.workers == 0:
 			return
 	assert(false,
-		"aucun bâtiment de data/buildings/ ne loge sans coûter de travailleur : "
+		"aucun bâtiment constructible de data/buildings/ ne loge sans coûter de travailleur : "
 		+ "une partie dont tout le monde est immobilisé ne pourrait plus rien bâtir")
 
 func _assert_known(known: Array[StringName], resource: StringName, where: String) -> void:

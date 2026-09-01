@@ -61,13 +61,20 @@ const REASON_NOT_ENOUGH_RESOURCES := &"not_enough_resources"
 ## Rien n'est bâti sur la cellule désignée.
 const REASON_NOTHING_HERE := &"nothing_here"
 
-## On ne démolit pas son propre Cœur.
+## Le Cœur ne se bâtit pas et ne se démolit pas : il se **fonde**, une fois.
 ##
-## DESIGN.md 4.2 ne l'exclut pas de « Démolir », et 5 fait du Cœur détruit une défaite : les
-## deux mis bout à bout donnent un bouton « perdre la partie » sans confirmation ni retour
-## en arrière, ce qu'aucune ligne de DESIGN.md ne demande. Le refus est ici et non dans
-## CityState parce que le Cœur n'est un Cœur que pour le run : la Construction, elle, ne voit
-## qu'un bâtiment comme un autre.
+## Deux gestes butent dessus, et c'est la même phrase dite deux fois. On ne le **démolit**
+## pas : DESIGN.md 4.2 ne l'exclut pas de « Démolir », et 5 fait du Cœur détruit une
+## défaite ; les deux mis bout à bout donnent un bouton « perdre la partie » sans
+## confirmation ni retour en arrière, ce qu'aucune ligne de DESIGN.md ne demande. Et on n'en
+## **bâtit** pas un second : DESIGN.md 4.1 le porte « posé au départ », gratuit et sans
+## chantier, ce qui en ferait le meilleur bâtiment du jeu à répétition — quarante points de
+## vie et quatre places de logement pour rien. `found()` refusait déjà une seconde fondation ;
+## laisser `open_site()` la contourner aurait rendu ce refus décoratif.
+##
+## Les deux refus sont ici et non dans CityState parce que le Cœur n'est un Cœur **que pour
+## le run** : la Construction, elle, ne voit qu'un bâtiment comme un autre, et c'est
+## `data/balance/` qui dit lequel ouvre la partie.
 const REASON_THE_HEART := &"the_heart"
 
 var _ok: bool
