@@ -63,6 +63,30 @@ const SHOT_PASSES_FLAG := "--shot-passes"
 ## faut un drapeau.
 const SHOT_SUN_FLAG := "--shot-sun"
 
+## Bâtiment à sélectionner avant de capturer, numéroté comme au clavier — 1 pour le premier.
+##
+## Il existe pour la même raison que le suivant, et la fiche de `N2` en a besoin de façon plus
+## pressante encore : elle commute sur **quatre** états — coût couvert, réserve courte, bras
+## courts, les deux —, et « réserve courte » ne s'obtient qu'en désignant un bâtiment qu'on
+## ne peut pas payer. Sans ce drapeau, une capture ne montrerait jamais que le premier
+## bâtiment du catalogue, donc jamais ce que la moitié d'une fiche sert à dire.
+##
+## Zéro et absent valent « ne touche à rien », c'est-à-dire le premier du catalogue.
+const SHOT_SELECT_FLAG := "--shot-select"
+
+## Ne fonde pas le Cœur avant de capturer. Drapeau **nu**.
+##
+## Une capture pose sinon le Cœur d'office, sans quoi toute image montrerait une carte nue.
+## Cet état-là — le run qui **attend** sa fondation — est donc devenu inatteignable le jour
+## où le harnais a su le photographier, et il l'est resté tant que rien n'y changeait de
+## couleur.
+##
+## `N2` l'y a fait changer : la fiche décrit ce que le clic gauche poserait, donc le **Cœur**
+## tant qu'il n'est pas fondé, et la sélection ensuite. C'est le corollaire de `P1a`, à la
+## lettre — quand une vue se met à commuter sur un état, vérifier d'abord qu'un drapeau
+## atteint chacune de ses valeurs.
+const SHOT_UNFOUNDED_FLAG := "--shot-unfounded"
+
 ## Rejoue le run entier sans écran et imprime ce que ça donne, tour par tour. Drapeau **nu**.
 ##
 ## Le seul drapeau de ce fichier qui ne capture pas une image, et il est ici quand même :

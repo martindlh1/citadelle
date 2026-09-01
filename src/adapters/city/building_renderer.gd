@@ -35,6 +35,21 @@ const SITE_BASE_RATIO := 0.2
 ## _raised().
 const SITE_COLOR := Color(0.62, 0.60, 0.55, 1.0)
 
+## Teinte vers laquelle la couleur d'un bâtiment **endormi** est tirée, et la part qu'elle
+## prend.
+##
+## Froide, là où celle d'un chantier est chaude : les deux états se ressemblent — ni l'un ni
+## l'autre ne produit — et se distinguent pourtant, parce que ce qu'ils demandent au joueur
+## n'est pas la même chose. Un chantier veut qu'on attende ; un endormi veut un toit.
+##
+## **C'est la seule réponse honnête à « lesquels dorment ? »** de `DESIGN.md` 3.3. La phrase
+## qu'un joueur doit pouvoir se dire est « cette ferme dort, il me manque un toit », et
+## « cette » désigne une case : la lire dans un HUD sous forme de coordonnées demanderait de
+## chercher sur la carte ce que la carte peut montrer elle-même. Le panneau dit combien et de
+## quelle nature, le plateau dit lesquels.
+const SLEEP_COLOR := Color(0.34, 0.38, 0.50, 1.0)
+const SLEEP_MIX := 0.62
+
 var _metrics: TerrainMetrics
 
 ## Renderer prêt à être ajouté à l'arbre, déjà peuplé pour cette ville.
@@ -62,7 +77,12 @@ static func create(city: CityState, metrics: TerrainMetrics) -> BuildingRenderer
 ## n'apprend pas pour autant ce qu'est une bataille : on lui donne des ancres à sauter.
 ##
 ## Le défaut est une liste vide, donc les cinq appelants d'avant `F3a` n'ont pas bougé.
-func rebuild(city: CityState, hidden: Array[Vector2i] = []) -> void:
+##
+## `asleep` suit le même patron depuis `N2` : on lui donne des ancres, il les **éteint**. Il
+## n'apprend pas pour autant ce qu'est le sommeil — que ce soit `StaffingPlan.asleep()` qui
+## les fournisse ne le regarde pas, exactement comme `hidden` ignore qu'une bataille existe.
+func rebuild(city: CityState, hidden: Array[Vector2i] = [],
+		asleep: Array[Vector2i] = []) -> void:
 	assert(city != null, "rendu d'une ville null")
 	assert(_metrics != null, "renderer non initialisé — passer par create()")
 	var placed: Array[PlacedBuilding] = []
@@ -80,6 +100,11 @@ func rebuild(city: CityState, hidden: Array[Vector2i] = []) -> void:
 		# Un chantier n'en montre qu'une part, qui monte avec ses crans.
 		var thickness := data.height * tile * raised
 		var color := SITE_COLOR.lerp(data.color, raised)
+		# Le sommeil s'applique APRÈS le gris de chantier et non à sa place : un chantier
+		# endormi est les deux à la fois — il n'est pas fini et il n'avance pas —, et ne
+		# montrer que l'un des deux ferait disparaître l'autre.
+		if asleep.has(building.anchor()):
+			color = color.lerp(SLEEP_COLOR, SLEEP_MIX)
 		for cell in building.cells():
 			var base := _metrics.cell_surface_center(cell, building.height())
 			# La BoxMesh est centrée sur son origine : on monte d'une demi-hauteur pour
