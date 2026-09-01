@@ -289,7 +289,7 @@ sur des cartes qui n'ont pas de cols. La capture de ce jalon le redit — le rel
 - **Neuf `.tres` de bâtiment ont changé** : `build_actions` s'appelle `site_turns`, et la
   palissade perd sa `defense`.
 - **`data/balance/run_balance.tres` est neuf**, et `balance.tres` gagne sa cinquième ligne.
-- **La branche n'est pas fusionnée** : `feat/i3-turn`, neuf commits.
+- **La branche n'est pas fusionnée** : `feat/i3-turn`, onze commits.
 
 ---
 
