@@ -71,7 +71,7 @@ static func inspect(query: TerrainQuery, centre: Vector2i, climb: int) -> MapRep
 			deposits += 1
 	return MapReport.create(shelf.size(), buildable,
 		_entries(query, shelf, climb), _pads(query), deposits,
-		_edge_distance(query, centre, climb))
+		_edge_distance(query, shelf, climb))
 
 ## Ce qui manque à cette carte pour être jouable. Vide = carte acceptable.
 ##
@@ -93,10 +93,11 @@ static func shortcomings(report: MapReport, params: TerrainGenBalance) -> Packed
 		missing.append("pads")
 	if report.deposits() < params.min_plateau_deposits:
 		missing.append("deposits")
-	# Le seul défaut qui ne se voit pas sur une image : une carte dont le centre est
-	# injoignable est **invincible**, donc sans jeu, et rien d'autre ne le dirait.
-	if not report.is_reachable():
-		missing.append("unreachable")
+	# Rien sur `is_reachable()`, et c'est délibéré : un accès **est** un chemin depuis la
+	# lisière, donc `min_accesses >= 1` — que missing_fields() impose — le garantit déjà.
+	# Une ligne de plus n'aurait jamais rien refusé, et `N1` a écrit qu'un contrôle qui n'a
+	# jamais refusé quoi que ce soit ne prouve pas qu'il refuserait. Le chiffre reste au
+	# rapport, où il **mesure** au lieu de juger.
 	return missing
 
 # --- le plateau -------------------------------------------------------------
@@ -247,14 +248,22 @@ static func _pads(query: TerrainQuery) -> int:
 				count += 1
 	return count
 
-## Pas qui séparent la lisière du centre, ou -1 si aucun chemin n'y mène.
+## Pas qui séparent la lisière du plateau, ou -1 si aucun chemin n'y mène.
 ##
 ## Un parcours en largeur, donc **le nombre de cases** et non un coût. Le chemin d'une vague
 ## sera plus cher que celui-ci — `V1` fera payer la montée —, et c'est écrit ici pour qu'une
 ## table qui imprime ce chiffre ne se lise pas comme une prédiction de bataille. Ce qu'il dit
-## est la **profondeur** de la carte : combien de cases séparent le bord du Cœur, donc
+## est la **profondeur** de la carte : combien de cases séparent le bord du village, donc
 ## combien de terrain une défense a devant elle.
-static func _edge_distance(query: TerrainQuery, centre: Vector2i, climb: int) -> int:
+##
+## **Jusqu'au plateau et non jusqu'au centre**, et l'écart n'est pas cosmétique : un rocher
+## tombé sur la case du milieu la rend infranchissable, et une distance mesurée là aurait
+## rendu -1 sur une carte parfaitement jouable dont le Cœur se poserait une case à côté. Ce
+## qu'on veut savoir est où le village commence, pas ce que porte une cellule.
+static func _edge_distance(query: TerrainQuery, shelf: Array[Vector2i], climb: int) -> int:
+	var on_shelf: Dictionary[Vector2i, bool] = {}
+	for cell in shelf:
+		on_shelf[cell] = true
 	var extent := query.size()
 	var depth: Dictionary[Vector2i, int] = {}
 	var queue: Array[Vector2i] = []
@@ -267,7 +276,7 @@ static func _edge_distance(query: TerrainQuery, centre: Vector2i, climb: int) ->
 	while head < queue.size():
 		var cell := queue[head]
 		head += 1
-		if cell == centre:
+		if on_shelf.has(cell):
 			return depth[cell]
 		for step in NEIGHBOURS:
 			var side := cell + step

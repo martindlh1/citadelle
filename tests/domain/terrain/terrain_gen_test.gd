@@ -1,14 +1,21 @@
 class_name TerrainGenTest
 extends GdUnitTestSuite
-## La génération : déterminisme d'abord, invariants ensuite.
+## La génération : déterminisme d'abord, **structure** ensuite, décoration en dernier.
 ##
 ## Les réglages sont construits en code plutôt que chargés depuis data/balance/ :
 ## aucun de ces cas ne fige un chiffre d'équilibrage, et aucun ne cassera à la
 ## prochaine passe de réglage. Ce qui est vérifié, ce sont les invariants et le fait
 ## que les molettes sont réellement câblées.
+##
+## **Deux portes et non une, et les cas choisissent.** `draft()` rend un essai brut, `generate()`
+## rejette jusqu'à ce que les promesses tiennent. Les cas qui parlent de décoration passent par
+## la première : ils veulent l'essai qu'ils nomment, pas celui que l'audit a fini par garder.
+## Ceux qui parlent des promesses passent par la seconde, qui est leur sujet.
 
 const SEED := 1234
-const SIZE := Vector2i(16, 16)
+const SIZE := Vector2i(20, 20)
+
+# --- le déterminisme --------------------------------------------------------
 
 func test_the_same_seed_gives_an_identical_grid() -> void:
 	var first := TerrainGen.generate(SEED, SIZE, _params())
@@ -29,14 +36,32 @@ func test_different_seeds_give_different_grids() -> void:
 func test_generation_does_not_depend_on_call_order() -> void:
 	var reference := TerrainGen.generate(SEED, SIZE, _params())
 	TerrainGen.generate(SEED + 7, SIZE, _params())
-	TerrainGen.generate(SEED + 99, Vector2i(8, 5), _params())
+	TerrainGen.draft(SEED + 99, Vector2i(8, 5), _params())
 	var again := TerrainGen.generate(SEED, SIZE, _params())
 	assert_bool(_grids_match(reference, again)).is_true()
 
-func test_grid_has_the_requested_size() -> void:
+## Deux essais voisins doivent donner des cartes **sans rapport** : le rang de l'essai passe
+## par un pas large, pas par un « +1 ». Sans ça, un seed rejeté se ferait rejeter à nouveau
+## pour le même motif autant de fois qu'il y a d'essais.
+func test_two_attempts_of_one_run_are_unrelated() -> void:
+	var first := TerrainGen.draft(TerrainGen.seed_for(SEED, 0), SIZE, _params())
+	var second := TerrainGen.draft(TerrainGen.seed_for(SEED, 1), SIZE, _params())
+	assert_bool(_grids_match(first, second)).is_false()
+
+## Le harnais rejoue la même suite d'essais pour la mesurer : elle doit être la même à chaque
+## appel, et propre à ce run.
+func test_the_attempt_seeds_are_stable_and_per_run() -> void:
+	assert_int(TerrainGen.seed_for(SEED, 3)).is_equal(TerrainGen.seed_for(SEED, 3))
+	assert_int(TerrainGen.seed_for(SEED, 3)).is_not_equal(TerrainGen.seed_for(SEED, 4))
+	assert_int(TerrainGen.seed_for(SEED, 3)).is_not_equal(TerrainGen.seed_for(SEED + 1, 3))
+
+# --- la forme --------------------------------------------------------------
+
+## Un brouillon ne promet rien, donc il accepte n'importe quelle taille — y compris une carte
+## trop petite pour qu'un plateau y tienne ses accès.
+func test_a_draft_has_the_requested_size() -> void:
 	var size := Vector2i(9, 4)
-	var grid := TerrainGen.generate(SEED, size, _params())
-	assert_vector(grid.size()).is_equal(size)
+	assert_vector(TerrainGen.draft(SEED, size, _params()).size()).is_equal(size)
 
 func test_every_cell_carries_a_terrain() -> void:
 	var grid := TerrainGen.generate(SEED, SIZE, _params())
@@ -45,19 +70,86 @@ func test_every_cell_carries_a_terrain() -> void:
 			.override_failure_message("terrain null en %s" % cell) \
 			.is_not_null()
 
-func test_heights_stay_within_the_configured_bounds() -> void:
+## L'amplitude du relief n'est plus une entrée depuis T4 : c'est la **conséquence** de la
+## structure, de la nappe au plateau. Rien ne doit sortir de cet intervalle.
+func test_heights_stay_between_the_water_and_the_plateau() -> void:
 	var params := _params()
 	var grid := TerrainGen.generate(SEED, SIZE, params)
 	for cell in _cells(grid):
 		var height := grid.height_at(cell)
 		assert_int(height) \
-			.override_failure_message("hauteur %d hors bornes en %s" % [height, cell]) \
-			.is_between(params.min_height, params.max_height)
+			.override_failure_message("hauteur %d hors structure en %s" % [height, cell]) \
+			.is_between(params.water_level, params.plateau_height)
+
+func test_the_centre_sits_on_the_plateau() -> void:
+	var params := _params()
+	var grid := TerrainGen.generate(SEED, SIZE, params)
+	assert_int(grid.height_at(TerrainGen.centre_of(SIZE))).is_equal(params.plateau_height)
+
+## **Le cas qui porte le jalon.** La plaine ne peut pas toucher le plateau : tout ce qui
+## enjambe jusqu'à lui est du terrain **taillé**, c'est-à-dire une rampe.
+##
+## C'est la garantie de DESIGN.md 3.1 dite à l'envers, et c'est ce qui permet à la génération
+## de ne pas espérer : le bruit a beau plisser la plaine, il est borné sous le seuil, donc il
+## n'ouvre jamais un accès que personne n'a voulu. Un `lowland_relief` relevé d'un cran de
+## trop ferait tomber ce cas — et `missing_fields()` refuserait le réglage avant lui.
+func test_only_carved_ground_can_step_onto_the_plateau() -> void:
+	var params := _params()
+	var grid := TerrainGen.generate(SEED, SIZE, params)
+	var query := grid.to_query()
+	var touching := 0
+	for cell in _cells(grid):
+		if grid.height_at(cell) == params.plateau_height:
+			continue
+		for step in MapAudit.NEIGHBOURS:
+			var side := cell + step
+			if not query.in_bounds(side) or grid.height_at(side) != params.plateau_height:
+				continue
+			if not query.can_step(cell, side, params.max_climb):
+				continue
+			touching += 1
+			assert_int(grid.height_at(cell)) \
+				.override_failure_message("la plaine touche le plateau en %s" % cell) \
+				.is_greater(params.lowland_ceiling())
+	assert_int(touching) \
+		.override_failure_message("aucune case ne monte : le cas ne prouve rien") \
+		.is_greater(0)
+
+# --- les promesses ---------------------------------------------------------
+
+func test_a_generated_map_keeps_every_promise() -> void:
+	var params := _params()
+	var grid := TerrainGen.generate(SEED, SIZE, params)
+	var report := MapAudit.inspect(grid.to_query(), TerrainGen.centre_of(SIZE),
+		params.max_climb)
+	assert_array(MapAudit.shortcomings(report, params)).is_empty()
+
+## Le rejet du seed, joué pour de vrai. La promesse est serrée **d'après ce que le premier
+## essai rend**, donc le cas ne peut pas se périmer sur un chiffre écrit à la main : il
+## fabrique son propre échec, puis vérifie que la carte rendue n'est pas celui-là.
+func test_a_draft_that_breaks_a_promise_is_rejected_for_the_next() -> void:
+	var params := _params()
+	var centre := TerrainGen.centre_of(SIZE)
+	var first := TerrainGen.draft(TerrainGen.seed_for(SEED, 0), SIZE, params)
+	var refused := MapAudit.inspect(first.to_query(), centre, params.max_climb)
+	params.min_plateau_deposits = refused.deposits() + 1
+	assert_array(MapAudit.shortcomings(refused, params)) \
+		.override_failure_message("le premier essai devait manquer sa promesse") \
+		.is_not_empty()
+
+	var kept := TerrainGen.generate(SEED, SIZE, params)
+	assert_bool(_grids_match(kept, first)) \
+		.override_failure_message("generate() a rendu l'essai qu'il devait rejeter") \
+		.is_false()
+	assert_array(MapAudit.shortcomings(
+		MapAudit.inspect(kept.to_query(), centre, params.max_climb), params)).is_empty()
+
+# --- la décoration ---------------------------------------------------------
 
 ## Une nappe est plate, et rien n'est immergé sans être de l'eau.
 func test_water_sits_exactly_at_the_water_level() -> void:
 	var params := _params()
-	var grid := TerrainGen.generate(SEED, SIZE, params)
+	var grid := TerrainGen.draft(SEED, SIZE, params)
 	for cell in _cells(grid):
 		var height := grid.height_at(cell)
 		if grid.terrain_at(cell) == params.water:
@@ -69,30 +161,34 @@ func test_water_sits_exactly_at_the_water_level() -> void:
 				.override_failure_message("terre à %d sous la nappe en %s" % [height, cell]) \
 				.is_greater(params.water_level)
 
-func test_the_generated_map_actually_has_water() -> void:
+## `water_share` est une **part** et non un seuil, et ce cas est ce qui l'épingle : la
+## première version comparait le bruit au chiffre, ce qui rendait zéro case d'eau pour douze
+## pour cent demandés — un bruit simplex se serre autour de sa moyenne.
+func test_the_water_share_is_really_a_share() -> void:
 	var params := _params()
-	var grid := TerrainGen.generate(SEED, SIZE, params)
-	assert_int(_count(grid, params.water)) \
-		.override_failure_message("aucune eau : le cas d'eau ne prouverait rien") \
-		.is_greater(0)
+	params.water_share = 0.25
+	var wet := _count(TerrainGen.draft(SEED, SIZE, params), params.water)
+	params.water_share = 0.05
+	var dry := _count(TerrainGen.draft(SEED, SIZE, params), params.water)
+	assert_int(wet) \
+		.override_failure_message("un quart demandé, %d cases noyées sur %d"
+			% [wet, SIZE.x * SIZE.y]) \
+		.is_greater(dry * 2)
 
 func test_zero_forest_density_places_no_forest() -> void:
 	var params := _params()
 	params.forest_density = 0.0
-	var grid := TerrainGen.generate(SEED, SIZE, params)
-	assert_int(_count(grid, params.forest)).is_equal(0)
+	assert_int(_count(TerrainGen.draft(SEED, SIZE, params), params.forest)).is_equal(0)
 
 func test_zero_stone_density_places_no_stone() -> void:
 	var params := _params()
 	params.stone_density = 0.0
-	var grid := TerrainGen.generate(SEED, SIZE, params)
-	assert_int(_count(grid, params.stone)).is_equal(0)
+	assert_int(_count(TerrainGen.draft(SEED, SIZE, params), params.stone)).is_equal(0)
 
 func test_zero_rock_density_places_no_rock() -> void:
 	var params := _params()
 	params.rock_density = 0.0
-	var grid := TerrainGen.generate(SEED, SIZE, params)
-	assert_int(_count(grid, params.rock)).is_equal(0)
+	assert_int(_count(TerrainGen.draft(SEED, SIZE, params), params.rock)).is_equal(0)
 
 ## Densité à fond, plafond bas : la forêt doit s'arrêter net à l'altitude dite.
 func test_forest_never_grows_above_its_ceiling() -> void:
@@ -101,7 +197,7 @@ func test_forest_never_grows_above_its_ceiling() -> void:
 	params.stone_density = 0.0
 	params.rock_density = 0.0
 	params.forest_max_height = 2
-	var grid := TerrainGen.generate(SEED, SIZE, params)
+	var grid := TerrainGen.draft(SEED, SIZE, params)
 	for cell in _cells(grid):
 		if grid.terrain_at(cell) == params.forest:
 			assert_int(grid.height_at(cell)) \
@@ -118,8 +214,8 @@ func test_the_forest_ceiling_does_not_shift_the_scatter_stream() -> void:
 	low.forest_max_height = 0
 	var high := _params()
 	high.forest_max_height = 99
-	var low_grid := TerrainGen.generate(SEED, SIZE, low)
-	var high_grid := TerrainGen.generate(SEED, SIZE, high)
+	var low_grid := TerrainGen.draft(SEED, SIZE, low)
+	var high_grid := TerrainGen.draft(SEED, SIZE, high)
 	for cell in _cells(low_grid):
 		var low_is_stone := low_grid.terrain_at(cell) == low.stone
 		var high_is_stone := high_grid.terrain_at(cell) == high.stone
@@ -127,29 +223,52 @@ func test_the_forest_ceiling_does_not_shift_the_scatter_stream() -> void:
 			.override_failure_message("gisement décalé en %s" % cell) \
 			.is_equal(high_is_stone)
 
+# --- le montage -------------------------------------------------------------
+
 func _params() -> TerrainGenBalance:
 	var params := TerrainGenBalance.new()
 	params.map_size = SIZE
-	params.min_height = 0
-	params.max_height = 5
-	params.water_level = 1
+	params.plateau_height = 5
+	params.plateau_radius = 4
+	params.plateau_jitter = 0.2
+	params.lowland_height = 1
+	params.lowland_relief = 1
+	params.water_level = 0
+	params.max_climb = 1
+	params.ramp_width = 2
+	params.water_share = 0.1
 	params.noise_frequency = 0.1
 	params.noise_octaves = 3
 	params.forest_density = 0.3
 	params.stone_density = 0.1
 	params.rock_density = 0.05
 	params.forest_max_height = 4
-	params.plain = _make_terrain(&"plain", TerrainData.Build.ALLOWED)
-	params.forest = _make_terrain(&"forest", TerrainData.Build.ALLOWED, &"forest")
-	params.stone = _make_terrain(&"stone", TerrainData.Build.ALLOWED, &"stone")
-	params.water = _make_terrain(&"water", TerrainData.Build.BLOCKED, &"water")
-	params.rock = _make_terrain(&"rock", TerrainData.Build.BLOCKED, &"blocker")
+	params.min_plateau_cells = 1
+	params.min_accesses = 2
+	params.max_accesses = 3
+	params.min_build_pads = 0
+	params.min_plateau_deposits = 0
+	# Large : plusieurs cas resserrent une promesse exprès pour voir le rejet jouer, et un
+	# plafond court les ferait échouer sur le plafond plutôt que sur ce qu'ils mesurent.
+	params.max_attempts = 64
+	params.plain = _make_terrain(&"plain", TerrainData.Build.ALLOWED,
+		TerrainData.Walk.ALLOWED)
+	params.forest = _make_terrain(&"forest", TerrainData.Build.ALLOWED,
+		TerrainData.Walk.ALLOWED, &"forest")
+	params.stone = _make_terrain(&"stone", TerrainData.Build.ALLOWED,
+		TerrainData.Walk.ALLOWED, &"stone")
+	params.water = _make_terrain(&"water", TerrainData.Build.BLOCKED,
+		TerrainData.Walk.BLOCKED, &"water")
+	params.rock = _make_terrain(&"rock", TerrainData.Build.BLOCKED,
+		TerrainData.Walk.BLOCKED, &"blocker")
 	return params
 
-func _make_terrain(id: StringName, build: TerrainData.Build, tag: StringName = &"") -> TerrainData:
+func _make_terrain(id: StringName, build: TerrainData.Build, walk: TerrainData.Walk,
+		tag: StringName = &"") -> TerrainData:
 	var data := TerrainData.new()
 	data.id = id
 	data.build = build
+	data.walk = walk
 	if not tag.is_empty():
 		data.tags.append(tag)
 	return data

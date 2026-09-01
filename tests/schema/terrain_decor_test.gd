@@ -81,6 +81,7 @@ func _terrain(decor: TerrainDecor) -> TerrainData:
 	var terrain := TerrainData.new()
 	terrain.id = &"forest"
 	terrain.build = TerrainData.Build.ALLOWED
+	terrain.walk = TerrainData.Walk.ALLOWED
 	terrain.color = Color(0.2, 0.4, 0.2)
 	terrain.decor = decor
 	return terrain
