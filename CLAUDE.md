@@ -118,7 +118,7 @@ res://
 │   │   ├── contracts/          # DTO inter-systèmes
 │   │   ├── terrain/            # HeightGrid, TerrainGen, CellPicker
 │   │   ├── city/               # CityState, PlacementValidator
-│   │   └── economy/            # Ledger  (+ Population et le résolveur à N1)
+│   │   └── economy/            # Ledger, Population, Staffing, Upkeep  (le résolveur à I3)
 │   ├── schema/                 # définitions des Resource (BuildingData…)
 │   ├── adapters/
 │   │   ├── terrain/  city/  hud/

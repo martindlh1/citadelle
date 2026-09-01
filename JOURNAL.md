@@ -4,6 +4,148 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-09-01 — `N1` : la population, et la règle que la spécification n'avait pas
+
+**État : terminé.** Branche `refactor/r0-demolition`, à la suite des quatre commits de `R0`.
+Les trois commandes passent : boot sans erreur ni warning, tout `src/domain/` parse,
+**296 tests verts contre 262**.
+
+### Ce que le jalon livre
+
+Quatre fichiers dans `domain/economy/`, aucun `Node`, aucun contrat créé.
+
+`Population` est le **jumeau de `Ledger`**, et le parallèle est délibéré plutôt que
+joli : ce sont deux plafonds bâtis sur le même modèle — une quantité, une capacité qu'un
+bâtiment relève, et un écrêtage quand cette capacité baisse. `Ledger.set_capacity()` rend ce
+qu'un entrepôt détruit fait perdre en ressources ; `Population.set_places()` rend ce qu'une
+habitation détruite fait perdre en habitants. Même signature, même raison.
+
+`Staffing` décide qui tourne et qui dort. `UpkeepResolver` fait manger le village et en tire
+la conséquence. `UpkeepReport` raconte ce qui s'est passé sans décider de ce qu'il faut en
+faire — la règle que `DESIGN.md` 9 garde du jeu supprimé.
+
+**Aucun DTO de `contracts/` n'entre**, et c'est la discipline que `R0` venait de réaffirmer :
+`StaffingPlan` et `UpkeepReport` restent dans `domain/economy/` tant qu'aucun **second
+système du domaine** ne les franchit. `domain/run/` aura le droit de tout lire, les adapters
+lisent le domaine — ni l'un ni l'autre n'est un critère.
+
+### Le sommeil n'est pas un état, c'est un calcul
+
+C'est la décision qui porte le jalon, et l'alternative était tentante : mémoriser sur chaque
+bâtiment s'il dort, et le mettre à jour à chaque famine, chaque destruction, chaque
+démolition. Deux états à garder d'accord finissent par diverger, et celui-ci aurait divergé
+**en silence** — un bâtiment endormi par erreur ne plante pas, il cesse simplement de
+produire.
+
+Rien n'est donc stocké : le plan se redérive de l'effectif et de l'ordre de pose à chaque
+demande. Le repeuplement automatique que `DESIGN.md` 3.4 réclame en toutes lettres devient
+gratuit, parce qu'il n'y a rien à repeupler — il n'y avait rien d'éteint.
+
+Et « éteindre du plus récent » revient à « garder le plus long préfixe qui tient », les deux
+formulations étant équivalentes puisque les sommes cumulées ne décroissent jamais. On écrit
+la seconde, qui se lit en une passe.
+
+### La règle que la spécification n'avait pas, et qui la sauve
+
+**Un bâtiment qui ne coûte aucun travailleur ne dort jamais.** Cette ligne n'était pas dans
+`DESIGN.md` 3.4 ; elle a été trouvée en écrivant la boucle, en vérifiant que l'interdit de
+blocage tenait vraiment.
+
+Il ne tenait pas. La soupape annoncée est l'habitation gratuite en bras : village bloqué, on
+bâtit une habitation, le plafond monte, la population repart. Mais une habitation neuve est
+le bâtiment **le plus récent**, donc le premier qu'un préfixe strict endort — et un chantier
+endormi n'avance pas. **La soupape existait dans la data et ne s'ouvrait jamais.**
+
+Le correctif tient en une ligne et se justifie tout seul : dormir veut dire « il manque des
+bras », et un bâtiment qui n'en demande aucun ne peut pas en manquer. Une palissade se bâtit
+pendant une famine.
+
+Ce que ça apprend vaut au-delà du cas : **une soupape se joue, elle ne se déclare pas.** La
+spécification avait raison sur le mécanisme — l'habitation gratuite — et n'avait pas vérifié
+qu'il était atteignable. C'est la même famille que les défauts de mesure que `F1` et `F2b`
+ont nommés, transposée d'une table à une règle : *cette règle pourrait-elle produire son
+effet si l'on jouait vraiment la situation qu'elle prétend débloquer ?*
+
+### L'interdit de blocage est gardé deux fois, et ce n'est pas un doublon
+
+`GameDatabase` refuse au boot un catalogue où aucun bâtiment ne loge sans coûter de bras. Il
+est là et non dans `BuildingData.missing_fields()` par la question que `CLAUDE.md` fait poser
+avant tout `missing_fields()` — *cette `Resource` a-t-elle sous les yeux tout ce que la règle
+regarde ?* Une `BuildingData` ne voit qu'elle-même et ne peut pas savoir qu'un *autre*
+bâtiment offre la sortie. Même partage que la règle du tour perdu, montée de `PhaseDef` à
+`RunBalance` dans le jeu d'avant.
+
+Un cas de test le double au niveau de `data/`, et la raison est mécanique : **un `assert()`
+est retiré d'un export**, alors qu'une suite de tests tourne toujours en débogage. Une règle
+dont la violation rend une partie définitivement injouable — sans rien casser ni rien
+signaler — est trop coûteuse à perdre pour ne reposer que sur la première des deux.
+
+**Et le contrôle a été vérifié en le faisant échouer**, plutôt qu'en le regardant passer :
+en donnant un bras à l'habitation et au Cœur, le boot s'arrête sur son message. Un contrôle
+qui n'a jamais refusé quoi que ce soit ne prouve pas qu'il refuserait.
+
+### Un résidu que `R0` avait laissé passer
+
+`ProductionBlock` portait encore `slots` et `skill_family` — des postes qu'une carte venait
+tenir, et une piste de compétence que le travail créditait. Deux champs de systèmes
+supprimés, et un `skill_family = &"harvest"` dans neuf `.tres` : exactement le genre de reste
+dont `R0` s'était promis de ne pas laisser traîner.
+
+Il n'en reste qu'un champ, `yield_per_turn`, et le bloc garde sa raison d'être : nullable, il
+rend la doctrine du zéro applicable — un bloc qui existe produit, donc son contenu se réclame
+sans condition.
+
+`upkeep_per_worker` devient `upkeep_per_inhabitant` et `roster_places` devient `housing`. Ces
+renommages n'étaient pas cosmétiques et ils avaient été **volontairement repoussés** de
+`R0`, qui s'interdisait tout ajout : un ouvrier était une fiche qu'on affectait, un habitant
+est une unité d'un compteur.
+
+### Un test qui mesurait autre chose que ce qu'il annonçait
+
+`BuildingSnapshot.create()` prend un `turns` qui est une **orientation**, et j'ai cru y
+passer la longueur d'un chantier. Le cas titré « un chantier immobilise comme un bâtiment
+fini » fabriquait donc un bâtiment **fini**, et il a échoué sur la seule assertion qui
+regardait son propre montage — `completed()` n'était pas vide.
+
+C'est la famille de défauts que ce projet nomme depuis `F1`, rencontrée pour la première fois
+dans un *fixture* plutôt que dans une table : le cas passait, il aurait simplement prouvé
+autre chose. L'assertion qui l'a attrapé est celle qui vérifiait la prémisse au lieu de la
+supposer, et c'est un argument pour en écrire plus souvent.
+
+### Ce que je n'ai pas fait
+
+**Pas de résolveur de production.** `DESIGN.md` 8 ne le liste pas dans `N1`, et il n'a rien à
+résoudre tant qu'aucun tour ne l'appelle — c'est `I3`. Un commentaire de `CLAUDE.md` disait
+« et le résolveur à `N1` » ; c'est la liste de jalons qui fait foi, et le commentaire a été
+corrigé.
+
+**Pas de baliste.** `DESIGN.md` 4.1 la porte, et ses trois champs qui comptent — portée,
+dégâts, cadence — n'existent pas avant `V2`. L'écrire aujourd'hui donnerait un bâtiment à
+moitié décrit, ce que la doctrine du projet refuse depuis `E1b` : un champ arrive avec le
+système qui le lit.
+
+**Aucun chiffre n'est équilibré.** `base_housing = 6`, `starting_population = 4`, et les
+coûts en bras de la table de 4.1 sont des points de départ. C'est `B1`.
+
+### Prochain jalon
+
+**`I3`** — le tour. `RunState` et `RunOrchestrator` réécrits sans phases, sans deck, sans
+roster ; le harnais Run refait autour d'un seul geste. C'est lui qui rend le jeu jouable à
+nouveau, et rien ne se regarde avant lui.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien.** Aucune `.tscn` ni `project.godot` touché.
+
+- **`HARNESS` vaut toujours `&"city"`.** `N1` n'a pas d'écran : la population ne se voit
+  qu'à `N2`, et `N2` attend `I3` pour avoir un tour à afficher.
+- **Neuf `.tres` de bâtiment ont changé** : un `workers`, un `housing` là où il y avait
+  `roster_places`, des PV alignés sur la table de `DESIGN.md` 4.1, et un bloc de production
+  réduit à son rendement.
+- **La branche n'est pas fusionnée** : `refactor/r0-demolition`, huit commits.
+
+---
+
 ## 2026-09-01 — le rescope, et `R0` : la moitié du code s'en va
 
 **État : terminé.** Branche `refactor/r0-demolition`, tirée de `master`. Les trois commandes
