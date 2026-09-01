@@ -6,7 +6,7 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ## 2026-09-01 — `N1` : la population, et la règle que la spécification n'avait pas
 
-**État : terminé.** Branche `refactor/r0-demolition`, à la suite des quatre commits de `R0`.
+**État : terminé.** Branche `feat/n1-population`, tirée de `master` après la fusion de `R0`.
 Les trois commandes passent : boot sans erreur ni warning, tout `src/domain/` parse,
 **296 tests verts contre 262**.
 
@@ -142,7 +142,12 @@ nouveau, et rien ne se regarde avant lui.
 - **Neuf `.tres` de bâtiment ont changé** : un `workers`, un `housing` là où il y avait
   `roster_places`, des PV alignés sur la table de `DESIGN.md` 4.1, et un bloc de production
   réduit à son rendement.
-- **La branche n'est pas fusionnée** : `refactor/r0-demolition`, huit commits.
+- **La branche n'est pas fusionnée** : `feat/n1-population`, quatre commits.
+- **Les quatre commits ont d'abord atterri sur `master`**, et il a fallu les déplacer :
+  `R0` avait été fusionnée entre les deux sessions, si bien que la branche de travail
+  n'existait plus et que je n'ai pas rebranché avant d'écrire. Rien n'est perdu — `master`
+  est revenu sur la fusion de `R0` — mais la règle vaut d'être relue : **vérifier sur quelle
+  branche on est au début d'un jalon, pas à son commit.**
 
 ---
 
