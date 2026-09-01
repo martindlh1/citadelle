@@ -76,70 +76,22 @@ obligatoire ; les autres sont optionnels :
 | `--shot-hover x,y` | cellule à désigner. À défaut, le centre de la carte |
 | `--shot-turns n` | quarts de tour appliqués à la **caméra** |
 | `--shot-rotate n` | quarts de tour appliqués au **bâtiment** à poser *(harnais Construction)* |
-| `--shot-evenings n` | soirs résolus avant de capturer *(harnais Cartes)*, journées jouées *(harnais Run)*, scène à montrer *(harnais HUD)* |
-| `--shot-phases n` | phases franchies **en plus** des journées *(harnais Run)* |
-| `--shot-fold` | replie le panneau d'affectation sur sa barre de tête *(harnais Run)* |
-| `--shot-piles` | ouvre la vue des piles *(harnais Run et Cartes)* |
-| `--shot-view v` | cran d'affichage du HUD : `complet`, `essentiel`, `masque`, ou `aucun` *(harnais Run)* |
-| `--shot-restart` | relance un run neuf, sur le seed suivant, avant de capturer *(harnais Run)* |
-| `--shot-select n` | sélectionne le corps de ce rang sur le champ de bataille *(harnais Bataille)* |
-| `--shot-foes` | passe la main à la vague et la rend au joueur *(harnais Bataille)* |
-| `--shot-rounds n` | laisse l'IA de la vague jouer ce nombre de manches *(harnais Bataille)* |
-| `--chronicle` | rejoue le run sous les quatre variantes d'équilibrage de `I2b` et imprime ce que ça donne, sans image *(harnais Run)* |
-
-**`--shot-foes` et `--shot-rounds` sont les deux valeurs du même interrupteur.** Depuis
-`F2b` l'IA tient la vague par défaut : `--shot-rounds` la laisse jouer, `--shot-foes`
-lui reprend la main pour capturer un tour qu'on mène soi-même. Une vue qui commute sur
-un état doit avoir un drapeau par valeur, sinon l'une des deux n'est jamais regardée.
-
-`--shot-fold`, `--shot-piles`, `--shot-restart` et `--shot-foes` sont des drapeaux **nus**, sans valeur :
-on les pose ou on ne les pose pas. Ce sont les deux cas les plus nets de la phrase ci-dessous, parce que ni
-le repli ni la vue des piles ne s'obtiennent autrement que par un geste du joueur — aucune
-suite de journées ne les produit. Sans eux, la seule façon de regarder un HUD replié ou
-une pioche ouverte serait de modifier du code pour la regarder, ce qui revient à ne jamais
-la regarder. `--shot-fold` se cumule avec `--shot-view`, sauf avec `aucun`, qui emporte le
-HUD entier ; `--shot-piles` passe par-dessus tous les crans, étant une modale.
-
-`--chronicle` est le seul drapeau qui ne capture rien, et il se lance sans `--shot` :
-
-```bash
-"$GODOT_BIN" --headless --path . -- --chronicle
-```
-
-Il rejoue le run entier sous les quatre croisements de `I2b` — deux modèles de journée
-× deux sorts de la main non jouée —, sur le même relief et les mêmes gestes, puis imprime
-une chronique par variante et quatre tables de comparaison. **Chaque table annonce ce
-qu'elle doit montrer**, et le verdict de fin dit ce qu'elle ne montrera jamais : « est-ce
-une corvée » n'a pas de colonne. Il dégrossit un arbitrage, il ne le rend pas.
-
-`--shot-view` existe pour la raison qui a valu son drapeau à `--shot-evenings`, et que
-`I2` a reformulée en une phrase : **un écran qu'aucune capture ne peut atteindre est celui
-que personne ne regardera.** Replier le rapport et masquer le HUD sont deux gestes qui ne
-changent que l'image, donc les deux seuls dont ni le parsing ni les tests ne diront jamais
-rien. `aucun` rend la carte entière sans rien dessus, ce qui est aussi la façon de
-regarder un village de quinze journées.
-
-`--shot-phases` vient de la même phrase, appliquée à la journée elle-même. `--shot-evenings`
-résout des **journées entières**, donc une capture s'arrêtait toujours sur le premier
-créneau : toutes les autres phases étaient inatteignables. Ça n'a gêné personne tant
-qu'une phase ressemblait à sa voisine, et c'est devenu un trou à `P1a`, quand une phase a
-eu une couleur à montrer. `--shot-evenings 3 --shot-phases 1` capture donc l'après-midi du
-quatrième jour.
-
-Sur le harnais **Run**, `--shot-evenings 0` est un cas à part : il capture l'écran de
-**fondation**, avant que le run n'ait commencé. C'est le seul état que les autres valeurs
-ne peuvent pas atteindre, puisque toute journée jouée commence par poser le Cœur. La
-valeur est comparée en texte et non convertie, pour distinguer un zéro écrit exprès d'un
-drapeau absent.
 
 `--shot-hover` a une valeur par défaut plutôt que rien, parce qu'une capture qui ne
 montre pas la surbrillance ne prouve rien à son sujet, et que souris à `(0, 0)` le
 survol réel tomberait hors carte. `--shot-rotate` existe pour la même raison : sans
-lui, aucune capture ne montrerait jamais un bâtiment pivoté. Et `--shot-evenings` pour
-une raison voisine mais plus forte : un rapport de fin de soirée est du texte fabriqué à
-la main, donc exactement le genre de code que ni le parsing ni les tests n'atteignent —
-sans ce drapeau, le chemin de résolution d'un harnais ne serait jamais emprunté par un
-contrôle.
+lui, aucune capture ne montrerait jamais un bâtiment pivoté.
+
+**Les drapeaux ont fondu avec les harnais, à `R0`.** Il en restait quatorze, il en reste
+quatre. Les dix qui partent — `--shot-evenings`, `--shot-phases`, `--shot-fold`,
+`--shot-piles`, `--shot-view`, `--shot-restart`, `--shot-select`, `--shot-foes`,
+`--shot-rounds` et `--chronicle` — servaient tous des harnais supprimés.
+
+La phrase qui les a fait naître, elle, ne bouge pas, et elle vaut pour ceux qui viendront :
+**un écran qu'aucune capture ne peut atteindre est celui que personne ne regardera.** Le cas
+le plus net était le repli d'un panneau — un état qu'aucune suite de journées ne produit,
+puisqu'il ne s'obtient que par un geste. Corollaire appris à `P1a` : quand une vue se met à
+commuter sur un état, vérifier **d'abord** qu'un drapeau atteint chacune de ses valeurs.
 
 **Écrire l'image hors du projet.** Une capture déposée dans l'arborescence est
 importée par le prochain scan de l'éditeur, qui lui colle un `.png.import` à ranger
@@ -154,58 +106,6 @@ fabriqués à la main, et les trois commandes de vérification ne regardent pas 
 Celle du harnais Construction imprime à la place la ligne de survol : la cellule visée,
 son terrain, et le verdict du domaine sur une pose à cet endroit. C'est la légende de
 l'image — le fantôme y est vert ou rouge, cette ligne dit pourquoi.
-
-Celle du harnais Cartes imprime la ligne de survol **et** la table des actions posées :
-quelle carte, sur quelle cible, combien de postes, et qui les tient. C'est ce qui a
-attrapé le seul vrai bug de `D2` — deux *Récolter* sur une même cabane à deux postes, et
-trois ouvriers dedans. Il ne se voyait ni au parsing, ni aux tests, ni à l'œil sur
-l'image : il se lisait dans cette table.
-
-Celle du harnais **Run** imprime le bandeau de phase, la **réserve chiffrée** et la ligne
-de survol. Elle joue une journée entière par `--shot-evenings` plutôt qu'un geste : ouvrir
-un chantier, le payer, y envoyer des ouvriers, le voir monter d'un cran et le relief se
-creuser à côté. Une capture qui ne montrerait qu'une carte posée ne dirait rien de ce que
-`I1` ajoute, et la réserve imprimée est la seule preuve que la bourse a bien été débitée.
-
-Elle s'arrête **au milieu** d'une phase depuis `W2`, sur une dernière manche posée et
-affectée qu'elle ne finit pas. Prise juste après une résolution, elle montrait un plateau
-vide et six fiches oisives — c'est-à-dire tout sauf ce que le panneau d'affectation fait.
-Elle remplit ces postes par le **bouton**, ce qui fait passer le chemin neuf du jalon sous
-le seul contrôle qui regarde l'écran.
-
-Depuis `I2`, elle joue le **run entier** et non plus une journée : `--shot-evenings 16`
-fonde le village, traverse quinze journées, encaisse les trois vagues du calendrier et
-s'arrête sur le bandeau de fin. Une vague qui tombe sur la dernière journée demandée reste
-**en approche**, de sorte que les deux moitiés de la fin de journée — l'attente et la
-facture — soient chacune atteignables en une commande. Elle imprime aussi une ligne
-d'armées, pour la raison qui vaut déjà pour la réserve : un panneau de bataille masqué et
-un panneau qui annonce zéro brèche se ressemblent beaucoup en capture, et ne disent pas du
-tout la même chose.
-
-Depuis `P1b`, elle imprime une ligne de **mise en page** : où finit la colonne de droite,
-où commence la main, et lequel des deux mord sur l'autre. Elle existe parce que le défaut
-qu'elle mesure a mis trois jalons à se faire voir — le panneau d'affectation descendait
-sur les cartes, et le dire demandait de sonder une image pixel par pixel, ce qui coûte une
-heure et rend un chiffre en pixels de **fenêtre** là où la mise en page raisonne en pixels
-**logiques** *(voir la sonde ci-dessous)*. Les deux bords sont demandés aux vues, en
-`global_position`, donc dans le même repère. Un recouvrement positif sur cette ligne est
-un défaut, quelle que soit la résolution demandée.
-
-Elle **n'imprime plus** le rapport du dernier soir : depuis `E2` c'est un panneau, et un
-panneau se regarde. Le réécrire en texte à côté aurait donné deux mises en forme du même
-rapport, dont une seule serait vérifiée par la capture — donc l'autre dériverait. `W2` lui
-retire la **table des actions posées** pour la même raison, et à contrecœur : c'est elle
-qui avait attrapé le seul vrai bug de `D2`. Elle est désormais dessinée par le panneau,
-avec les ouvriers qui la tiennent, et la garder en texte aurait laissé la version imprimée
-dire vrai pendant qu'une mise en page fautive cachait l'autre. `P1b` lui retire les **trois
-lignes de piles** par le même raisonnement : elles sont une vue depuis ce jalon, et `P`
-l'ouvre.
-
-Le harnais **HUD** est le seul dont `--shot-evenings` ne désigne pas un temps mais un
-**cas** : il ne joue rien, il fabrique des états — réserve pleine qui gaspille, famine,
-phase du milieu de journée — qu'un vrai run met une dizaine de journées à atteindre. Il
-réutilise le drapeau plutôt que d'en inventer un neuvième, ce que `dev_shot.gd` prévoit
-en posant que chaque harnais ignore ceux qui ne le concernent pas.
 
 **Les coordonnées de la sonde ne sont pas des pixels de l'image.** `project.godot` est
 en `stretch/mode="canvas_items"` : le viewport garde la résolution de base du projet
@@ -226,59 +126,42 @@ qu'il a demandée. Une capture qui paraît « plus zoomée » qu'une autre est p
 toujours ça, et non le rendu qui a changé — au moindre doute, `cmp` sur les deux
 `.png` tranche là où l'oeil se trompe.
 
-## Les harnais qui n'affichent rien
+## Les harnais, après `R0`
 
-Tous les harnais ne dessinent pas. Les harnais **Économie** et **Effectifs** sont des
-rapports texte : ils impriment leurs tableaux sur la **sortie standard** en plus de
-l'écran, donc
+Il en reste **deux** sur neuf, et ce sont ceux des deux systèmes que le rescope garde
+intacts : **Terrain** et **Construction**. Les sept autres exerçaient l'Économie d'avant, les
+Effectifs, les Cartes, le Combat, la Bataille, le HUD et le Run — tous supprimés. Le harnais
+par défaut est désormais **Construction**.
+
+**Ce qui revient, et quand.** L'Économie à `N1`, le Run à `I3`, la génération mesurée sur
+deux cents seeds à `T4`, la Bataille à `V2`. Ajouter un harnais reste un `.gd` et une ligne
+de `HARNESS_SCRIPTS` — jamais une scène, jamais une intervention dans l'éditeur.
+
+Trois leçons de la famille survivent aux harnais qui les ont produites, et elles valent
+d'autant plus pour ceux qu'on écrira à neuf :
+
+**Un harnais qui mesure doit être lu, pas seulement lancé.** Un tableau de chiffres compile,
+s'aligne, ne lève aucune erreur, et peut être **faux sur ce qu'il prétend montrer** — ce qui
+est pire qu'une panne, parce qu'on lui fait confiance. D'où la discipline : chaque table
+annonce en toutes lettres ce qu'elle doit montrer, et le verdict de fin dit ce qu'elle ne
+montrera jamais.
+
+**Une table choisit son moment, et l'écrit dans son titre.** Deux colonnes issues du même
+compteur ne prouvent rien en se ressemblant ; une mesure qui emprunte un raccourci mesure le
+raccourci ; une mesure prise au mauvais instant répond à une autre question que la sienne. Le
+test qui les attrape toutes est le même — *cette table pourrait-elle rendre ce chiffre-là
+sans que la règle qu'elle prétend montrer existe ?*
+
+**Un rapport qu'on ne voit qu'en lançant le jeu finit par ne plus être lu.** Les harnais qui
+ne dessinent pas impriment sur la **sortie standard** en plus de l'écran, de sorte que
 
 ```bash
 "$GODOT_BIN" --headless --quit --path .
 ```
 
-suffit à le lire, sans capture ni fenêtre. C'est la même commande que la première
-vérification, ce qui est voulu — un rapport qu'on ne voit qu'en lançant le jeu finit
-par ne plus être lu du tout.
+suffise à les lire — la même commande que la première vérification, ce qui est voulu.
 
-Ce rapport se termine sur un verdict d'équilibrage que les tests ne peuvent pas
-donner, puisqu'ils travaillent sur des chiffres choisis : avec les valeurs de
-`data/balance/`, qui casse en premier — la famine ou la réserve pleine.
-
-Il tient aussi une **file de construction** depuis `E1b` : ce que la bourse refuse à
-l'ouverture y reste, et le harnais en retente la tête un soir à la fois. La colonne de
-droite dit donc aussi le soir où chaque bâtiment différé devient enfin payable.
-
-Le harnais **Effectifs**, arrivé à `W1`, est le premier à composer **deux systèmes du
-domaine** : chaque soir, l'Économie résout la production, les Effectifs distribuent
-l'XP, et la main-d'œuvre est reprojetée avant le soir suivant — ce que
-`RunOrchestrator` fera à `I1`. Sa table montre la récolte à côté du multiplicateur qui
-vient de la produire, et son verdict répond à trois questions que les tests ne peuvent
-pas poser : au bout de combien de soirs un ouvrier devient bon, ce que la spécialisation
-rapporte une fois la troncature passée, et ce qu'une absence coûte.
-
-Le harnais **Cartes** en faisait partie à `D1`, où il mesurait sur deux cents seeds ce
-qu'un draft coûte en dilution. **`D2` l'a rendu graphique** : ce qu'il tabulait se lit
-maintenant en jouant, exactement comme le rapport de `C1` a cédé la place à la scène de
-`C2`. Son verdict statistique avait fait son travail et n'avait pas à être rejoué à
-chaque lancement ; les chiffres restent dans l'entrée `D1` du journal.
-
-Il a été le premier harnais où une **phase entière** se jouait : prendre une carte, la
-poser sur une cible, y envoyer des ouvriers, résoudre le soir. Il compose trois systèmes
-du domaine — Cartes, Économie, Effectifs — là où celui des Effectifs en composait deux.
-
-Le harnais **Run**, arrivé à `I1`, est le seul qui ne montre pas un système mais **une
-journée**, et le seul à ne plus appeler le domaine du tout : tout passe par
-`RunManager`. Il lit son bandeau de phase et les gestes qu'il allume sur la `PhaseDef`
-courante, jamais sur un nom écrit à l'écran — c'est ce qui fera de l'arbitrage de `I2b`
-un échange de `.tres`. Une carte de bâtiment y affiche son coût et se voit refuser quand
-la réserve ne suit pas, un chantier monte vraiment d'un cran, et le relief se creuse
-vraiment. Il remplace le harnais Cartes comme scène de travail par défaut ; les autres
-restent utiles pour isoler un système.
-
-`Tab` y fait une seule chose, exprimée deux fois : elle agit sur ce que la carte tenue
-**ferait**. Elle pivote un bâtiment, elle retourne un terrassement.
-
-Son rapport distingue les **deux sortes de résolution** de la journée : chaque phase
-imprime ce qu'elle a produit, et seule celle qui ferme la journée porte la ligne
-d'upkeep, marquée « fin de journée ». Une ligne d'upkeep à zéro sur les autres phases se
-lirait comme un soir où personne n'a mangé.
+**Et un chemin de capture emprunte les fonctions de geste du harnais**, ou il refait leur
+rafraîchissement à la main. Une capture scriptée qui appelle le domaine en direct ne redessine
+rien : c'est ainsi que toutes les captures du projet ont montré pendant trois jalons une main
+d'avant leurs propres poses.
