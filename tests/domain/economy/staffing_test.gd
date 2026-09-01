@@ -152,3 +152,40 @@ func test_a_construction_site_commits_like_a_finished_building() -> void:
 	var city := CitySnapshot.create(placed)
 	assert_array(city.completed()).is_empty()
 	assert_int(Staffing.resolve(city, 5).committed()).is_equal(3)
+
+# --- ce que le village peut posséder de plus --------------------------------
+
+func test_an_empty_village_has_the_hands_of_its_headcount() -> void:
+	assert_bool(Staffing.has_the_hands(CitySnapshot.empty(), 4, 4)).is_true()
+	assert_bool(Staffing.has_the_hands(CitySnapshot.empty(), 4, 5)).is_false()
+	assert_int(Staffing.hands_short(CitySnapshot.empty(), 4, 5)).is_equal(1)
+
+## Le manque est un écart, comme celui de la réserve : il dit **combien** il en faut de
+## plus, parce que c'est ce qu'une fiche affiche avant qu'on clique.
+func test_the_shortfall_counts_the_hands_that_are_missing() -> void:
+	assert_int(Staffing.hands_short(_city([2, 3]), 6, 4)).is_equal(3)
+
+func test_a_village_with_room_to_spare_is_short_of_nothing() -> void:
+	assert_int(Staffing.hands_short(_city([2, 3]), 10, 4)).is_equal(0)
+
+## **Le cas qui protège la règle**, et c'est le piège que le docstring décrit : un village
+## qui a déjà un endormi rend `available() == 1`, et ouvrir un chantier d'un bras sur cette
+## base creuserait le manque au lieu de le combler.
+##
+## Le cas vérifie sa propre prémisse — sans l'endormi, il ne prouverait rien : les deux
+## réponses coïncideraient et l'on pourrait remplacer la règle par la mauvaise sans qu'il
+## tombe.
+func test_the_question_is_asked_to_the_whole_demand_and_not_to_the_free_hands() -> void:
+	var city := _city([2, 2, 2])
+	var plan := Staffing.resolve(city, 5)
+	assert_bool(plan.has_sleepers()) \
+		.override_failure_message("sans endormi, le cas ne prouve rien") \
+		.is_true()
+	assert_int(plan.available()).is_equal(1)
+	assert_bool(Staffing.has_the_hands(city, 5, 1)).is_false()
+	assert_int(Staffing.hands_short(city, 5, 1)).is_equal(2)
+
+## La soupape, vue depuis la porte qui la garde : un bâtiment gratuit en bras s'ouvre dans
+## un village entièrement immobilisé. Sans ce zéro, DESIGN.md 3.4 n'a plus de sortie.
+func test_a_building_that_costs_nobody_is_always_allowed() -> void:
+	assert_bool(Staffing.has_the_hands(_city([4]), 4, 0)).is_true()

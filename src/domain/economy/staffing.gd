@@ -84,3 +84,30 @@ static func demand(city: CitySnapshot) -> int:
 	for building in city.buildings():
 		total += maxi(0, building.data().workers)
 	return total
+
+## Combien de bras manquent au village pour **posséder** un bâtiment de plus. 0 s'il les a.
+##
+## La question se pose à la demande totale de la ville et non aux bras que le plan laisse
+## libres, et l'écart entre les deux est un piège. Une ville de trois bâtiments à deux bras
+## pour cinq habitants a un endormi et rend `available() == 1` : ouvrir un chantier d'un bras
+## sur cette base **creuserait** le manque, et endormirait un bâtiment de plus au tour
+## suivant. Ce que DESIGN.md 3.2 fait dire aux travailleurs est « ce que le village peut
+## posséder », pas « ce qu'il lui reste sous la main cet instant ».
+##
+## **Elle a vécu en privé chez RunOrchestrator jusqu'à N2**, et elle en sort pour la raison
+## qui a sorti Ledger.shortfall() : une fiche de bâtiment doit dire « il te manque 2 bras »
+## avant qu'on clique. Une vue qui poserait la question à `available()` — le chiffre qu'elle
+## a justement sous les yeux — répondrait autre chose que le domaine, et le piège ci-dessus
+## dit que ce serait plus permissif. C'est exactement le genre de désaccord silencieux que
+## CLAUDE.md interdit à un adapter d'inventer.
+static func hands_short(city: CitySnapshot, headcount: int, workers: int) -> int:
+	assert(headcount >= 0, "effectif négatif")
+	return maxi(0, demand(city) + maxi(0, workers) - headcount)
+
+## Le village peut-il posséder un bâtiment qui immobilise ce nombre de bras ?
+##
+## Le oui/non de hands_short(), écrit avec lui pour la raison que Ledger.can_afford() donne
+## sur shortfall() : la règle est à un seul endroit, donc celle qui décide est celle qu'on
+## lit.
+static func has_the_hands(city: CitySnapshot, headcount: int, workers: int) -> bool:
+	return hands_short(city, headcount, workers) == 0

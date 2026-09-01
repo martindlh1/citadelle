@@ -123,16 +123,37 @@ func deposit(bundle: Dictionary[StringName, int]) -> Dictionary[StringName, int]
 			stored[resource] = granted[resource]
 	return stored
 
-## La réserve couvre-t-elle ce coût, ressource par ressource ?
+## Ce qui manque à la réserve pour couvrir ce coût, ressource par ressource.
 ##
-## Aucune conversion : manquer d'une seule ressource suffit à refuser, quel que soit
-## l'excédent des autres.
-func can_afford(cost: Dictionary[StringName, int]) -> bool:
+## Vide quand elle le couvre. Une ressource qui suffit n'y figure pas, de sorte que ce lot
+## se lise comme la liste de ce qui bloque — même contrat que deposit(), qui ne nomme que
+## ce qui est entré.
+##
+## **C'est la raison d'un refus, dite en chiffres**, et elle est ici parce que la règle est
+## ici. `REASON_NOT_ENOUGH_RESOURCES` dit qu'on ne peut pas ; une fiche de bâtiment doit
+## pouvoir dire « il te manque 5 bois » avant qu'on clique, et si elle recalculait cet écart
+## elle tiendrait une seconde copie de la comparaison ci-dessous. Une vue demande, le domaine
+## répond — c'est la même porte que can_afford(), ouverte un cran plus loin.
+##
+## Aucune conversion : manquer d'une seule ressource suffit, quel que soit l'excédent des
+## autres.
+func shortfall(cost: Dictionary[StringName, int]) -> Dictionary[StringName, int]:
+	var missing: Dictionary[StringName, int] = {}
 	for resource in cost:
 		assert(cost[resource] >= 0, "coût négatif en %s : %d" % [resource, cost[resource]])
-		if amount(resource) < cost[resource]:
-			return false
-	return true
+		var short := cost[resource] - amount(resource)
+		if short > 0:
+			missing[resource] = short
+	return missing
+
+## La réserve couvre-t-elle ce coût, ressource par ressource ?
+##
+## Le oui/non de shortfall(), et **écrit avec lui** plutôt qu'à côté : deux boucles qui
+## comparent le stock au coût sont deux occasions de diverger, et celle qui décide n'est pas
+## forcément celle qu'on lit. Le prix est un Dictionary alloué là où un `return false`
+## suffisait ; il se paie une fois par pose tentée, ce qui ne se mesure pas.
+func can_afford(cost: Dictionary[StringName, int]) -> bool:
+	return shortfall(cost).is_empty()
 
 ## Paie ce coût. Rend faux et ne mute rien si la réserve ne le couvre pas.
 ##
