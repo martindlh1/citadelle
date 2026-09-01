@@ -104,7 +104,7 @@ func _ready() -> void:
 	_bar = ResourceBar.create(_palette)
 	add_child(_corner(_bar, Control.SIZE_SHRINK_END, Control.SIZE_SHRINK_END))
 	EventBus.turn_resolved.connect(_on_turn_resolved)
-	_light_the_turn()
+	_world.settle_at(DevWorld.REST)
 	if DevShot.has_flag(DevShot.CHRONICLE_FLAG):
 		_write_chronicle()
 		return
@@ -203,7 +203,12 @@ func _pass_turn() -> void:
 	_delta = _difference(before, _state().ledger().amounts())
 	_last_action = "Tour %d résolu." % report.turn()
 
-## Ce qu'un tour résolu change à l'écran : le bâti, et la lumière.
+## Ce qu'un tour résolu change à l'écran : le bâti, et un jour qui passe.
+##
+## **Le soleil fait une révolution entière**, puis revient se poser à midi. C'est la seule
+## chose de cet écran qui dise le temps en le montrant plutôt qu'en l'écrivant, et elle ne
+## dit pas *quel* jour on est : la lumière au repos est la même au premier tour et au
+## vingtième. Le run fini est la seule exception, et il tombe dans la nuit.
 ##
 ## Il passe par le bus plutôt que par le retour de `end_turn()`, ce qui est le partage que
 ## `CLAUDE.md` veut — un adapter entend ce que le domaine a fait, il ne va pas le chercher.
@@ -211,7 +216,10 @@ func _pass_turn() -> void:
 ## défaut que `P1a` a trouvé venait précisément d'un chemin qui court-circuitait ça.
 func _on_turn_resolved(_report: TurnReport) -> void:
 	_renderer.rebuild(_state().city())
-	_light_the_turn()
+	if _state().is_over():
+		_world.fall_to_night()
+		return
+	_world.pass_a_day()
 
 ## Rapporte ce que le domaine a répondu, sans le juger, et redessine si ça a bougé.
 func _report_gesture(what: String, result: PlayResult) -> void:
@@ -227,19 +235,6 @@ func _report_gesture(what: String, result: PlayResult) -> void:
 	if result.spilled() > 0:
 		extra += ", %d unité(s) renversée(s)" % result.spilled()
 	_last_action = "%s en %s%s." % [what, result.anchor(), extra]
-
-## Le soleil suit l'avancement du run : lever au premier tour, coucher au dernier.
-##
-## `DevWorld.light_day()` prend une **fraction** et jamais un nom de moment, ce que `I1`
-## avait posé pour une journée en phases et qui survit tel quel à leur disparition : la
-## journée qu'il éclaire est maintenant le run entier, et pas une ligne n'a bougé. Un run
-## fini passe à la nuit.
-func _light_the_turn() -> void:
-	if _state().is_over():
-		_world.light_night()
-		return
-	var length: int = maxi(1, _state().balance().run.turns - 1)
-	_world.light_day(float(_state().turn() - 1) / float(length))
 
 # --- ce que le fantôme montre ------------------------------------------------
 
@@ -515,15 +510,20 @@ func _capture_if_asked() -> void:
 		_world.rig().rotate_steps(turns)
 		var seconds: float = GameDatabase.get_balance().camera.rotation_seconds
 		await get_tree().create_timer(seconds).timeout
-	# Le soleil ne glisse pas sur trois images de chauffe : sans ce pas forcé, une capture
-	# scriptée photographierait une lumière à mi-course.
-	_world.settle_light(float(_state().turn() - 1)
-		/ float(maxi(1, _state().balance().run.turns - 1)))
+	# Le soleil ne parcourt pas sa course en trois images de chauffe : sans ce pas forcé,
+	# une capture scriptée photographierait une lumière arrêtée n'importe où. Elle se pose
+	# donc là où le jeu la laisse entre deux tours — à midi, ou dans la nuit si le run est
+	# fini —, ce qui est aussi ce qui rend deux captures comparables. La sonde ci-dessous
+	# a bougé le soleil, donc ce réglage vient forcément après elle.
+	_world.settle_at(DevShot.sun_moment(
+		DevWorld.MIDNIGHT if _state().is_over() else DevWorld.REST))
 	for _frame in DevShot.WARMUP_FRAMES:
 		await get_tree().process_frame
 	var camera := _world.rig().get_camera()
 	print("[run_harness] cadrage : camera.size = %.3f, viewport = %s"
 		% [camera.size, get_viewport().get_visible_rect().size])
+	print("[run_harness] %s" % _probe_the_sun())
+	print("[run_harness] %s" % _probe_the_light())
 	# Les deux vues du HUD disent où elles sont, en coordonnées de mise en page et non en
 	# pixels d'image : `P1b` a payé une heure pour apprendre que sonder un PNG rend un
 	# nombre dans le mauvais repère, le viewport logique étant plus petit que la fenêtre.
@@ -601,6 +601,62 @@ func _corner(view: Control, horizontal: Control.SizeFlags,
 	view.size_flags_vertical = vertical
 	slot.add_child(view)
 	return slot
+
+## Sonde du cycle solaire : le soleil repart-il **à chaque** tour ?
+##
+## **Ce que cette ligne doit montrer**, et c'est la seule chose qu'aucune image ne peut dire :
+## qu'une seconde journée bouge autant que la première. La première version de la course
+## visait un moment absolu, si bien qu'elle se jouait au premier jour et à aucun autre —
+## rien ne plantait, rien ne compilait de travers, et les quatre captures du cycle étaient
+## toutes justes, puisqu'une image fixe ne dit rien d'un mouvement **absent**.
+##
+## Elle joue donc deux journées de suite, en pas forcés d'un quart de course, et imprime où
+## le soleil s'arrête à chaque quart. Deux séries identiques et non triviales — `0.50, 0.75,
+## 0.00, 0.25` — disent que la course tourne et se rejoue ; une seconde série figée sur
+## `0.25` serait le bug, à la lecture.
+##
+## Elle passe par `pass_a_day()`, la fonction que le tour appelle vraiment. Un scripteur qui
+## emprunte un autre chemin mesure cet autre chemin : `P1a` a payé trois jalons pour cette
+## phrase.
+func _probe_the_sun() -> String:
+	var days := PackedStringArray()
+	for _day in 2:
+		var quarters := PackedStringArray()
+		_world.pass_a_day()
+		for _quarter in 4:
+			_world.step_the_course(DevWorld.DAY_SECONDS / 4.0)
+			quarters.append("%.2f" % _world.moment())
+		days.append("[%s]" % ", ".join(quarters))
+	return "soleil : deux journées jouées d'affilée, %s" % " puis ".join(days)
+
+## Pas d'échantillonnage de la course, pour la sonde de régularité.
+const LIGHT_SAMPLES := 72
+
+## Sonde de régularité : la lumière tourne-t-elle d'un pas **égal** tout au long de la course ?
+##
+## **Ce que cette ligne doit montrer**, et c'est la seconde chose qu'aucune image fixe ne dit :
+## que le passage à la nuit ne se fait pas d'un coup. La bascule du soleil à la lune n'est pas
+## qu'une baisse d'intensité — la lumière **change de direction** de plus de cent trente
+## degrés —, et l'étaler sur un dixième de la course la fait lurcher là où tous les autres
+## dixièmes sont doux. Chaque point du cycle était pourtant juste pris isolément : c'est le
+## chemin entre eux qui ne l'était pas.
+##
+## Elle échantillonne la course en pas réguliers et imprime le **pire** écart angulaire à côté
+## du pas moyen. Deux nombres du même ordre disent une rotation régulière ; un pire écart
+## plusieurs fois le moyen serait l'à-coup, en chiffres.
+##
+## Elle repose le soleil en sortant, parce qu'elle l'a promené pour mesurer.
+func _probe_the_light() -> String:
+	var worst := 0.0
+	var previous := Vector3.ZERO
+	for sample in LIGHT_SAMPLES + 1:
+		_world.settle_at(DevWorld.REST + float(sample) / float(LIGHT_SAMPLES))
+		var here := _world.sun_direction()
+		if sample > 0:
+			worst = maxf(worst, rad_to_deg(previous.angle_to(here)))
+		previous = here
+	return "lumière : pas moyen %.1f°, pire pas %.1f° sur %d échantillons" % [
+		360.0 / float(LIGHT_SAMPLES), worst, LIGHT_SAMPLES]
 
 func _make_label() -> Label:
 	var label := Label.new()

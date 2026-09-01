@@ -50,6 +50,19 @@ const SHOT_ROTATE_FLAG := "--shot-rotate"
 ## capture montrerait un village qu'on vient de fonder.
 const SHOT_PASSES_FLAG := "--shot-passes"
 
+## Moment du cycle solaire à photographier, en fraction de révolution : 0 à l'aube, 0,25 à
+## midi, 0,5 au crépuscule, 0,75 au cœur de la nuit. Lu par les harnais qui éclairent.
+##
+## Une capture se pose sinon là où le jeu laisse le soleil entre deux tours, c'est-à-dire
+## **toujours à midi** : la course entière serait un état qu'aucune image ne peut atteindre,
+## donc que personne ne regarderait. C'est la phrase que `P1a` a laissée au projet, et le
+## corollaire qu'elle traîne — quand une vue se met à commuter sur un état, vérifier d'abord
+## qu'un drapeau atteint **chacune** de ses valeurs.
+##
+## Il ne sert qu'à regarder. Aucun geste du jeu ne le produit, et c'est bien pour ça qu'il
+## faut un drapeau.
+const SHOT_SUN_FLAG := "--shot-sun"
+
 ## Rejoue le run entier sans écran et imprime ce que ça donne, tour par tour. Drapeau **nu**.
 ##
 ## Le seul drapeau de ce fichier qui ne capture pas une image, et il est ici quand même :
@@ -87,6 +100,16 @@ static func argument(flag: String) -> String:
 	if index < 0 or index + 1 >= args.size():
 		return ""
 	return args[index + 1]
+
+## Moment du cycle solaire demandé, ou `fallback` si le drapeau est absent.
+##
+## `to_float()` rend 0.0 sur une chaîne vide, ce qui est **l'aube** et non « pas de
+## demande » : les deux se distinguent donc en regardant la présence du drapeau, jamais sa
+## valeur. Sans ça, toute capture sans drapeau se prendrait au lever du jour.
+static func sun_moment(fallback: float) -> float:
+	if not has_flag(SHOT_SUN_FLAG):
+		return fallback
+	return argument(SHOT_SUN_FLAG).to_float()
 
 ## Cellule à désigner, lue en « x,y ». `fallback` à défaut, et aussi sur un argument
 ## mal formé : une capture doit montrer quelque chose plutôt qu'échouer sur une virgule.

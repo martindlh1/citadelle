@@ -83,6 +83,7 @@ obligatoire ; les autres sont optionnels :
 | `--shot-turns n` | quarts de tour appliqués à la **caméra** |
 | `--shot-rotate n` | quarts de tour appliqués au **bâtiment** à poser *(harnais Construction et Run)* |
 | `--shot-passes n` | tours à résoudre avant de capturer *(harnais Run)* |
+| `--shot-sun f` | moment du cycle solaire : 0 aube, 0.25 midi, 0.5 crépuscule, 0.75 nuit *(harnais Run)* |
 | `--chronicle` | rejoue le run entier sans écran et imprime la table, puis quitte *(harnais Run)* |
 
 `--shot-hover` a une valeur par défaut plutôt que rien, parce qu'une capture qui ne
@@ -91,7 +92,7 @@ survol réel tomberait hors carte. `--shot-rotate` existe pour la même raison :
 lui, aucune capture ne montrerait jamais un bâtiment pivoté.
 
 **Les drapeaux ont fondu avec les harnais, à `R0`**, et `I3` en rend deux. Il en restait
-quatorze avant le rescope, il en reste six. Les dix qui étaient partis servaient des harnais
+quatorze avant le rescope, il en reste sept. Les dix qui étaient partis servaient des harnais
 supprimés ; `--shot-passes` remplace `--shot-evenings` pour un tour au lieu d'une journée en
 phases, et `--chronicle` revient tel quel parce que la question qu'il pose n'a pas changé.
 
@@ -119,6 +120,15 @@ fabriqués à la main, et les trois commandes de vérification ne regardent pas 
 Celle du harnais Construction imprime à la place la ligne de survol : la cellule visée,
 son terrain, et le verdict du domaine sur une pose à cet endroit. C'est la légende de
 l'image — le fantôme y est vert ou rouge, cette ligne dit pourquoi.
+
+Celle du harnais Run en imprime **deux**, et toutes deux disent ce qu'une image fixe ne peut
+pas dire. La première joue deux journées d'affilée et donne où le soleil s'arrête à chaque
+quart : deux séries identiques et non triviales disent que la course se **rejoue**, une
+seconde série figée serait le bug. La seconde échantillonne la course et donne le pire écart
+angulaire de la lumière à côté du pas moyen : deux nombres du même ordre disent une rotation
+régulière, un pire écart plusieurs fois le moyen serait l'à-coup. Les deux existent parce
+qu'un défaut d'animation est invisible sur une capture — la première a été écrite après avoir
+livré une course qui ne partait qu'au premier jour.
 
 **Les coordonnées de la sonde ne sont pas des pixels de l'image.** `project.godot` est
 en `stretch/mode="canvas_items"` : le viewport garde la résolution de base du projet
