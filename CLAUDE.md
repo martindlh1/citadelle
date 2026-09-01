@@ -49,7 +49,8 @@ Un système du domaine expose des fonctions qui prennent un état et rendent un 
 ```gdscript
 class_name ProductionResolver extends RefCounted
 
-static func resolve(city: CityState, assign: Assignment, roster: Roster) -> ProductionReport
+static func resolve(city: CitySnapshot, terrain: TerrainQuery,
+        people: PopulationState, balance: EconomyBalance) -> ProductionReport
 ```
 
 Le domaine **ne notifie personne**. Il retourne. C'est l'appelant qui publie.
@@ -64,64 +65,41 @@ Les DTO échangés entre systèmes. C'est le seul endroit où deux systèmes se 
 
 | DTO | Producteur | Consommateur |
 |---|---|---|
-| `TerrainQuery` | Terrain | Construction, Économie, Combat |
-| `CitySnapshot` | Ville | Économie, Cartes, Combat |
+| `TerrainQuery` | Terrain | Construction, Économie, Vagues |
+| `CitySnapshot` | Ville | Économie, Vagues |
+| `BuildingSnapshot` | Ville | Économie, Vagues, adapters |
 | `PlacementResult` | Construction | adapters |
-| `PlayedAction` | Cartes | Économie, adapters |
-| `ActionPlan` | Cartes | Économie, adapters |
-| `TargetResult` | Cartes | adapters |
-| `Assignment` | Effectifs | Économie, Combat |
-| `LaborForce` | Effectifs | Économie |
-| `CombatForce` | Effectifs | Combat |
-| `CombatStats` | Effectifs, `src/schema/` | Combat |
-| `ProductionReport` | Économie | Effectifs (XP), adapters |
-| `DamageReport` | Combat | Ville, Effectifs, Économie, adapters |
 
-**`I2` n'a touché aucune ligne de cette table**, et c'est la promesse de `DESIGN.md` 8 tenue : c'était la raison de passer `F1` avant lui. Un jalon d'intégration qui fait bouger un contrat est un jalon qui a découvert trop tard ce qu'il branchait. La fin de run, le calendrier des vagues et la bataille en attente vivent tous dans `domain/run/` ou dans `src/schema/`, par le critère habituel — aucun second système du domaine ne les franchit.
+**`R0` a ramené cette table de douze lignes à quatre**, et c'est la seule fois du projet où
+elle a rétréci. Les huit qui partent — `PlayedAction`, `ActionPlan`, `TargetResult`,
+`Assignment`, `LaborForce`, `CombatForce`, `CombatStats`, `DamageReport`, plus
+`ProductionReport` et `WorkLine` — décrivaient toutes une frontière entre deux systèmes
+supprimés par le rescope. Aucune n'est partie parce qu'elle était mal dessinée.
 
-**`WaveDef` a quitté cette table à `F1`, et c'est une correction.** Elle y figurait depuis
-`I0` comme un DTO de `contracts/` ; c'est une `Resource` de `src/schema/`, éditée dans
-`data/waves/`, exactement comme `PhaseDef` décrit la forme d'une journée et `BuildingData`
-un bâtiment. `contracts/` est l'endroit où deux systèmes **du code** se rencontrent ; un
-contenu que l'on règle dans un `.tres` voyage déjà partout — le domaine reçoit ses blocs
-d'équilibrage en argument depuis `E1`, et une `BuildingData` traverse tous les systèmes
-dans un `BuildingSnapshot`. Le Combat reçoit donc sa vague comme le résolveur de chantiers
-reçoit son `ActionBalance`.
+Ce que la coupe vérifie, et c'était l'argument qui a fait préférer couper à repartir d'une
+branche : **les quatre qui restent n'ont pas eu à bouger d'un mot.** Terrain et Construction
+ne connaissaient rien des systèmes qui les entouraient, donc rien à défaire — ce que la
+règle de dépendance promettait sans qu'on l'ait jamais éprouvée à ce point.
 
-L'Économie voit le relief depuis `D2`, et c'est la conséquence directe de la seconde
-lecture de `DESIGN.md` 3.5 : une action jouée **à cru** rend ce que le tag de sa cellule
-dicte, donc le résolveur doit pouvoir le lire. Il voit le contrat, jamais la grille.
+**Ce que les jalons à venir y remettront, et à quelle condition.** `ProductionReport`
+revient avec `N1`, `PopulationState` avec lui, et un rapport de bataille avec `V2`. Aucun
+n'entre avant que **deux systèmes du domaine** le franchissent vraiment : c'est la règle qui
+a fait attendre `CombatForce` jusqu'à `F1`, et elle vaut d'autant plus au sortir d'une coupe
+où l'on est tenté de redessiner d'avance ce qu'on vient de perdre.
 
-**`Assignment` associe un ouvrier à une action posée, pas à un lieu.** Une ancre ne
-suffisait plus à désigner sans ambiguïté ce qu'un ouvrier fait — *Terraformer* et
-*Récolter* peuvent viser la même case nue.
+L'Économie voit le relief, et c'est la conséquence de `DESIGN.md` 3.3 : le rendement d'une
+case dépend de son tag, donc le résolveur doit pouvoir le lire. Il voit le contrat, jamais
+la grille.
 
 **Un rapport reste chez son système tant qu'aucun autre ne le franchit.** `PickResult`
-vit dans `domain/terrain/`, `ProgressReport` dans `domain/workforce/`, et `I1` y a rangé
-`PlayResult`, `SiteReport`, `PhaseReport` et `DayReport` sous `domain/run/`. Le critère est un
-second **système du domaine**, pas un adapter : les adapters lisent le domaine, c'est
-leur métier. Le coût d'une promotion ultérieure est un déplacement de fichier ; le coût
-d'une frontière inventée trop tôt est une forme figée avant qu'on la connaisse. Et une
-frontière qui doit vraiment traverser se remarque : `PhaseReport` porte un
-`ProgressReport`, ce qui l'aurait fait entrer dans `contracts/` en traînant un interne
-des Effectifs derrière lui.
-
-**Le premier contrat qui a bougé depuis `F1` l'a fait après une partie jouée à la main.**
-*(Écrit après `I2`.)* `LaborUnit` a gagné l'XP de piste, et son docstring refusait
-explicitement de la porter — « ni les traits, ni l'XP, ni les blessures ». Ce refus était
-juste tant que rien ne posait la question, ce qui est exactement la règle qui a fait
-attendre `CombatForce` jusqu'à `F1`.
-
-Ce que le cas apprend en plus : **la question qui fait bouger un contrat peut venir d'un
-défaut d'usage plutôt que d'un système neuf.** Le bouton d'auto-affectation existait depuis
-`W2` et paraissait fini ; c'est en jouant quinze journées qu'on a vu qu'il classait par
-ordre de roster tant que personne n'avait franchi de palier — un multiplicateur venant d'un
-palier, six ouvriers frais valent tous 1.00. Aucun test ne le montrait, parce que les cas
-écrits comparaient des ouvriers **distincts**, ce qui est le cas intéressant et le cas rare.
+vit dans `domain/terrain/`. Le critère est un second **système du domaine**, pas un adapter :
+les adapters lisent le domaine, c'est leur métier. Le coût d'une promotion ultérieure est un
+déplacement de fichier ; le coût d'une frontière inventée trop tôt est une forme figée avant
+qu'on la connaisse.
 
 **`domain/run/` est le seul dossier autorisé à connaître les autres**, et c'est
-`DESIGN.md` 3.8 qui l'autorise nommément. Il tient les états internes de tous les
-systèmes ; aucun ne le connaît en retour.
+`DESIGN.md` 3.7 qui l'autorise nommément. Il tient les états internes de tous les
+systèmes ; aucun ne le connaît en retour. *(Vide depuis `R0` — `I3` le réécrit.)*
 
 **Changer l'intérieur d'un système est libre. Changer un contrat se discute.**
 
@@ -133,21 +111,17 @@ systèmes ; aucun ne le connaît en retour.
 res://
 ├── addons/gdunit4/
 ├── data/                       # contenu, .tres uniquement
-│   ├── buildings/  cards/  terrain/  waves/  enemies/  events/
+│   ├── buildings/  terrain/  commodities/
 │   └── balance/                # tous les chiffres réglables, un seul endroit
 ├── src/
 │   ├── domain/
 │   │   ├── contracts/          # DTO inter-systèmes
 │   │   ├── terrain/            # HeightGrid, TerrainGen, CellPicker
 │   │   ├── city/               # CityState, PlacementValidator
-│   │   ├── economy/            # Ledger, ProductionResolver
-│   │   ├── workforce/          # Worker, Roster, SkillTrack, Assignment
-│   │   ├── deck/               # Deck, Hand, DraftPool
-│   │   ├── combat/             # CombatBoard, Combatant, CombatMovement
-│   │   └── run/                # RunState, DayCycle, RunOrchestrator
+│   │   └── economy/            # Ledger  (+ Population et le résolveur à N1)
 │   ├── schema/                 # définitions des Resource (BuildingData…)
 │   ├── adapters/
-│   │   ├── terrain/  city/  deck/  workforce/  combat/  hud/
+│   │   ├── terrain/  city/  hud/
 │   └── autoload/               # EventBus, GameDatabase, RunManager
 ├── scenes/
 │   ├── dev/                    # dev_boot.tscn (seule .tscn), un harnais .gd par système,
@@ -156,6 +130,15 @@ res://
 │   └── ui/
 └── tests/                      # miroir de src/domain/
 ```
+
+**Ce que `R0` a retiré, et où ça revient.** `domain/deck/`, `domain/workforce/`,
+`domain/combat/` et leurs adapters sont supprimés définitivement *(cf. `DESIGN.md` 9)*.
+`domain/run/` est vide et revient à `I3` ; `data/waves/` et `data/enemies/` reviennent à
+`V4` sous une autre forme. `data/cards/` ne revient pas.
+
+Trois dossiers du plan d'origine n'ont jamais existé et n'existeront pas : `data/events/`
+attend le système `HORS MVP` de `DESIGN.md` 3.6, `scenes/game/` et `scenes/ui/` attendent
+`M1` — et ce sont des `.tscn`, donc l'humain.
 
 ---
 
@@ -315,9 +298,15 @@ Si la sortie contient une erreur ou un warning de script, la tâche n'est pas fi
 |---|---|
 | `EventBus` | Signaux typés globaux. Aucune logique, aucun état. Couche adapter uniquement — le domaine ne le connaît pas. |
 | `GameDatabase` | Charge et indexe les `.tres` de `data/` au boot, par (catégorie, identifiant) où la catégorie est le sous-dossier. `get_balance()`, `get_resource(category, id)`, `list_ids(category)`, `list_categories()`. Les accesseurs typés par système — `get_building(id)` et consorts — s'ajoutent avec le système concerné. |
-| `RunManager` | Possède le `RunState` courant, pilote le `DayCycle`, publie les résultats du domaine sur `EventBus`. C'est l'unique pont domaine → adapters. |
+| `RunManager` | Possède le `RunState` courant et publie les résultats du domaine sur `EventBus`. C'est l'unique pont domaine → adapters. **Coquille depuis `R0`** — `I3` le remplit à nouveau. |
 
 Le bus transporte des DTO immuables. Jamais une référence mutable sur un état du domaine.
+
+**Les trois fichiers restent, même vidés.** `project.godot` les déclare comme autoloads, et
+ce fichier appartient à l'humain : un autoload dont le script manque casse le boot. `R0` a
+donc ramené `EventBus` à un seul signal et `RunManager` à un état possédé, plutôt que de les
+supprimer. C'est la seule contrainte du projet où la propriété d'un fichier décide de la
+forme du code.
 
 ---
 
@@ -502,44 +491,33 @@ L'occlusion par le relief est un problème connu du système Terrain. V1 : la ro
 
 **Toute `DirectionalLight3D` éclairant cette caméra doit être en `SHADOW_ORTHOGONAL`**, jamais en cascades. Le défaut de Godot (`SHADOW_PARALLEL_4_SPLITS`, sans fondu) découpe l'ombre en quatre résolutions selon la profondeur : sous une caméra orthogonale, où la profondeur croît linéairement du bas vers le haut de l'écran, ces frontières deviennent des **lignes horizontales fixes à l'écran**, floues d'un côté et nettes de l'autre, que le terrain traverse quand on déplace la vue. Les cascades servent à couvrir un horizon lointain ; ici la scène est bornée. Serrer aussi `directional_shadow_max_distance` sur ce que la caméra voit vraiment — l'étaler au-delà ne fait que diluer les texels. Constaté à `T2`.
 
-### Structure de la journée — pilotée par data
+### La journée en phases n'existe plus
 
-`DayCycle` ne connaît ni « matin » ni « soir ». Une journée est une liste ordonnée de `PhaseDef` chargées depuis `data/balance/`, chacune déclarant ses types d'action autorisés et si une résolution se déclenche à sa fin. Aucun nom de phase ne doit apparaître en dur dans le code, ni dans le domaine ni dans les adapters — l'UI lit le libellé et les actions permises depuis la `PhaseDef` courante.
+*(Écrit à `R0`.)* `DayCycle`, `PhaseDef` et `RunBalance` sont supprimés. Une journée en
+phases existait parce que deux gestes différents — poser une carte, y envoyer des ouvriers —
+demandaient chacun leur moment ; le rescope n'en laisse qu'un. **Une journée est un tour**,
+et `I3` l'écrit.
 
-*(Écrit à `I1`.)* La règle vaut aussi pour **les tests** : un cas qui écrirait `&"evening"` pour vérifier une règle figerait exactement ce que `DESIGN.md` 2 garde ouvert. Les suites fabriquent leurs propres journées, sur des noms qui n'existent dans aucun `.tres`.
+Ce qui survit de cette section est la doctrine qui l'a produite, et elle vaut pour ce qui
+vient : **aucun nom de moment ne s'écrit en dur**, ni dans le domaine, ni dans les adapters,
+ni dans les tests. La règle avait tenu mot pour mot de `I1` à `F2b`, et c'est ce qui a permis
+d'échanger un modèle de journée contre un autre en repointant un `.tres`.
 
-`resolves` est un booléen, donc le seul champ de tout `data/balance/` que la doctrine du zéro ne protège pas : effacé par un réenregistrement, il vaut faux sans que rien ne le dise. Le filet est posé un cran plus haut — `RunBalance` exige qu'**au moins une** phase de la journée résolve. Même geste que `C4` sur `build_actions`.
-
-**Une phase résout, une journée ferme, et ce sont deux choses.** Une phase produit ce que les actions posées rapportent ; une journée prélève l'upkeep, et demain l'événement et le combat. La fin de journée n'est **pas** un champ de `PhaseDef` : c'est la fin de la dernière phase, par définition, et un booléen en data pourrait dire le contraire de la liste qui le porte. Elle ne dépend pas non plus de `resolves` — une journée coûte à nourrir même si sa dernière phase ne produit rien. Écrire quoi que ce soit qui fasse manger une fois par phase reviendrait à rendre la structure de la journée inséparable de son équilibrage, ce que `DESIGN.md` 2 veut précisément pouvoir échanger séparément.
+Deux règles de cette section méritent d'être relues avant d'écrire `I3`, parce que le
+rescope ne les périme pas :
 
 **Une `Resource` ne peut juger que ce qu'elle voit seule ; le reste monte d'un cran.**
-*(Écrit à `I2b`.)* `PhaseDef` refusait une phase qui n'autorise rien **et** ne résout pas,
-au motif qu'elle n'est qu'un tour perdu. Le motif était bon et la conclusion fausse : la
-**dernière** phase d'une journée ferme cette journée — donc prélève l'upkeep et fait tomber
-la vague —, et ça n'est ni autoriser ni résoudre. Une `PhaseDef` ne sait pas qu'elle est
-dernière, alors que `RunBalance` voit la liste ; la règle vit donc là, avec l'exception
-nommée, comme l'unicité de `id` et comme `phases.none_resolves` avant elle.
+`PhaseDef` refusait une phase qui n'autorise rien et ne résout pas, au motif qu'elle n'est
+qu'un tour perdu — motif juste, conclusion fausse, parce qu'une `PhaseDef` ne sait pas
+qu'elle est la dernière. Le contrôle **refusait au boot le seul modèle de journée qu'on
+voulait jouer**. La question à se poser avant d'écrire un `missing_fields()` tient en une
+ligne : *cette `Resource` a-t-elle sous les yeux tout ce que la règle regarde ?*
 
-Le coût du mauvais étage n'était pas théorique : ce contrôle **refusait au boot le seul
-modèle de journée qu'on voulait jouer**. Le test à faire avant d'écrire un `missing_fields()`
-tient en une question — *cette Resource a-t-elle sous les yeux tout ce que la règle regarde ?*
-Si la réponse est non, la règle appartient au bloc qui l'agrège.
-
-**Un champ de `data/` peut refuser une valeur plutôt que de l'interpréter.**
-*(Écrit à `I2b`.)* `DeckBalance.carry_over` dit par pool combien de cartes non jouées
-survivent à une phase, et n'accepte que deux valeurs : zéro, ou la taille de la main. Le
-milieu — garder deux cartes sur cinq — demanderait de dire *lesquelles*, et aucun écran ne
-sait le demander ; le résoudre par une règle d'ancienneté aurait tranché une question de
-`DESIGN.md` par un arbitraire enfoui dans un résolveur. Refuser est le même geste que le
-bloc `production` nullable de `E1b` : **la cohérence devient structurelle au lieu d'être
-vérifiée**, et le jour où le geste existe c'est le contrôle qui se desserre, pas le domaine
-qui change.
-
-### Effectifs — un vivier ou deux, indécidé
-
-Le système Effectifs projette ses unités en `LaborForce` et `CombatForce`. Économie et Combat ne consomment que ces projections. Aucun code hors de `domain/workforce/` ne doit supposer que les deux viennent de la même liste, ni qu'elles viennent de deux listes distinctes.
-
-**Les deux projections portent tout le monde ; le filtre appartient au consommateur.** *(Écrit à `F1`.)* L'Économie reçoit le roster présent entier et n'en fait travailler que ce que l'`Assignment` place ; le Combat le reçoit entier et n'en engage que ce que la borne de déploiement tient. Projeter les seuls engagés donnerait aux Effectifs à connaître un plafond qui vient de la ville — une frontière qu'ils n'ont aucune raison de franchir.
+**Un champ de `data/` peut refuser une valeur plutôt que de l'interpréter.** `carry_over`
+n'acceptait que deux valeurs parce que le milieu aurait demandé un geste qui n'existait pas ;
+refuser rendait la cohérence **structurelle** au lieu de vérifiée. Même geste que le bloc
+`production` nullable. Le jour où le geste existe, c'est le contrôle qui se desserre, pas le
+domaine qui change.
 
 ### Un système ne voit jamais le contenu d'un état voisin
 
@@ -584,7 +562,7 @@ Tous les nombres réglables vivent dans `data/balance/*.tres`. Modifier un équi
 
 - Tout `src/domain/` est testé. `src/adapters/` ne l'est pas.
 - Les tests instancient le domaine directement, sans arbre de scène ni `.tscn`.
-- Priorité : `CellPicker`, `PlacementValidator`, `ProductionResolver`, `CombatResolver`, `Deck`.
+- Priorité : `CellPicker`, `PlacementValidator`, `TerrainGen` (ses garanties, `T4`), `Population` (`N1`), le chemin d'une vague (`V1`).
 - Un bug d'équilibrage se reproduit avec un seed et une séquence d'actions → en faire un cas de test.
 
 ---
@@ -610,3 +588,12 @@ Tous les nombres réglables vivent dans `data/balance/*.tres`. Modifier un équi
 - Un harnais de dev livré sous forme de fichier de scène plutôt que de script
 - Une tâche annoncée terminée sans avoir lancé le contrôle de parsing et les tests
 - Une feature hors périmètre sans mise à jour préalable de `DESIGN.md`
+- **Un `Worker` nommé, une piste de compétence, une affectation nominative.** La population
+  est un **entier** *(cf. `DESIGN.md` 3.4)*. Le jour où l'on se surprend à vouloir savoir
+  *lequel* des douze habitants fait quoi, on réécrit ce que `R0` vient de couper.
+- **Un bâtiment qui produirait au prorata de ses travailleurs.** C'est tout ou rien : un
+  bâtiment en sommeil ne rend rien. Un rendement dégradé demanderait un second chiffre et une
+  explication à donner.
+- **Une règle qui déciderait *qui* meurt en suivant les habitants un par un.** Quand
+  l'effectif baisse, le dernier bâti s'éteint le premier — une règle d'ordre, jamais un
+  suivi.

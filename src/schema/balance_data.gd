@@ -2,8 +2,9 @@ class_name BalanceData
 extends Resource
 ## Racine de l'équilibrage : un sous-bloc par système.
 ##
-## Chaque système ajoute son champ ici quand il atterrit — economy, workforce, combat.
-## Un champ n'est jamais retiré sans migrer les .tres qui le référencent.
+## Chaque système ajoute son champ ici quand il atterrit. Un champ n'est jamais retiré sans
+## migrer les .tres qui le référencent — ce que `R0` a fait pour les quatre blocs des
+## systèmes supprimés : workforce, deck, actions, run et combat.
 ##
 ## Point d'accès unique : GameDatabase.get_balance().
 
@@ -18,22 +19,6 @@ extends Resource
 
 ## Économie : réserve commune, upkeep, stock d'ouverture.
 @export var economy: EconomyBalance
-
-## Effectifs : places du roster, valeur d'une soirée, courbes de paliers.
-@export var workforce: WorkforceBalance
-
-## Cartes : deck de départ, tailles de main par pool, largeur d'un draft.
-@export var deck: DeckBalance
-
-## Actions : capacité et rendement d'une case nue, tags qui autorisent un verbe, bornes
-## du terrassement, piste que créditent les chantiers.
-@export var actions: ActionBalance
-
-## Run : les phases d'une journée, dans l'ordre, et le nombre de journées.
-@export var run: RunBalance
-
-## Combat : places de déploiement, valeur d'un homme sur la ligne, coût d'une brèche.
-@export var combat: CombatBalance
 
 ## Champs non renseignés de tous les blocs, préfixés du nom de leur bloc.
 ## Vide = équilibrage exploitable. Vérifié au boot par GameDatabase.
@@ -64,29 +49,4 @@ func missing_fields() -> PackedStringArray:
 	else:
 		for field in economy.missing_fields():
 			missing.append("economy.%s" % field)
-	if workforce == null:
-		missing.append("workforce")
-	else:
-		for field in workforce.missing_fields():
-			missing.append("workforce.%s" % field)
-	if deck == null:
-		missing.append("deck")
-	else:
-		for field in deck.missing_fields():
-			missing.append("deck.%s" % field)
-	if actions == null:
-		missing.append("actions")
-	else:
-		for field in actions.missing_fields():
-			missing.append("actions.%s" % field)
-	if run == null:
-		missing.append("run")
-	else:
-		for field in run.missing_fields():
-			missing.append("run.%s" % field)
-	if combat == null:
-		missing.append("combat")
-	else:
-		for field in combat.missing_fields():
-			missing.append("combat.%s" % field)
 	return missing

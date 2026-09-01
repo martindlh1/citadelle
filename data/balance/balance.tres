@@ -5,11 +5,6 @@
 [ext_resource type="Resource" path="res://data/balance/terrain_gen_balance.tres" id="3_terrain_gen_balance"]
 [ext_resource type="Resource" path="res://data/balance/camera_balance.tres" id="4_camera_balance"]
 [ext_resource type="Resource" path="res://data/balance/economy_balance.tres" id="5_economy_balance"]
-[ext_resource type="Resource" path="res://data/balance/workforce_balance.tres" id="6_workforce_balance"]
-[ext_resource type="Resource" path="res://data/balance/deck_balance.tres" id="7_deck_balance"]
-[ext_resource type="Resource" path="res://data/balance/action_balance.tres" id="8_action_balance"]
-[ext_resource type="Resource" path="res://data/balance/run_balance.tres" id="9_run_balance"]
-[ext_resource type="Resource" path="res://data/balance/combat_balance.tres" id="10_combat_balance"]
 
 [resource]
 script = ExtResource("1_balance_data")
@@ -17,8 +12,3 @@ terrain = ExtResource("2_terrain_balance")
 terrain_gen = ExtResource("3_terrain_gen_balance")
 camera = ExtResource("4_camera_balance")
 economy = ExtResource("5_economy_balance")
-workforce = ExtResource("6_workforce_balance")
-deck = ExtResource("7_deck_balance")
-actions = ExtResource("8_action_balance")
-run = ExtResource("9_run_balance")
-combat = ExtResource("10_combat_balance")
