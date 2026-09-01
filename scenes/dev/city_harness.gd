@@ -20,9 +20,9 @@ extends Node
 ## Clic gauche pose, clic droit détruit, Espace avance le chantier sous le curseur, 1 à
 ## 9 choisissent le bâtiment. La caméra garde Q et E, la molette, WASD et R.
 ##
-## Espace tient lieu de carte *Construire*, qui n'existe pas encore — c'est D1 et D2 qui
-## l'écriront. Le harnais ne fait donc pas semblant d'avoir des actions : il appelle la
-## porte du domaine directement, une touche pour un cran.
+## Espace tient lieu du cran qu'un tour pose tout seul depuis I3. Ce harnais n'a pas de
+## tour — c'est celui du Run qui en a un —, donc il appelle la porte du domaine
+## directement, une touche pour un cran, et n'en fait pas semblant.
 
 ## Seed de la carte. Fixe : deux lancements doivent se comparer.
 const SEED := 1234
@@ -240,7 +240,7 @@ func _seed_city() -> void:
 		if anchor == NO_CELL:
 			continue
 		_city.place(_terrain, data, anchor, index)
-		for _notch in index % (data.build_actions + 1):
+		for _notch in index % (data.site_turns + 1):
 			_city.advance(anchor)
 
 func _first_accepted_anchor(data: BuildingData, turns: int) -> Vector2i:
@@ -295,7 +295,7 @@ func _catalogue_lines() -> String:
 		var turns := _orientation(_turns) if index == _selected else ""
 		lines.append("  %s %d  %-16s %d cellule(s), h %.2f, chantier %d  %s"
 			% [mark, index + 1, data.id, data.footprint.size(), data.height,
-				data.build_actions, turns])
+				data.site_turns, turns])
 	return "\n".join(lines)
 
 ## Ce que le curseur désigne, et le verdict du domaine sur une pose à cet endroit.
@@ -327,7 +327,7 @@ func _hovered_site() -> String:
 func _site_state(building: PlacedBuilding) -> String:
 	if building.is_complete():
 		return "achevé"
-	return "chantier %d/%d" % [building.progress(), building.data().build_actions]
+	return "chantier %d/%d" % [building.progress(), building.data().site_turns]
 
 ## L'orientation en clair. Les crans seuls ne disent rien à la lecture d'une capture,
 ## et c'est précisément là qu'on cherche à vérifier qu'une forme a bien pivoté.

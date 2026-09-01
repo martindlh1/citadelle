@@ -103,7 +103,7 @@ func rebuild(city: CityState, hidden: Array[Vector2i] = []) -> void:
 func _raised(building: PlacedBuilding) -> float:
 	if building.is_complete():
 		return 1.0
-	var done := float(building.progress()) / float(building.data().build_actions)
+	var done := float(building.progress()) / float(building.data().site_turns)
 	return SITE_BASE_RATIO + (1.0 - SITE_BASE_RATIO) * done
 
 ## Combien de boîtes cette ville demande : la somme des cellules de ses empreintes.

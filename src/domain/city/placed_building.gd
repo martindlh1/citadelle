@@ -80,24 +80,23 @@ func progress() -> int:
 
 ## Crans qu'il reste à poser. 0 sur un bâtiment achevé.
 func remaining() -> int:
-	return maxi(0, _data.build_actions - _progress)
+	return maxi(0, _data.site_turns - _progress)
 
 ## Le chantier est-il achevé ?
 ##
 ## Tant que non, le bâtiment occupe ses cellules et ne fait rien d'autre : il ne produit
 ## pas, n'offre aucun slot et ne relève aucun plafond. Voir DESIGN.md 3.2.
 func is_complete() -> bool:
-	return _progress >= _data.build_actions
+	return _progress >= _data.site_turns
 
 ## Pose un cran de chantier. Rend vrai s'il a avancé, faux s'il était déjà achevé.
 ##
 ## L'avancement ne dépasse jamais ce que la data réclame : un chantier fini absorberait
-## sinon des actions Construire sans que rien ne le dise, et remaining() finirait
-## négatif. Le refus est rendu plutôt que tu, pour que l'appelant sache que son action
-## n'a servi à rien.
+## sinon les crans du tour sans que rien ne le dise, et remaining() finirait négatif. Le
+## refus est rendu plutôt que tu, pour que l'appelant sache que le cran n'a servi à rien.
 ##
 ## Passer par CityState.advance() plutôt que d'appeler ceci directement : c'est la porte
-## documentée, celle qu'une action vise par une ancre.
+## documentée, celle que la résolution d'un tour vise par une ancre.
 func advance() -> bool:
 	if is_complete():
 		return false

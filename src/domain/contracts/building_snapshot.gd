@@ -76,11 +76,11 @@ func progress() -> int:
 ## Un bâtiment sans coût de chantier est achevé dès la pose : 0 >= 0. C'est ainsi que
 ## le Cœur, posé au départ et sans carte, n'a besoin d'aucun chemin particulier.
 func is_complete() -> bool:
-	return _progress >= _data.build_actions
+	return _progress >= _data.site_turns
 
 ## Crans qu'il reste à poser. 0 sur un bâtiment achevé.
 func remaining() -> int:
-	return maxi(0, _data.build_actions - _progress)
+	return maxi(0, _data.site_turns - _progress)
 
 ## Points déjà encaissés.
 func damage() -> int:

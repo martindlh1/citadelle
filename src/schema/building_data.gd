@@ -6,12 +6,19 @@ extends Resource
 ## argument et ne lit jamais GameDatabase, comme pour TerrainData.
 ##
 ## C1 n'y mettait que ce que le placement consomme ; E1 y ajoute l'économie — coût,
-## réserve, et la production à plat —, E1b sort cette dernière dans un bloc nullable, W1
-## les places de roster, C4 le coût de chantier, et F1 la défense, les PV et les places de
-## déploiement. Seuls les bonus d'adjacence de C3 restent dehors, de la même façon que
-## BalanceData gagne un bloc quand un système atterrit. Un champ ajouté plus tard oblige à
-## rouvrir les .tres ; un champ ajouté d'avance oblige à deviner sa forme, ce qui coûte
-## plus cher.
+## réserve, et la production à plat —, E1b sort cette dernière dans un bloc nullable, C4 le
+## coût de chantier, F1 les PV, et N1 le coût en travailleurs et le plafond de logement.
+## Seuls les bonus d'adjacence de C3 et les quatre chiffres de défense de V2 restent
+## dehors, de la même façon que BalanceData gagne un bloc quand un système atterrit. Un
+## champ ajouté plus tard oblige à rouvrir les .tres ; un champ ajouté d'avance oblige à
+## deviner sa forme, ce qui coûte plus cher.
+##
+## **I3 lui a retiré `defense`**, dernier résidu du combat tactique. DESIGN.md 4.1 : « La
+## palissade perd sa `defense` et garde ses points de vie […] elle ne défend plus par un
+## chiffre abstrait, parce qu'il n'y a plus de total de défense à opposer à une puissance. »
+## Le champ valait 3 dans un .tres et **aucun système ne le lisait** — même geste que N1 sur
+## les deux tiers de ProductionBlock. Ce qui le remplace est portée / dégâts / cadence, et
+## c'est V2 qui l'écrit, avec le système qui le lit.
 ##
 ## Ajouter un **bâtiment** doit rester une édition de data/. Ajouter une **nature** de
 ## bâtiment est légitimement une modification de code — mais dans src/domain/, jamais
@@ -66,27 +73,36 @@ const QUARTER_TURNS := 4
 ## milieu de cellules qui ont changé.
 @export_range(0.0, 4.0, 0.05) var height: float
 
-## Combien d'actions *Construire* il faut lui jeter dessus pour l'achever.
+## Combien de **tours** son chantier dure.
 ##
-## C'est la colonne **Chantier** de DESIGN.md 4.1. Poser une carte de bâtiment ouvre un
-## chantier et non un bâtiment : il occupe ses cellules et paie son coût tout de suite,
-## mais ne produit rien et n'offre aucun slot avant d'avoir reçu ce nombre de crans.
+## C'est la colonne **Chantier** de DESIGN.md 4.1. Ouvrir un chantier n'est pas poser un
+## bâtiment : il occupe ses cellules, paie son coût et immobilise ses bras tout de suite,
+## mais ne produit rien et ne relève aucun plafond avant d'avoir reçu ce nombre de crans.
+##
+## **Un cran par tour, et personne ne le lui donne.** DESIGN.md 3.2 : « Chaque tour, chaque
+## chantier ouvert avance d'un cran. » Le champ s'appelait `build_actions` jusqu'à I3, et
+## le renommage n'est pas cosmétique : il comptait les actions *Construire* d'un deck que
+## le rescope a supprimé, c'est-à-dire « autant de cartes qu'il faudra piocher ». Le
+## chiffre est le même, ce qu'il compte a changé de nature — même geste que
+## `upkeep_per_worker` → `upkeep_per_inhabitant` à N1.
 ##
 ## **0 est une valeur légitime** et veut dire « achevé à la pose ». La doctrine du zéro
-## ne s'applique donc pas ici, exactement comme pour storage_bonus et roster_places
+## ne s'applique donc pas ici, exactement comme pour storage_bonus et housing
 ## juste en dessous — mais pour une raison qui lui est propre : le Cœur porte « — »
 ## dans cette colonne, comme il porte « posé au départ » dans celle du coût, et c'est
 ## déjà un cost vide qui représente la seconde. Représenter la première par un zéro est
 ## le même geste sur la même ligne du tableau.
 ##
-## Le prix de ce choix est connu : un build_actions oublié dans un .tres vaut 0 et fait
+## Le prix de ce choix est connu : un site_turns oublié dans un .tres vaut 0 et fait
 ## sauter le chantier en silence. Il est racheté par un cas de test qui charge tout
 ## data/ et exige qu'au moins un bâtiment en déclare un — le motif de
 ## production_block_test.gd, qui refuse de passer par vacuité.
 ##
-## Le champ ne s'appelle pas `turns` : ce nom désigne déjà les quarts de tour d'une
-## orientation, partout dans le système.
-@export_range(0, 10, 1) var build_actions: int
+## Il ne s'appelle pas `turns` tout court : ce nom désigne déjà les quarts de tour d'une
+## orientation, partout dans le système — y compris sur le PlacedBuilding qui porte le
+## chantier. Les confondre fabrique un bâtiment fini là où l'on croyait poser un chantier,
+## ce qu'un cas de test de N1 a payé pour de vrai.
+@export_range(0, 10, 1) var site_turns: int
 
 ## Ce qu'il coûte à poser, par ressource.
 ##
@@ -103,11 +119,10 @@ const QUARTER_TURNS := 4
 ## de vérifiée. Tranché avant E1b, voir DESIGN.md 3.3 et le docstring de
 ## ProductionBlock.
 ##
-## Cinq bâtiments de DESIGN.md 4.1 — tour de guet, caserne, marché, atelier, camp
-## d'exploration — portent un slot dans le tableau et arrivent pourtant sans bloc. Ce
-## n'est pas un oubli : leur poste n'est pas un poste de production, il héberge une
-## défense, un échange ou une action débloquée, et le système qui le lira n'existe pas
-## encore — F1, I3, X1, X2, X3. Leur bloc viendra avec lui, et de la bonne nature.
+## La tour de guet n'en a pas, et ce n'est pas un oubli : ce qu'elle rend n'est pas une
+## récolte mais des tirs, donc quatre chiffres d'une autre nature que V2 écrira. Les quatre
+## autres bâtiments qui étaient dans ce cas — caserne, marché, atelier, camp
+## d'exploration — sont partis avec les systèmes qui les justifiaient, à R0.
 @export var production: ProductionBlock
 
 ## Ce qu'il ajoute à la réserve commune. 0 pour tout ce qui n'est pas un entrepôt.
@@ -146,23 +161,6 @@ const QUARTER_TURNS := 4
 ## bâtir — jamais. C'est GameDatabase qui tient cette règle, parce qu'elle regarde le
 ## catalogue entier et qu'une BuildingData ne voit qu'elle-même.
 @export_range(0, 20, 1) var workers: int
-
-## Ce qu'il oppose à une vague du seul fait d'être debout. Colonne **Déf.** de
-## DESIGN.md 4.1.
-##
-## Le **plat** de cette colonne, et rien d'autre. La tour de guet y porte « +8 déf. si
-## occupée », et F1 ne le lit pas : aucun verbe de 4.2 ne tient un poste de défense, donc
-## le bloc qui décrirait ce poste serait la nature qu'aucun système n'emploie — le même
-## refus que E1b a opposé à cinq `slots = 1`.
-##
-## 0 est légitime — douze bâtiments sur treize ne défendent rien —, comme pour
-## storage_bonus et roster_places. Un cas de test exige en retour qu'au moins un bâtiment
-## de data/ en déclare un, ce qui rattrape la disparition du format entier là où un
-## contrôle champ par champ ne pourrait rien voir.
-##
-## Il ne compte que sur un bâtiment **achevé** : une palissade en chantier ne retient rien.
-## C'est CitySnapshot.completed() qui le garantit, pas ce fichier.
-@export_range(0, 100, 1) var defense: int
 
 ## Ce qu'il encaisse avant de tomber. Colonne **PV** de DESIGN.md 4.1.
 ##
@@ -269,18 +267,15 @@ func missing_fields() -> PackedStringArray:
 	# Hors du bloc économie : le chantier est un chiffre de la Construction et les
 	# places de roster un chiffre des Effectifs. Les ranger avec le coût et la réserve
 	# ferait mentir le nom de cette fonction.
-	if build_actions < 0:
-		missing.append("build_actions")
+	if site_turns < 0:
+		missing.append("site_turns")
 	if housing < 0:
 		missing.append("housing")
 	if workers < 0:
 		missing.append("workers")
-	# Le seul champ de défense réclamé : voir son docstring. defense
-	# sont légitimement nuls sur presque tout le catalogue.
+	# Réclamé, contrairement aux champs plats ci-dessus : voir son docstring.
 	if hit_points <= 0:
 		missing.append("hit_points")
-	if defense < 0:
-		missing.append("defense")
 	missing.append_array(_economy_fields())
 	if footprint.is_empty():
 		missing.append("footprint")

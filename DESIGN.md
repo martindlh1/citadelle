@@ -90,24 +90,32 @@ emploi aux cartes.
 ### Ce qui remplace le tempo
 
 L'ancien jeu avait deux régulateurs qui se doublaient : la main de cartes disait *quoi*, le
-pool d'ouvriers disait *combien*. Les deux disparaissent, et deux autres les remplacent — mais
-ceux-ci ne se doublent pas, parce qu'ils ne répondent pas à la même question.
+pool d'ouvriers disait *combien*. Les deux disparaissent, et **un seul** les remplace.
 
 > **Les travailleurs** disent ce que le village peut **posséder**. Un bâtiment en immobilise
 > à l'ouverture de son chantier et les garde à vie *(cf. 3.4)*. Sans bras libres, on ne bâtit
 > pas, quel que soit le bois qu'on ait.
->
-> **La file de chantiers** dit ce qu'il peut **faire à la fois**. Bâtir, terrasser et réparer
-> se disputent un petit nombre d'emplacements *(cf. 3.2)*.
 
-Trois vertus à ce partage. Il **réutilise `C4`**, écrit et testé. Il donne une décision par
-tour qui est un **ordonnancement** — dans quel ordre j'occupe mes emplacements — plutôt qu'un
-remplissage. Et il **relie la construction à la population**, donc à la nourriture, donc au
-placement des fermes : la boucle se referme sur elle-même sans qu'aucune règle n'ait à le
-dire.
+Il **relie la construction à la population**, donc à la nourriture, donc au placement des
+fermes : la boucle se referme sur elle-même sans qu'aucune règle n'ait à le dire. C'est le
+seul régulateur du jeu, et il est spatial de bout en bout — les bras viennent des habitants,
+les habitants d'un toit, le toit d'une case plate.
 
-La file mord surtout **au lendemain d'une vague**, quand il faut choisir entre réparer et
-grandir. C'est la seule raison de la garder à côté des travailleurs, et elle suffit.
+*Ce document a porté un second régulateur, une **file de chantiers** en nombre fixe, de
+l'écriture du rescope jusqu'à `I3`.* Il est retiré, et l'argument est celui qui a fait couper
+le reste : il **doublait** le premier au lieu de le croiser. Ce qu'un village peut mener de
+front est déjà ce que ses bras autorisent, puisqu'un chantier les immobilise à son ouverture ;
+un plafond de plus par-dessus posait la même question deux fois, et devenait la contrainte
+réelle dès qu'elle mordait la première.
+
+Son seul argument propre était l'arbitrage **réparer ou grandir** au lendemain d'une vague.
+Il ne disparaît pas avec elle : réparer coûte des ressources et occupe le village, et la
+vraie rareté d'un lendemain de vague est le bois et le temps, pas un jeton d'emplacement.
+
+**Ce que ça change, et il faut l'écrire.** Un bâtiment gratuit en bras — l'habitation, la
+palissade — n'est plus borné que par la ressource et par la place au sol. On peut en ouvrir
+dix d'un coup si l'on a le bois et les cases. C'est cohérent avec le pitch, où la contrainte
+est spatiale, et c'est un chiffre de `B1` s'il s'avère trop permissif.
 
 ### La durée d'un run
 
@@ -221,24 +229,25 @@ qu'un mur de ressources.
 **Réparer est un chantier**, et c'est ce qui donne un prix à une vague passée. Un bâtiment
 abîmé **fonctionne normalement** — ses points de vie sont ce qu'il encaisse, jamais ce qu'il
 rend — mais il tombera plus vite à la vague suivante. Le remettre à neuf coûte une fraction
-de son coût de construction et occupe un emplacement de chantier pendant quelques tours. Il
-n'immobilise **aucun** travailleur de plus : ce sont ceux du bâtiment qui le réparent, et
-une palissade qui n'en a aucun se répare quand même.
+de son coût de construction et prend quelques tours. Il n'immobilise **aucun** travailleur de
+plus : ce sont ceux du bâtiment qui le réparent, et une palissade qui n'en a aucun se répare
+quand même.
 
-#### Deux régulateurs, et ils ne font pas le même métier
+#### Un seul régulateur, et il est spatial
 
 C'est la réponse au trou que le rescope ouvrait — les cartes et les ouvriers réglaient le
-tempo à eux deux, et ils disparaissent. Deux choses les remplacent, et elles sont
-complémentaires plutôt que redondantes :
+tempo à eux deux, et ils disparaissent. Une seule chose les remplace :
 
 | | dit | vient de |
 |---|---|---|
 | **Les travailleurs** | ce que le village peut **posséder** | la population, donc le logement, donc la terre |
-| **La file de chantiers** | ce qu'il peut **faire à la fois** | un petit nombre d'emplacements, en data |
 
-Bâtir, terrasser et réparer se disputent les mêmes emplacements. C'est bénin en temps de
-paix, et c'est là que ça mord au lendemain d'une vague : **réparer ou grandir** est une vraie
-question, et c'est la file qui la pose.
+Bâtir, terrasser et réparer puisent tous dans le même budget de bras, et ce budget se gagne
+sur la carte. **Ouvrir un chantier, c'est immobiliser des gens** ; le nombre de chantiers
+qu'on mène de front n'a donc pas besoin d'un second plafond pour être borné — il l'est déjà,
+par le même chiffre.
+
+*La file de chantiers, retirée à `I3`, est décrite en 2 avec la raison de sa disparition.*
 
 **Ce qu'un chantier détruit rend** reste l'`OUVERT` de l'ancien document, et il devient un
 peu plus pressant : une vague qui casse un chantier à moitié fait maintenant partie du jeu
@@ -264,8 +273,16 @@ générée, pas dans l'abstrait.
 
 ### 3.3 Économie
 
-> **Contrat** — `TerrainQuery` + `CitySnapshot` + `PopulationState` → `ProductionReport`.
-> Ne connaît ni la grille ni les `Node` : tout lui est fourni.
+> **Contrat** — `CitySnapshot` + `PopulationState` → `ProductionReport`. Ne connaît ni la
+> grille ni les `Node` : tout lui est fourni.
+
+*Ce contrat portait un `TerrainQuery` jusqu'à `I3`, et il l'a perdu là.* Le relief y était
+parce que le jeu d'avant laissait jouer une carte **à cru** sur une case, auquel cas le tag
+de cette case décidait du rendement ; ce geste n'existe plus. Un bâtiment rend son bloc, et
+rien dans le résolveur ne pourrait aujourd'hui faire quoi que ce soit d'un relief — le
+passer serait un champ ajouté d'avance, avec en prime une signature qui ment sur ce qu'elle
+lit. **Le relief revient dans l'Économie à `C3`**, avec l'adjacence, qui est son premier
+consommateur réel.
 
 **Conservé** : le `Ledger` en **réserve commune** — les cent unités sont partagées entre
 toutes les ressources, remplir de bois c'est renoncer à stocker de la pierre —, l'écrêtage
@@ -418,6 +435,22 @@ fermes coûterait la production *et* douze habitants *et* la capacité de recons
 est une cascade que le joueur ne peut plus rattraper. Seules la famine et la perte d'un toit
 tuent.
 
+#### Une soupape se joue, elle ne se déclare pas — y compris pour ce qui la garde
+
+*(Trouvé à `I3`, en jouant l'interdit ci-dessus dans un vrai tour.)* Le contrôle du boot
+vérifiait qu'un bâtiment gratuit en bras **existe**, pas qu'on puisse le **bâtir**. Le Cœur
+le satisfaisait à lui seul — il loge quatre personnes et ne coûte aucun bras —, alors qu'il
+est posé une fois à la fondation et jamais reconstruit : la soupape qu'il semblait offrir ne
+s'ouvre jamais. Le garde-fou aurait donc laissé passer un catalogue où l'habitation coûte des
+bras, c'est-à-dire exactement la partie mortellement bloquée qu'il existe pour interdire.
+
+C'est la règle de cette section retournée contre ce qui la protège, et il a fallu un tour
+jouable pour que la différence se voie.
+
+*Une seconde forme de blocage a existé entre l'écriture du rescope et `I3` : des chantiers
+endormis gardaient à jamais leurs places dans la file de 3.2, y compris contre l'habitation
+qui aurait tout débloqué. Elle disparaît avec la file.*
+
 **`OUVERT`** — pouvoir réordonner les priorités, donc décider qui s'éteint. C'est le bout
 pointu de l'affectation, donc c'est refusé pour l'instant. Si le manque se fait sentir en
 jouant, c'est un glisser-déposer sur une liste, et rien d'autre.
@@ -552,6 +585,27 @@ donc il n'y a ni état « en attente », ni seconde porte, ni bataille à repren
 seule chose qui rendait nécessaire la coupure que l'ancien jeu avait dû écrire, et elle se
 défait.
 
+#### Le joueur ne joue pas pendant qu'une animation joue
+
+*(Posé à `I3b`, sur la course du soleil, et valable pour tout ce qui viendra.)* « Purement
+décorative » ne veut pas dire « sans conséquence ». Un geste posé pendant qu'une transition
+se joue arrive dans un état que le joueur **ne regarde pas encore** : il pose un bâtiment sur
+une ville qu'il n'a pas vue, et découvre les deux ensemble. Rien ne casse — le domaine répond
+correctement — mais l'écran a menti par omission.
+
+Une transition est donc **le moment où le plateau parle et où le joueur se tait**. Elle
+interdit d'agir, jamais de regarder : la caméra continue de tourner et de zoomer, parce que
+regarder est précisément ce qu'on demande.
+
+**Et c'est un verrou d'adapter, jamais un état du domaine.** Y remettre une attente parce
+qu'une animation dure trois secondes rouvrirait la coupure que le paragraphe ci-dessus vient
+de refermer, et pour une raison encore plus faible. Le domaine ignore qu'un écran existe ;
+c'est l'écran qui sait quand il n'a pas fini de parler.
+
+Il y a **un seul** verrou, et les animations s'y déclarent au lieu d'inventer le leur : deux
+verrous à tenir d'accord finissent par diverger, et celui qu'on oublie laisse passer les
+gestes en silence. La bataille de `V3` prendra le même.
+
 #### Le vocabulaire de défense, et il est volontairement minuscule
 
 Un bâtiment de défense porte **quatre chiffres** :
@@ -665,14 +719,20 @@ Il n'y a plus de cartes, donc plus de verbes. Un tour offre :
 
 | Geste | Coût | Note |
 |---|---|---|
-| **Bâtir** | ressources + travailleurs, à l'ouverture | il faut un emplacement de chantier libre |
-| **Réparer** | une fraction du coût de construction | occupe un emplacement, aucun travailleur de plus |
-| **Terrasser** | un coût en ressources | occupe un emplacement, monte ou descend d'un cran |
+| **Bâtir** | ressources + travailleurs, à l'ouverture | les bras sont rendus à la démolition |
+| **Réparer** | une fraction du coût de construction | aucun travailleur de plus |
+| **Terrasser** | un coût en ressources | monte ou descend d'un cran |
 | **Démolir** | rien, et ne rend aucune ressource | libère les cellules **et les travailleurs** |
 | **Passer le tour** | — | le seul geste obligatoire |
 
-Les trois premiers se disputent la **file de chantiers** *(cf. 3.2)*. C'est tout le tempo du
-jeu, et il tient en une ligne de ce tableau.
+Les trois premiers puisent dans le même budget de **bras** *(cf. 3.2)*. C'est tout le tempo
+du jeu, et il tient dans la colonne des coûts de ce tableau.
+
+**Le Cœur n'est dans aucune de ces lignes.** Il se **fonde** — c'est l'étape de 2, avant le
+premier tour —, et il ne se bâtit ni ne se démolit ensuite. Les deux refus sont la même
+phrase : le porter dans *Bâtir* en ferait le meilleur bâtiment du jeu à répétition, gratuit,
+sans chantier et logeant quatre personnes ; le porter dans *Démolir* donnerait un bouton
+« perdre la partie » sans confirmation, puisque 5 fait du Cœur détruit une défaite.
 
 **Le terrassement redevient central, et il redevient jouable.** Il avait été retiré du deck
 parce que son sens — monter ou descendre — ne s'affichait nulle part sur une carte à jouer.
@@ -785,7 +845,7 @@ survit, ce qui garde le journal lisible ; `R` et `N` sont neuves.
 ### `C` — la construction
 
 - **C5** — **Le terrassement comme chantier.** Le verbe revient, avec son sens montré.
-- **C6** — **La réparation.** Un bâtiment abîmé, un chantier qui le remet à neuf, et la file
+- **C6** — **La réparation.** Un bâtiment abîmé, un chantier qui le remet à neuf, et le bois
   qui fait choisir entre réparer et grandir. Il vient **après `V4`** : réparer n'a aucun sens
   tant que rien n'abîme.
 - **C3** — **L'adjacence**, et sa prévisualisation du delta au survol. Promu au rang de

@@ -245,15 +245,6 @@ func test_negative_workers_are_reported() -> void:
 	building.workers = -1
 	assert_array(building.missing_fields()).contains(["workers"])
 
-## La défense rejoint la même doctrine à F1 : la plupart des bâtiments ne défendent rien.
-## Le cas est écrit pour que personne ne la réclame en croyant corriger un oubli.
-##
-## `R0` lui retire les places de déploiement, le champ étant parti avec le combat tactique.
-func test_a_building_that_defends_nothing_is_complete() -> void:
-	var building := _building(_l_shape())
-	assert_int(building.defense).is_equal(0)
-	assert_array(building.missing_fields()).is_empty()
-
 ## Les PV, eux, sont **réclamés**, et c'est le seul champ de combat qui le soit. Un
 ## bâtiment à zéro tombe au premier coup sans que rien ne le signale : « gratuit à
 ## défendre » et « oublié dans le .tres » y seraient indiscernables, Godot n'écrivant
@@ -263,16 +254,6 @@ func test_a_building_without_hit_points_is_reported() -> void:
 	building.hit_points = 0
 	assert_array(building.missing_fields()).contains(["hit_points"])
 
-func test_a_wall_carries_its_defence() -> void:
-	var building := _building(_l_shape())
-	building.defense = 3
-	assert_array(building.missing_fields()).is_empty()
-
-func test_a_negative_defence_is_reported() -> void:
-	var building := _building(_l_shape())
-	building.defense = -1
-	assert_array(building.missing_fields()).contains(["defense"])
-
 
 ## Le coût de chantier suit la même doctrine, et pour une raison qui lui est propre : le
 ## Cœur porte « — » dans la colonne Chantier de DESIGN.md 4.1 comme il porte « posé au
@@ -280,21 +261,21 @@ func test_a_negative_defence_is_reported() -> void:
 ## refuserait de démarrer sur le seul bâtiment du jeu qui ne se construit pas.
 func test_a_building_without_a_site_is_complete() -> void:
 	var building := _building(_l_shape())
-	assert_int(building.build_actions).is_equal(0)
+	assert_int(building.site_turns).is_equal(0)
 	assert_array(building.missing_fields()).is_empty()
 
 func test_a_building_carries_its_site_cost() -> void:
 	var building := _building(_l_shape())
-	building.build_actions = 3
+	building.site_turns = 3
 	assert_array(building.missing_fields()).is_empty()
 
 ## Sous son propre nom lui aussi : c'est un chiffre de la Construction.
 func test_a_negative_site_cost_is_reported_under_its_own_name() -> void:
 	var building := _building(_l_shape())
-	building.build_actions = -1
-	assert_array(building.missing_fields()).contains(["build_actions"])
+	building.site_turns = -1
+	assert_array(building.missing_fields()).contains(["site_turns"])
 
-## Le rachat du zéro légitime, et la seule chose qui rattraperait un build_actions
+## Le rachat du zéro légitime, et la seule chose qui rattraperait un site_turns
 ## oublié dans TOUS les .tres à la fois : au moins un bâtiment de data/ en déclare un.
 ##
 ## Sans cette exigence, un champ disparu du format entier passerait par vacuité — c'est
@@ -305,7 +286,7 @@ func test_at_least_one_building_of_data_declares_a_site() -> void:
 		if file.get_extension() != "tres":
 			continue
 		var building := load("%s/%s" % [BUILDING_ROOT, file]) as BuildingData
-		if building.build_actions > 0:
+		if building.site_turns > 0:
 			with_a_site.append(file.get_basename())
 	assert_array(with_a_site) \
 		.override_failure_message("aucun bâtiment de data/buildings/ ne déclare de chantier") \
@@ -321,17 +302,42 @@ func test_at_least_one_building_of_data_declares_a_site() -> void:
 ##
 ## Ce qu'il exige est faible exprès : *au moins un* bâtiment qui loge sans coûter de bras.
 ## Un manoir cher en travailleurs resterait légitime à côté.
-func test_at_least_one_shelter_costs_no_workers() -> void:
+##
+## **Le bâtiment d'ouverture est écarté depuis I3.** Le Cœur loge quatre personnes et ne
+## coûte aucun bras, donc il satisfaisait ce cas à lui seul — mais il est posé une fois, à
+## la fondation, et aucun geste du jeu n'en bâtit un second. La soupape qu'il semblait
+## offrir ne s'ouvre jamais, si bien que le cas serait passé sur un catalogue où
+## l'habitation coûte des bras, c'est-à-dire sur exactement la partie bloquée qu'il existe
+## pour interdire. C'est la même famille de défaut que la règle qu'il protège : **une
+## soupape se joue, elle ne se déclare pas** — et il aura fallu un tour jouable pour que la
+## différence se voie.
+func test_at_least_one_buildable_shelter_costs_no_workers() -> void:
+	var balance := load("res://data/balance/balance.tres") as BalanceData
+	var opener := String(balance.run.starting_building)
 	var free_shelters: Array[String] = []
 	for file in DirAccess.get_files_at(BUILDING_ROOT):
-		if file.get_extension() != "tres":
+		if file.get_extension() != "tres" or file.get_basename() == opener:
 			continue
 		var building := load("%s/%s" % [BUILDING_ROOT, file]) as BuildingData
 		if building != null and building.housing > 0 and building.workers == 0:
 			free_shelters.append(file.get_basename())
-	assert_array(free_shelters) 		.override_failure_message(
-			"aucun bâtiment de data/buildings/ ne loge sans coûter de travailleur : "
-			+ "une partie dont tout le monde est immobilisé ne pourrait plus rien bâtir") 		.is_not_empty()
+	assert_array(free_shelters) \
+		.override_failure_message(
+			"aucun bâtiment constructible de data/buildings/ ne loge sans coûter de "
+			+ "travailleur : une partie dont tout le monde est immobilisé ne pourrait "
+			+ "plus rien bâtir") \
+		.is_not_empty()
+
+## Le bâtiment d'ouverture est bien celui que le cas ci-dessus écarte, et il est bien
+## gratuit en bras. Sans cette vérification, un starting_building mal orthographié
+## n'écarterait rien et le trou se refermerait tout seul sans qu'on le sache.
+func test_the_starting_building_is_the_one_the_shelter_rule_skips() -> void:
+	var balance := load("res://data/balance/balance.tres") as BalanceData
+	var opener := balance.run.starting_building
+	var heart := load("%s/%s.tres" % [BUILDING_ROOT, opener]) as BuildingData
+	assert_object(heart).is_not_null()
+	assert_int(heart.workers).is_equal(0)
+	assert_int(heart.housing).is_greater(0)
 
 ## Un producteur cohérent : un rendement par tour, et c'est tout ce que N1 lui demande.
 func _producer() -> BuildingData:

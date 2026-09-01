@@ -79,3 +79,28 @@ func test_a_zoom_factor_of_one_is_reported() -> void:
 	var camera := CameraBalance.new()
 	camera.zoom_factor = 1.0
 	assert_array(camera.missing_fields()).contains(["zoom_factor"])
+
+## Le cinquième bloc, entré à `I3`. Le fume-test en reprend un le jour où un système
+## atterrit, jamais avant — c'est ce que `R0` a fait à l'envers en en retirant cinq.
+func test_balance_carries_a_run_block() -> void:
+	var balance := load(BALANCE_PATH) as BalanceData
+	assert_object(balance.run).is_not_null()
+	assert_object(balance.run).is_instanceof(RunBalance)
+
+## Le bâtiment d'ouverture nommé par `data/balance/` existe-t-il vraiment ?
+##
+## `RunBalance` ne peut pas le vérifier seule — une `Resource` de schéma ne lit jamais
+## l'index —, et `GameDatabase` ne le vérifie pas non plus : c'est `RunState.open()` qui
+## s'arrête dessus, donc un `assert()`, donc quelque chose qu'un export retire. Le doubler
+## ici est le geste que `N1` a posé sur l'interdit de blocage, et pour la même raison : la
+## faute rendrait un run impossible à ouvrir, et elle ne se verrait qu'en le lançant.
+func test_the_starting_building_names_something_that_exists() -> void:
+	var run := (load(BALANCE_PATH) as BalanceData).run
+	if String(run.starting_building).is_empty():
+		return
+	var path := "res://data/buildings/%s.tres" % run.starting_building
+	assert_bool(ResourceLoader.exists(path)) \
+		.override_failure_message(
+			"balance/run_balance.tres → starting_building nomme %s, absent de data/buildings/"
+				% run.starting_building) \
+		.is_true()

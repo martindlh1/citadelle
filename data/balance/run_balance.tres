@@ -1,0 +1,12 @@
+[gd_resource type="Resource" script_class="RunBalance" format=3]
+
+[ext_resource type="Script" path="res://src/schema/run_balance.gd" id="1_run_balance"]
+
+[resource]
+script = ExtResource("1_run_balance")
+turns = 20
+starting_building = &"heart"
+score_per_resource = 1
+score_per_building = 5
+score_per_inhabitant = 10
+score_per_heart_hit_point = 2

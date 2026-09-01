@@ -33,9 +33,15 @@ standard, donc le seul exploitable en ligne de commande.
 
 ## Vérification
 
-Les trois commandes qui doivent passer avant de considérer une tâche terminée sont
+Les **quatre** commandes qui doivent passer avant de considérer une tâche terminée sont
 décrites dans [`CLAUDE.md`](CLAUDE.md#vérification-avant-de-conclure), avec les pièges
-de la 4.7.2 qui expliquent pourquoi il en faut trois et pas une.
+de la 4.7.2 qui expliquent pourquoi il en faut plusieurs et pas une.
+
+La quatrième est entrée à `I3`, et elle a une histoire courte : deux fichiers hors
+`src/domain/` ne compilaient plus depuis `R0` — un harnais orphelin et une fonction de HUD
+qui prenait une classe supprimée — sans qu'aucune des trois autres ne puisse le dire. Le
+boot ne charge que ce qu'un harnais actif référence, et la passe de parsing ne balaie que le
+domaine. Il restait un angle mort de la taille de `src/adapters/`.
 
 ## Lancer une scène de dev
 
@@ -75,17 +81,25 @@ obligatoire ; les autres sont optionnels :
 | `--shot chemin.png` | rend une image puis quitte |
 | `--shot-hover x,y` | cellule à désigner. À défaut, le centre de la carte |
 | `--shot-turns n` | quarts de tour appliqués à la **caméra** |
-| `--shot-rotate n` | quarts de tour appliqués au **bâtiment** à poser *(harnais Construction)* |
+| `--shot-rotate n` | quarts de tour appliqués au **bâtiment** à poser *(harnais Construction et Run)* |
+| `--shot-passes n` | tours à résoudre avant de capturer *(harnais Run)* |
+| `--shot-sun f` | moment du cycle solaire : 0 aube, 0.25 midi, 0.5 crépuscule, 0.75 nuit *(harnais Run)* |
+| `--chronicle` | rejoue le run entier sans écran et imprime la table, puis quitte *(harnais Run)* |
 
 `--shot-hover` a une valeur par défaut plutôt que rien, parce qu'une capture qui ne
 montre pas la surbrillance ne prouve rien à son sujet, et que souris à `(0, 0)` le
 survol réel tomberait hors carte. `--shot-rotate` existe pour la même raison : sans
 lui, aucune capture ne montrerait jamais un bâtiment pivoté.
 
-**Les drapeaux ont fondu avec les harnais, à `R0`.** Il en restait quatorze, il en reste
-quatre. Les dix qui partent — `--shot-evenings`, `--shot-phases`, `--shot-fold`,
-`--shot-piles`, `--shot-view`, `--shot-restart`, `--shot-select`, `--shot-foes`,
-`--shot-rounds` et `--chronicle` — servaient tous des harnais supprimés.
+**Les drapeaux ont fondu avec les harnais, à `R0`**, et `I3` en rend deux. Il en restait
+quatorze avant le rescope, il en reste sept. Les dix qui étaient partis servaient des harnais
+supprimés ; `--shot-passes` remplace `--shot-evenings` pour un tour au lieu d'une journée en
+phases, et `--chronicle` revient tel quel parce que la question qu'il pose n'a pas changé.
+
+*Attention, ils n'étaient partis que du README.* `R0` les avait retirés du tableau ci-dessus
+sans les retirer de `scenes/dev/dev_shot.gd`, si bien que le code et cette page se sont
+contredits pendant deux jalons. Rien ne pouvait le dire : ce fichier n'a ni test ni écran.
+Voir la quatrième commande de vérification.
 
 La phrase qui les a fait naître, elle, ne bouge pas, et elle vaut pour ceux qui viendront :
 **un écran qu'aucune capture ne peut atteindre est celui que personne ne regardera.** Le cas
@@ -107,6 +121,15 @@ Celle du harnais Construction imprime à la place la ligne de survol : la cellul
 son terrain, et le verdict du domaine sur une pose à cet endroit. C'est la légende de
 l'image — le fantôme y est vert ou rouge, cette ligne dit pourquoi.
 
+Celle du harnais Run en imprime **deux**, et toutes deux disent ce qu'une image fixe ne peut
+pas dire. La première joue deux journées d'affilée et donne où le soleil s'arrête à chaque
+quart : deux séries identiques et non triviales disent que la course se **rejoue**, une
+seconde série figée serait le bug. La seconde échantillonne la course et donne le pire écart
+angulaire de la lumière à côté du pas moyen : deux nombres du même ordre disent une rotation
+régulière, un pire écart plusieurs fois le moyen serait l'à-coup. Les deux existent parce
+qu'un défaut d'animation est invisible sur une capture — la première a été écrite après avoir
+livré une course qui ne partait qu'au premier jour.
+
 **Les coordonnées de la sonde ne sont pas des pixels de l'image.** `project.godot` est
 en `stretch/mode="canvas_items"` : le viewport garde la résolution de base du projet
 pendant que la fenêtre, elle, suit `--resolution`. La capture sort donc à la taille de
@@ -126,16 +149,33 @@ qu'il a demandée. Une capture qui paraît « plus zoomée » qu'une autre est p
 toujours ça, et non le rendu qui a changé — au moindre doute, `cmp` sur les deux
 `.png` tranche là où l'oeil se trompe.
 
-## Les harnais, après `R0`
+## Les harnais, après `R0` et `I3`
 
-Il en reste **deux** sur neuf, et ce sont ceux des deux systèmes que le rescope garde
-intacts : **Terrain** et **Construction**. Les sept autres exerçaient l'Économie d'avant, les
-Effectifs, les Cartes, le Combat, la Bataille, le HUD et le Run — tous supprimés. Le harnais
-par défaut est désormais **Construction**.
+Il y en a **trois** : **Terrain**, **Construction** et **Run**. `R0` en avait supprimé sept
+sur neuf, tous ceux qui exerçaient l'Économie d'avant, les Effectifs, les Cartes, le Combat,
+la Bataille et le HUD. `I3` rend le Run, et il redevient le harnais **par défaut** pour la
+raison qui l'a fait venir tôt dans l'ordre des jalons : un projet qui ne se lance pas est un
+projet dont on ne mesure plus rien.
 
-**Ce qui revient, et quand.** L'Économie à `N1`, le Run à `I3`, la génération mesurée sur
-deux cents seeds à `T4`, la Bataille à `V2`. Ajouter un harnais reste un `.gd` et une ligne
-de `HARNESS_SCRIPTS` — jamais une scène, jamais une intervention dans l'éditeur.
+Le harnais Run tient le seul geste du jeu — fonder, bâtir, démolir, passer le tour — et il
+imprime deux choses qu'aucun autre contrôle ne regarde. Sa **capture** montre l'écran après
+`n` tours résolus ; sa **chronique** rejoue le run entier sans écran et rend un tableau,
+tour par tour, jusqu'au verdict :
+
+```bash
+"$GODOT_BIN" --headless --path . -- --chronicle
+```
+
+C'est le seul contrôle du projet qui joue la boucle complète sur la data réelle — ni le
+parsing ni les tests n'enchaînent vingt tours. Il n'arbitre rien et le dit en toutes lettres :
+la politique qu'il joue est bête, donc ses chiffres sont un **plancher** et non une partie
+bien jouée.
+
+**Ce qui revient encore, et quand.** La génération mesurée sur deux cents seeds à `T4`, la
+Bataille à `V2`. Le harnais de l'Économie ne revient pas : ce qu'il montrait — le repas, la
+famine, la réserve qui se remplit — se montre dans un tour, ce qui est le seul endroit où ces
+chiffres veulent dire quelque chose. Ajouter un harnais reste un `.gd` et une ligne de
+`HARNESS_SCRIPTS` — jamais une scène, jamais une intervention dans l'éditeur.
 
 Trois leçons de la famille survivent aux harnais qui les ont produites, et elles valent
 d'autant plus pour ceux qu'on écrira à neuf :

@@ -13,6 +13,17 @@ extends RefCounted
 ##
 ## Les arguments qui suivent -- sont ceux du jeu et non du moteur, d'où
 ## get_cmdline_user_args().
+##
+## **Un drapeau n'existe que tant qu'un harnais le lit.** `R0` a supprimé sept harnais sur
+## neuf et retiré du README les dix drapeaux qui les servaient — `--shot-evenings`,
+## `--shot-phases`, `--shot-fold`, `--shot-piles`, `--shot-view`, `--shot-restart`,
+## `--shot-select`, `--shot-foes`, `--shot-rounds` et `--chronicle` — mais les avait laissés
+## ici. Le code et la documentation se sont donc contredits pendant deux jalons, et rien ne
+## pouvait le dire : ce fichier n'a ni test ni écran. `I3` les retire, et rend ceux dont son
+## tour a besoin.
+##
+## La phrase qui les fait naître, elle, ne bouge pas : **un état qu'aucune capture ne peut
+## atteindre est un état que personne ne regardera.**
 
 ## Déclenche une capture vers ce chemin, puis quitte.
 const SHOT_FLAG := "--shot"
@@ -29,104 +40,40 @@ const SHOT_HOVER_FLAG := "--shot-hover"
 ## concernent pas.
 const SHOT_ROTATE_FLAG := "--shot-rotate"
 
-## Soirs à résoudre avant de capturer. Lu par les harnais qui savent résoudre ; les
-## autres l'ignorent, comme ils ignorent déjà les drapeaux qui ne les concernent pas.
+## Tours à résoudre avant de capturer. Lu par les harnais qui savent résoudre ; les autres
+## l'ignorent, comme ils ignorent déjà les drapeaux qui ne les concernent pas.
 ##
-## Il existe parce qu'un rapport de fin de soirée est du texte fabriqué à la main, donc
-## exactement le genre de code que ni le parsing ni les tests ne regardent : sans lui, le
-## chemin de résolution d'un harnais ne serait jamais emprunté par un contrôle.
-const SHOT_EVENINGS_FLAG := "--shot-evenings"
+## Il rend à `I3` ce que `--shot-evenings` faisait pour la journée en phases, et il existe
+## pour la même raison : un rapport de fin de tour est du texte fabriqué à la main, donc
+## exactement le genre de code que ni le parsing ni les tests ne regardent. Sans lui, le
+## chemin de résolution du harnais Run ne serait emprunté par aucun contrôle, et toute
+## capture montrerait un village qu'on vient de fonder.
+const SHOT_PASSES_FLAG := "--shot-passes"
 
-## Phases à franchir **en plus** des journées, avant de capturer. Lu par les harnais qui
-## connaissent une journée en phases.
+## Moment du cycle solaire à photographier, en fraction de révolution : 0 à l'aube, 0,25 à
+## midi, 0,5 au crépuscule, 0,75 au cœur de la nuit. Lu par les harnais qui éclairent.
 ##
-## Il vient de `P1a`, et il vient de la phrase ci-dessous appliquée à elle-même : une
-## journée compte plusieurs phases, mais `--shot-evenings` en résout des journées entières,
-## donc une capture s'arrête toujours sur le **premier** créneau. Toutes les autres phases
-## étaient des écrans qu'aucune capture ne pouvait atteindre — ce qui n'a gêné personne
-## tant qu'une phase ressemblait à une autre, et qui est devenu un trou le jour où la phase
-## a eu une couleur à montrer.
-const SHOT_PHASES_FLAG := "--shot-phases"
+## Une capture se pose sinon là où le jeu laisse le soleil entre deux tours, c'est-à-dire
+## **toujours à midi** : la course entière serait un état qu'aucune image ne peut atteindre,
+## donc que personne ne regarderait. C'est la phrase que `P1a` a laissée au projet, et le
+## corollaire qu'elle traîne — quand une vue se met à commuter sur un état, vérifier d'abord
+## qu'un drapeau atteint **chacune** de ses valeurs.
+##
+## Il ne sert qu'à regarder. Aucun geste du jeu ne le produit, et c'est bien pour ça qu'il
+## faut un drapeau.
+const SHOT_SUN_FLAG := "--shot-sun"
 
-## Replier le panneau d'affectation avant de capturer. Drapeau **nu**, sans valeur.
-##
-## Même raison que les deux ci-dessus, et le repli est un cas encore plus net : c'est un
-## état qu'aucune suite de journées ne produit, puisqu'il ne s'obtient que par un geste du
-## joueur. Sans ce drapeau, la seule façon de regarder un HUD replié serait de modifier du
-## code pour le regarder — ce qui revient à ne jamais le regarder.
-const SHOT_FOLD_FLAG := "--shot-fold"
-
-## Ouvrir la vue des piles avant de capturer. Drapeau **nu**, sans valeur.
-##
-## Troisième drapeau ouvert par la même porte que `--shot-view`, `--shot-phases` et
-## `--shot-fold`, et le cas est aussi net que celui du repli : la vue des piles est une
-## modale qu'aucune suite de journées ne fait apparaître, puisqu'elle ne s'obtient que par
-## une touche. Sans ce drapeau, la seule façon de la regarder serait de modifier du code
-## pour la regarder — c'est-à-dire de ne jamais la regarder.
-const SHOT_PILES_FLAG := "--shot-piles"
-
-## Cran d'affichage du HUD au moment de capturer. Lu par les harnais qui en ont un.
-##
-## Il existe pour la raison qui a valu son drapeau à `--shot-evenings`, et que `I2` a
-## reformulée en une phrase : **un écran qu'aucune capture ne peut atteindre est celui que
-## personne ne regardera**. Replier un rapport et masquer un HUD sont deux gestes qui ne
-## changent que l'image, donc les deux seuls dont ni le parsing ni les tests ne diront
-## jamais rien.
-const SHOT_VIEW_FLAG := "--shot-view"
-
-## Relance un run neuf après la suite de journées demandée, avant de capturer.
-##
-## Cinquième drapeau nu, et la même porte que les quatre autres : **un état qu'aucune
-## capture ne peut atteindre est celui que personne ne regardera.** Relancer ne s'obtient
-## que par un clic sur un écran de fin, donc aucune suite de journées ne le produit — et
-## `_restart()` serait du code que ni le parsing, ni les tests, ni une image n'empruntent
-## jamais, sur le seul chemin du harnais qui reconstruise un run entier.
-##
-## Il se cumule avec `--shot-evenings` : `--shot-evenings 16 --shot-restart` joue le run
-## jusqu'au verdict, le relance, et capture la fondation du suivant.
-const SHOT_RESTART_FLAG := "--shot-restart"
-
-## Corps à sélectionner sur le champ de bataille avant de capturer, par son rang d'entrée.
-##
-## Sixième passage par la même porte, et le cas est aussi net que le repli de `P1a` : les
-## deux voiles d'un combat — où l'on peut aller, ce qu'on peut frapper — ne s'allument
-## qu'après un clic sur une fiche. Sans ce drapeau, **la seule image qu'une capture pourrait
-## prendre d'une bataille serait celle où rien n'est sélectionné**, c'est-à-dire celle qui
-## ne montre aucune des deux choses que `F3a` ajoute.
-##
-## Un rang et non un identifiant : les corps d'une vague se nomment `raider_0`, ce qui est
-## une nomenclature de harnais et n'a aucune raison de fuir sur une ligne de commande.
-const SHOT_SELECT_FLAG := "--shot-select"
-
-## Passe la main au camp d'en face avant de capturer. Drapeau **nu**.
-##
-## Même porte encore : le tour de la vague change la couleur du bandeau, l'encre des fiches
-## et qui répond aux clics. Aucune suite de gestes automatique ne l'atteint, puisque `F2a`
-## n'a pas d'IA — c'est un état qui ne s'obtient que par un geste, comme le repli.
-const SHOT_FOES_FLAG := "--shot-foes"
-
-## Manches que l'IA de la vague joue avant de capturer. Argument entier.
-##
-## `--shot-foes` passe la main au camp d'en face **sans le faire jouer** : c'est l'état
-## d'un tour qu'on mène soi-même, et `F2b` le garde atteignable parce qu'on peut encore
-## jouer les deux camps. Celui-ci laisse l'IA agir, ce qui est l'autre valeur du même
-## interrupteur — `CLAUDE.md` demande depuis `P1a` qu'un drapeau atteigne **chacune** des
-## valeurs d'un état sur lequel une vue commute.
-const SHOT_ROUNDS_FLAG := "--shot-rounds"
-
-## Rejoue le run entier sous chaque variante d'équilibrage et imprime ce que ça donne.
+## Rejoue le run entier sans écran et imprime ce que ça donne, tour par tour. Drapeau **nu**.
 ##
 ## Le seul drapeau de ce fichier qui ne capture pas une image, et il est ici quand même :
 ## `DevShot` est l'unique endroit du projet qui lise la ligne de commande, et un second
 ## lecteur serait un second endroit où l'on écrit `OS.get_cmdline_user_args()`.
 ##
-## Il vient de `I2b`, qui demande d'arbitrer deux `.tres` en jouant quinze journées. Ce
-## qu'une partie jouée ne dit pas et qu'une table dit tout de suite : **si la comparaison
-## est honnête**. Un modèle de journée qui résout moitié moins produit moitié moins à coût
-## constant, et sans le chiffre on prendrait cet écart pour un ressenti.
-##
-## Il n'arbitre rien, et le rapport le dit en toutes lettres : « est-ce une corvée » n'est
-## pas mesurable. C'est un instrument de dégrossissage, pas un juge.
+## Il vient du jeu d'avant, où il arbitrait deux modèles de journée, et `I3` le rend pour la
+## même raison exactement : c'est le seul contrôle qui joue la boucle entière sur la data
+## réelle, là où le parsing et les tests n'en jouent jamais vingt tours d'affilée. Il
+## n'arbitre rien, et le rapport le dit en toutes lettres — la politique qu'il joue est
+## bête, donc ses chiffres sont un plancher et non une partie bien jouée.
 const CHRONICLE_FLAG := "--chronicle"
 
 ## Images laissées passer avant de capturer. La première ne porte encore ni le tampon
@@ -153,6 +100,16 @@ static func argument(flag: String) -> String:
 	if index < 0 or index + 1 >= args.size():
 		return ""
 	return args[index + 1]
+
+## Moment du cycle solaire demandé, ou `fallback` si le drapeau est absent.
+##
+## `to_float()` rend 0.0 sur une chaîne vide, ce qui est **l'aube** et non « pas de
+## demande » : les deux se distinguent donc en regardant la présence du drapeau, jamais sa
+## valeur. Sans ça, toute capture sans drapeau se prendrait au lever du jour.
+static func sun_moment(fallback: float) -> float:
+	if not has_flag(SHOT_SUN_FLAG):
+		return fallback
+	return argument(SHOT_SUN_FLAG).to_float()
 
 ## Cellule à désigner, lue en « x,y ». `fallback` à défaut, et aussi sur un argument
 ## mal formé : une capture doit montrer quelque chose plutôt qu'échouer sur une virgule.
