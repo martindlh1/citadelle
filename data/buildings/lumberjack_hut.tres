@@ -5,11 +5,9 @@
 
 [sub_resource type="Resource" id="Resource_lumberjack_hut_production"]
 script = ExtResource("2_production_block")
-slots = 2
-yield_per_slot = Dictionary[StringName, int]({
+yield_per_turn = Dictionary[StringName, int]({
 &"wood": 2
 })
-skill_family = &"harvest"
 
 [resource]
 script = ExtResource("1_building_data")
@@ -19,4 +17,5 @@ height = 0.6
 build_actions = 1
 footprint = Array[Vector2i]([Vector2i(0, 0)])
 production = SubResource("Resource_lumberjack_hut_production")
-hit_points = 4
+workers = 2
+hit_points = 6

@@ -116,17 +116,36 @@ const QUARTER_TURNS := 4
 ## seule capacité partagée : c'est ce qui donne à l'entrepôt une valeur d'arbitrage.
 @export_range(0, 500, 1) var storage_bonus: int
 
-## Ce qu'il ajoute au plafond de places du roster. 0 pour tout ce qui n'est pas une
-## habitation.
+## Ce qu'il ajoute au plafond de logement. 0 pour tout ce qui n'est pas une habitation.
+## Colonne **Loge** de DESIGN.md 4.1.
 ##
 ## Champ plat et non bloc, exactement comme storage_bonus juste au-dessus, et pour la
 ## même raison : c'est un nombre qui relève un plafond global, pas une nature de
-## bâtiment. La doctrine du zéro ne s'y applique donc pas non plus — douze bâtiments
-## sur treize ne logent personne, et le réclamer refuserait de démarrer sur des données
+## bâtiment. La doctrine du zéro ne s'y applique donc pas non plus — la plupart des
+## bâtiments ne logent personne, et le réclamer refuserait de démarrer sur des données
 ## correctes.
 ##
-## Entré à W1 avec le système qui le lit, comme DESIGN.md 4.1 l'avait annoncé à E1b.
-@export_range(0, 20, 1) var roster_places: int
+## Il s'appelait roster_places jusqu'à N1. Le renommage suit celui d'upkeep_per_worker :
+## il n'y a plus de roster, il y a un plafond d'habitants.
+@export_range(0, 20, 1) var housing: int
+
+## Travailleurs qu'il **immobilise**, payés à l'ouverture du chantier et gardés à vie.
+## Colonne **Trav.** de DESIGN.md 4.1.
+##
+## C'est un **coût de construction**, au même titre que `cost` juste au-dessus, et la seule
+## différence tient en un mot : le bois est consommé, le travailleur est immobilisé. Il
+## revient au pool quand le bâtiment est démoli ou détruit.
+##
+## Un seul champ suffit là où le modèle écarté à N1 en aurait demandé deux — un coût de
+## chantier et un besoin de fonctionnement. Ceux qui l'ont bâti sont ceux qui y vivent.
+##
+## 0 est légitime et fréquent : une palissade ne loge aucun ouvrier. Mais un zéro est
+## **obligatoire quelque part**, et c'est la seule règle de ce fichier qu'il ne peut pas
+## vérifier lui-même : si aucun bâtiment qui loge n'était gratuit en travailleurs, une
+## partie dont tout le monde est immobilisé et le logement plein ne pourrait plus rien
+## bâtir — jamais. C'est GameDatabase qui tient cette règle, parce qu'elle regarde le
+## catalogue entier et qu'une BuildingData ne voit qu'elle-même.
+@export_range(0, 20, 1) var workers: int
 
 ## Ce qu'il oppose à une vague du seul fait d'être debout. Colonne **Déf.** de
 ## DESIGN.md 4.1.
@@ -252,8 +271,10 @@ func missing_fields() -> PackedStringArray:
 	# ferait mentir le nom de cette fonction.
 	if build_actions < 0:
 		missing.append("build_actions")
-	if roster_places < 0:
-		missing.append("roster_places")
+	if housing < 0:
+		missing.append("housing")
+	if workers < 0:
+		missing.append("workers")
 	# Le seul champ de défense réclamé : voir son docstring. defense
 	# sont légitimement nuls sur presque tout le catalogue.
 	if hit_points <= 0:

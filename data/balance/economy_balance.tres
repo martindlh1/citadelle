@@ -5,7 +5,9 @@
 [resource]
 script = ExtResource("1_economy_balance")
 base_storage_cap = 100
-upkeep_per_worker = 1
+base_housing = 6
+starting_population = 4
+upkeep_per_inhabitant = 1
 upkeep_resource = &"food"
 starting_stock = Dictionary[StringName, int]({
 &"food": 20,

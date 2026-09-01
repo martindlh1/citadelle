@@ -13,4 +13,5 @@ cost = Dictionary[StringName, int]({
 &"wood": 20
 })
 storage_bonus = 100
-hit_points = 6
+workers = 1
+hit_points = 8
