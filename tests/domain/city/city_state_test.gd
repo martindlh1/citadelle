@@ -256,7 +256,7 @@ func test_enough_notches_finish_the_site() -> void:
 	assert_bool(_city.building_at(Vector2i(1, 1)).is_complete()).is_true()
 	assert_int(_city.building_at(Vector2i(1, 1)).remaining()).is_equal(0)
 
-## Un chantier fini n'absorbe pas d'action Construire en silence : il refuse, et
+## Un chantier fini n'absorbe pas un cran de plus en silence : il refuse, et
 ## remaining() ne part jamais dans le négatif. Le refus est rendu pour que l'appelant
 ## sache que sa carte n'a servi à rien.
 func test_a_finished_site_refuses_further_notches() -> void:
@@ -404,7 +404,7 @@ func _keep() -> BuildingData:
 func _site(id: StringName, actions: int,
 		offsets: Array[Vector2i] = _single()) -> BuildingData:
 	var building := _building(id, offsets)
-	building.build_actions = actions
+	building.site_turns = actions
 	return building
 
 ## Un L, dont l'enveloppe couvre une cellule qu'il n'occupe pas : (1, 1).

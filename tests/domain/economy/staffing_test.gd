@@ -19,19 +19,19 @@ func _city(costs: Array[int]) -> CitySnapshot:
 			_building(StringName("b%d" % i), costs[i]), Vector2i(i, 0), 0, 0, 0, 0))
 	return CitySnapshot.create(placed)
 
-## `build_actions` est ce qui fait d'un bâtiment un chantier tant que son avancement ne
+## `site_turns` est ce qui fait d'un bâtiment un chantier tant que son avancement ne
 ## l'a pas rattrapé. À zéro — le défaut — il est achevé dès la pose, comme le Cœur.
 ##
 ## Ce n'est **pas** le `turns` de BuildingSnapshot.create(), qui est une orientation. Les
 ## confondre fabrique un bâtiment fini là où le cas croyait poser un chantier, et le test
 ## passe alors sur autre chose que ce qu'il annonce.
 func _building(id: StringName, workers: int, housing: int = 0,
-		build_actions: int = 0) -> BuildingData:
+		site_turns: int = 0) -> BuildingData:
 	var data := BuildingData.new()
 	data.id = id
 	data.footprint = [Vector2i.ZERO] as Array[Vector2i]
 	data.hit_points = HIT_POINTS
-	data.build_actions = build_actions
+	data.site_turns = site_turns
 	data.workers = workers
 	data.housing = housing
 	return data

@@ -245,15 +245,6 @@ func test_negative_workers_are_reported() -> void:
 	building.workers = -1
 	assert_array(building.missing_fields()).contains(["workers"])
 
-## La défense rejoint la même doctrine à F1 : la plupart des bâtiments ne défendent rien.
-## Le cas est écrit pour que personne ne la réclame en croyant corriger un oubli.
-##
-## `R0` lui retire les places de déploiement, le champ étant parti avec le combat tactique.
-func test_a_building_that_defends_nothing_is_complete() -> void:
-	var building := _building(_l_shape())
-	assert_int(building.defense).is_equal(0)
-	assert_array(building.missing_fields()).is_empty()
-
 ## Les PV, eux, sont **réclamés**, et c'est le seul champ de combat qui le soit. Un
 ## bâtiment à zéro tombe au premier coup sans que rien ne le signale : « gratuit à
 ## défendre » et « oublié dans le .tres » y seraient indiscernables, Godot n'écrivant
@@ -263,16 +254,6 @@ func test_a_building_without_hit_points_is_reported() -> void:
 	building.hit_points = 0
 	assert_array(building.missing_fields()).contains(["hit_points"])
 
-func test_a_wall_carries_its_defence() -> void:
-	var building := _building(_l_shape())
-	building.defense = 3
-	assert_array(building.missing_fields()).is_empty()
-
-func test_a_negative_defence_is_reported() -> void:
-	var building := _building(_l_shape())
-	building.defense = -1
-	assert_array(building.missing_fields()).contains(["defense"])
-
 
 ## Le coût de chantier suit la même doctrine, et pour une raison qui lui est propre : le
 ## Cœur porte « — » dans la colonne Chantier de DESIGN.md 4.1 comme il porte « posé au
@@ -280,21 +261,21 @@ func test_a_negative_defence_is_reported() -> void:
 ## refuserait de démarrer sur le seul bâtiment du jeu qui ne se construit pas.
 func test_a_building_without_a_site_is_complete() -> void:
 	var building := _building(_l_shape())
-	assert_int(building.build_actions).is_equal(0)
+	assert_int(building.site_turns).is_equal(0)
 	assert_array(building.missing_fields()).is_empty()
 
 func test_a_building_carries_its_site_cost() -> void:
 	var building := _building(_l_shape())
-	building.build_actions = 3
+	building.site_turns = 3
 	assert_array(building.missing_fields()).is_empty()
 
 ## Sous son propre nom lui aussi : c'est un chiffre de la Construction.
 func test_a_negative_site_cost_is_reported_under_its_own_name() -> void:
 	var building := _building(_l_shape())
-	building.build_actions = -1
-	assert_array(building.missing_fields()).contains(["build_actions"])
+	building.site_turns = -1
+	assert_array(building.missing_fields()).contains(["site_turns"])
 
-## Le rachat du zéro légitime, et la seule chose qui rattraperait un build_actions
+## Le rachat du zéro légitime, et la seule chose qui rattraperait un site_turns
 ## oublié dans TOUS les .tres à la fois : au moins un bâtiment de data/ en déclare un.
 ##
 ## Sans cette exigence, un champ disparu du format entier passerait par vacuité — c'est
@@ -305,7 +286,7 @@ func test_at_least_one_building_of_data_declares_a_site() -> void:
 		if file.get_extension() != "tres":
 			continue
 		var building := load("%s/%s" % [BUILDING_ROOT, file]) as BuildingData
-		if building.build_actions > 0:
+		if building.site_turns > 0:
 			with_a_site.append(file.get_basename())
 	assert_array(with_a_site) \
 		.override_failure_message("aucun bâtiment de data/buildings/ ne déclare de chantier") \
