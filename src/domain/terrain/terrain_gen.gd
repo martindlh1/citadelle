@@ -28,8 +28,9 @@ extends RefCounted
 ## fichier. Il retrouve le replat en marchant et compte les accès en marchant, ce qui le rend
 ## indifférent à la technique employée : c'est ce qui permet de les essayer.
 ##
-## `TerrainGenBalance.Shape` dit laquelle on essaie. C'est un champ d'**exploration**, et il
-## se réduira à ce qu'on aura retenu.
+## Le village, lui, ne s'installe plus au centre : `MapAudit` cherche le replat jouable le plus
+## proche du milieu et le rapport le porte. C'est la contrepartie du bruit — on ne peut pas
+## exiger d'un relief tiré au sort qu'il laisse une place à bâtir sur une case nommée d'avance.
 
 ## Décorrèle les flux de bruit. Sans ces décalages ils partiraient tous du même seed et
 ## leurs motifs seraient corrélés — des forêts qui suivent les lignes de crête.
@@ -104,7 +105,8 @@ static func accepted_attempt(run_seed: int, size: Vector2i,
 	var centre := centre_of(size)
 	for attempt in params.max_attempts:
 		var grid := draft(seed_for(run_seed, attempt), size, params)
-		var report := MapAudit.inspect(grid.to_query(), centre, params.max_climb)
+		var report := MapAudit.inspect(grid.to_query(), centre, params.max_climb,
+			params.min_plateau_cells)
 		if MapAudit.shortcomings(report, params).is_empty():
 			return attempt
 	return -1

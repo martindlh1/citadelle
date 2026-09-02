@@ -68,6 +68,57 @@ func test_deposits_are_counted_on_the_plateau_only() -> void:
 	_grid.set_terrain(Vector2i(0, 0), _stone)
 	assert_int(_inspect().deposits()).is_equal(1)
 
+# --- le site ----------------------------------------------------------------
+
+## **Le cas qui porte la règle du jalon.** Un centre qui dépasse d'un cran est un replat d'une
+## seule case : fonder là revenait à noter la carte sur un pixel, et c'est très exactement ce
+## que le bruit en crêtes produit au milieu d'une carte sur deux. Le village descend donc d'une
+## case et s'installe sur le replat d'à côté.
+func test_the_village_steps_off_a_peak_to_the_shelf_beside_it() -> void:
+	_grid.set_height(CENTRE, PLATEAU + 1)
+	# La prémisse : le milieu est bien un pic. Sans ce relevé, un montage raté rendrait le
+	# même « le village n'est pas au centre » en prouvant autre chose.
+	var peak := _inspect()
+	assert_int(peak.shelf()) 		.override_failure_message("le milieu n'est pas un pic : le cas ne prouve rien") 		.is_equal(1)
+	assert_vector(peak.site()).is_equal(CENTRE)
+
+	var report := _inspect(2)
+	assert_vector(report.site()) 		.override_failure_message("le village est resté sur le pic") 		.is_not_equal(CENTRE)
+	assert_int(report.drift()).is_equal(1)
+	assert_int(report.shelf()).is_equal(SHELF_SIDE * SHELF_SIDE - 1)
+
+## **Le plus proche, et non le plus grand.** Un replat de quatre cases posé sous le milieu suffit
+## tant qu'on ne demande que quatre places ; dès qu'on en demande cinq, le village descend sur
+## le grand plateau. Une recherche qui aurait classé par taille serait descendue dans les deux
+## cas, et aurait donné la même réponse pour une autre raison.
+func test_the_nearest_shelf_wins_over_the_largest() -> void:
+	for cell in [CENTRE, CENTRE + Vector2i(1, 0), CENTRE + Vector2i(0, 1),
+			CENTRE + Vector2i(1, 1)]:
+		_grid.set_height(cell, PLATEAU + 1)
+
+	var small := _inspect(4)
+	assert_vector(small.site()) 		.override_failure_message("quatre places suffisaient : le village n'avait pas à bouger") 		.is_equal(CENTRE)
+	assert_int(small.shelf()).is_equal(4)
+
+	var large := _inspect(5)
+	assert_int(large.shelf()) 		.override_failure_message("cinq places : le village devait descendre") 		.is_equal(SHELF_SIDE * SHELF_SIDE - 4)
+	assert_int(large.drift()).is_equal(1)
+
+## Quand aucun replat n'offre la place demandée, on s'installe sur le plus grand qu'il y ait et
+## le rapport dit de combien on manque. Rendre « rien » aurait obligé l'appelant à distinguer
+## deux cas pour arriver à la même conclusion : ce seed ne vaut rien.
+func test_an_impossible_requirement_falls_back_to_the_largest_shelf() -> void:
+	var report := _inspect(999)
+	assert_int(report.shelf()) 		.override_failure_message("le repli devait prendre la plaine, plus grande que le plateau") 		.is_equal(SIZE.x * SIZE.y - SHELF_SIDE * SHELF_SIDE)
+	assert_array(MapAudit.shortcomings(report, _promises(1, 9, 999, 0, 0, 9))) 		.contains(["plateau"])
+
+## Un village trop loin du milieu se nomme, comme le reste. C'est le seuil qui **mord** sur les
+## réglages du jour : les trois autres promesses protègent d'une molette tournée demain.
+func test_a_village_too_far_from_the_middle_is_named() -> void:
+	var report := _inspect(999)
+	assert_int(report.drift()) 		.override_failure_message("le repli devait éloigner le village du milieu") 		.is_equal(3)
+	assert_array(MapAudit.shortcomings(report, _promises(1, 9, 1, 0, 0, 2))) 		.contains(["site_drift"])
+
 # --- les accès --------------------------------------------------------------
 
 ## Le montage nu : deux crans d'écart, donc rien ne monte. C'est la moitié structurelle de la
@@ -171,35 +222,42 @@ func test_the_depth_is_minus_one_when_nothing_reaches_the_plateau() -> void:
 func test_a_map_that_keeps_its_promises_lacks_nothing() -> void:
 	_ramp(Vector2i(4, 1))
 	_ramp(Vector2i(4, 7))
-	assert_array(MapAudit.shortcomings(_inspect(), _promises(2, 4, 25, 0, 0))).is_empty()
+	assert_array(MapAudit.shortcomings(_inspect(), _promises(2, 4, 25, 0, 0, 9))).is_empty()
 
 func test_each_broken_promise_is_named() -> void:
 	_ramp(Vector2i(4, 1))
-	var missing := MapAudit.shortcomings(_inspect(), _promises(2, 4, 999, 999, 9))
+	var missing := MapAudit.shortcomings(_inspect(), _promises(2, 4, 999, 999, 9, 9))
 	assert_array(missing).contains(["plateau", "accesses_too_few", "pads", "deposits"])
 
 func test_too_many_accesses_is_a_different_name_from_too_few() -> void:
 	for foot in [Vector2i(4, 1), Vector2i(4, 7), Vector2i(1, 4)]:
 		_ramp(foot)
-	assert_array(MapAudit.shortcomings(_inspect(), _promises(1, 2, 1, 0, 0))) \
+	assert_array(MapAudit.shortcomings(_inspect(), _promises(1, 2, 1, 0, 0, 9))) \
 		.contains(["accesses_too_many"])
 
 # --- le montage -------------------------------------------------------------
 
-func _inspect() -> MapReport:
-	return MapAudit.inspect(_grid.to_query(), CENTRE, CLIMB)
+## L'audit du montage courant, pour un site qui exige `need` cases à bâtir.
+##
+## Une case par défaut, parce que la plupart des cas de ce fichier parlent d'autre chose que
+## du site : une exigence forte les ferait tous porter sur la recherche plutôt que sur leur
+## sujet, et un montage dont le milieu est bâtissable rend alors le milieu.
+func _inspect(need := 1) -> MapReport:
+	return MapAudit.inspect(_grid.to_query(), CENTRE, CLIMB, need)
 
 ## Pose une case de rampe : une marche à mi-hauteur, contre le plateau.
 func _ramp(cell: Vector2i) -> void:
 	_grid.set_cell(cell, PLATEAU - CLIMB, _plain)
 
-func _promises(low: int, high: int, cells: int, pads: int, deposits: int) -> TerrainGenBalance:
+func _promises(low: int, high: int, cells: int, pads: int, deposits: int,
+		drift: int) -> TerrainGenBalance:
 	var params := TerrainGenBalance.new()
 	params.min_accesses = low
 	params.max_accesses = high
 	params.min_plateau_cells = cells
 	params.min_build_pads = pads
 	params.min_plateau_deposits = deposits
+	params.max_site_drift = drift
 	return params
 
 func _terrain(id: StringName, build: TerrainData.Build, walk: TerrainData.Walk,

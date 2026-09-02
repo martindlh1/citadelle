@@ -1,7 +1,8 @@
 class_name MapReport
 extends RefCounted
-## Ce qu'une carte vaut, mesuré sur la carte elle-même : son plateau, ses accès, sa surface
-## bâtissable, ses gisements, et la distance qui sépare la lisière du centre.
+## Ce qu'une carte vaut, mesuré sur la carte elle-même : où le village s'installe, le replat
+## qui le porte, ses accès, sa surface bâtissable, ses gisements, et la distance qui l'en
+## sépare de la lisière.
 ##
 ## Immuable. Rendu par MapAudit.inspect().
 ##
@@ -19,7 +20,13 @@ extends RefCounted
 ## même rapport sert à **rejeter** un seed et à **décrire** une distribution de deux cents
 ## cartes, et la seconde lecture serait sans intérêt si les chiffres arrivaient déjà jugés.
 
-## Cellules du replat central : tout ce qui est à la hauteur du centre et s'y rattache.
+## Là où le village s'installe : la case que l'audit a retenue pour fonder.
+var _site: Vector2i = Vector2i.ZERO
+
+## Cases qui la séparent du milieu de la carte, en anneaux.
+var _drift: int = 0
+
+## Cellules du replat qui porte ce site : tout ce qui est à sa hauteur et s'y rattache.
 var _shelf: int = 0
 
 ## Celles de ce replat sur lesquelles on peut bâtir. Un rocher posé dessus fait l'écart.
@@ -38,14 +45,18 @@ var _pads: int = 0
 ## Cellules de gisement bâtissables sur le plateau.
 var _deposits: int = 0
 
-## Pas qui séparent la lisière de la carte du centre du plateau, ou -1 s'il est injoignable.
+## Pas qui séparent la lisière de la carte du plateau, ou -1 s'il est injoignable.
 var _edge_distance: int = -1
 
 ## Rapport brut. Réservé à MapAudit, qui est le seul à savoir le composer.
-static func create(shelf: int, plateau: int, entries: Array[Vector2i], pads: int,
-		deposits: int, edge_distance: int) -> MapReport:
+static func create(site: Vector2i, drift: int, shelf: int, plateau: int,
+		entries: Array[Vector2i], pads: int, deposits: int,
+		edge_distance: int) -> MapReport:
 	assert(plateau <= shelf, "plus de cases bâtissables que de replat")
+	assert(drift >= 0, "dérive négative : %d" % drift)
 	var report := MapReport.new()
+	report._site = site
+	report._drift = drift
 	report._shelf = shelf
 	report._plateau = plateau
 	report._entries = entries.duplicate()
@@ -54,7 +65,26 @@ static func create(shelf: int, plateau: int, entries: Array[Vector2i], pads: int
 	report._edge_distance = edge_distance
 	return report
 
-## Cellules du replat central, bâtissables ou non.
+## Là où le village s'installe.
+##
+## **C'est un résultat et non une donnée**, et c'est ce qui distingue ce rapport de celui que
+## `T4` rendait d'abord. Un relief bruité n'a aucune raison d'offrir une place à bâtir au
+## milieu exact de la carte — sur des crêtes, le centre géométrique est souvent un **pic**. On
+## a donc cessé de fonder au centre pour fonder **où le terrain le permet, au plus près du
+## centre**, ce qui est aussi la seule des deux règles qu'un joueur puisse deviner en
+## regardant la carte.
+func site() -> Vector2i:
+	return _site
+
+## Cases qui séparent ce site du milieu de la carte, en anneaux.
+##
+## C'est le filtre qui a remplacé la garantie de plateau : une carte trouve presque toujours
+## un replat quelque part, la question est **à quelle distance**. Un village qui s'installe
+## à douze cases du milieu se retrouve adossé à la lisière, donc sans terrain devant lui.
+func drift() -> int:
+	return _drift
+
+## Cellules du replat qui porte le site, bâtissables ou non.
 func shelf() -> int:
 	return _shelf
 
@@ -78,11 +108,11 @@ func pads() -> int:
 func deposits() -> int:
 	return _deposits
 
-## Pas de la lisière au centre du plateau. -1 si aucun chemin n'y mène.
+## Pas de la lisière au plateau. -1 si aucun chemin n'y mène.
 func edge_distance() -> int:
 	return _edge_distance
 
-## Le centre est-il joignable depuis la lisière ?
+## Le plateau est-il joignable depuis la lisière ?
 ##
 ## Une carte dont il ne l'est pas est **invincible**, ce qui est pire qu'injouable : aucune
 ## vague n'atteint jamais le Cœur, donc le jeu n'a plus d'enjeu et rien ne le signale.

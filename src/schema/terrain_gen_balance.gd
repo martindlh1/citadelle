@@ -17,13 +17,16 @@ extends Resource
 ##
 ## Ce qui la remplace est du bruit, comme avant, **penché** par quelques règles qui ne se
 ## voient pas : un centre un peu plus haut, un centre un peu plus calme, des crêtes qui
-## barrent parce qu'elles sont hautes et non parce qu'on les a posées là. `shape` dit
-## laquelle de ces façons de pencher on essaie — c'est un champ d'**exploration**, et il se
-## réduira à ce qu'on aura choisi.
+## barrent parce qu'elles sont hautes et non parce qu'on les a posées là.
 ##
-## **L'audit, lui, ne change pas d'une ligne**, et c'est ce qui rend l'exploration possible :
-## il retrouve le replat central en marchant et compte les accès sans rien savoir de la
-## technique. Un vérificateur taillé sur la mesa aurait été à réécrire avec elle.
+## **Et le village ne s'installe plus au centre, mais au plus près du centre.** C'est ce qui
+## rend le reste tenable : un bruit n'a aucune raison de laisser une place à bâtir sur une case
+## désignée d'avance, et l'exiger revenait à noter la carte sur un pixel. Voir
+## `min_plateau_cells` et `max_site_drift`, qui disent ensemble ce qu'on cherche et jusqu'où.
+##
+## **L'audit, lui, ne sait toujours rien de la technique**, et c'est ce qui rend l'exploration
+## possible : il cherche le replat en marchant et compte les accès en marchant. Un vérificateur
+## taillé sur la mesa aurait été à réécrire avec elle.
 ##
 ## La dispersion se lit en bandes cumulées sur un tirage unique par cellule :
 ## [0, forest) donne de la forêt, puis [forest, forest+stone) du gisement, puis
@@ -180,8 +183,23 @@ enum Relief {
 
 @export_group("Promesses")
 
-## Cellules bâtissables que le replat central doit porter au minimum.
+## Cellules bâtissables qu'un replat doit offrir pour qu'on veuille bien s'y installer.
+##
+## **C'est une consigne de recherche avant d'être un seuil**, et la nuance est ce qui a
+## remplacé la mesa. L'audit cherche le replat de cette taille le plus proche du centre ; il ne
+## rejette la carte que s'il n'en trouve **nulle part**, ce qui veut dire un relief où aucun
+## village ne tiendrait. Le filtre utile, celui qui mord, est `max_site_drift`.
 @export_range(1, 4096, 1) var min_plateau_cells: int
+
+## Cases dont le village peut s'écarter du milieu de la carte, en anneaux.
+##
+## Fonder au centre exact n'a pas de sens sur un relief bruité — c'est souvent un pic —, mais
+## fonder n'importe où non plus : un village adossé à la lisière n'a pas de terrain devant lui,
+## donc pas de bataille. Ce chiffre est l'écart qu'on tolère entre les deux, et c'est **le**
+## réglage qui décide combien de brouillons partent à la poubelle.
+## À zéro le village devrait tomber sur le milieu exact, ce qui est justement la contrainte
+## qu'on vient de retirer : la valeur est refusée au boot plutôt que d'être interprétée.
+@export_range(1, 128, 1) var max_site_drift: int
 
 ## Accès distincts que ce replat doit avoir au minimum.
 @export_range(1, 32, 1) var min_accesses: int
@@ -244,6 +262,8 @@ func missing_fields() -> PackedStringArray:
 		missing.append("densities_sum")
 	if min_plateau_cells < 1:
 		missing.append("min_plateau_cells")
+	if max_site_drift < 1:
+		missing.append("max_site_drift")
 	if min_accesses < 1:
 		missing.append("min_accesses")
 	if max_accesses < min_accesses:

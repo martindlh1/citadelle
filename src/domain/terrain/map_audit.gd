@@ -3,10 +3,10 @@ extends RefCounted
 ## Ce qui regarde une carte et dit ce qu'elle vaut, en marchant dessus.
 ##
 ## Fonction pure sur un TerrainQuery. Elle ne génère rien, ne corrige rien, et surtout **ne
-## sait rien de la façon dont la carte a été faite** : elle retrouve le plateau par un
-## parcours, compte les accès en marchant depuis la lisière, et mesure la place à bâtir en
-## essayant d'y poser une empreinte. C'est la condition pour qu'elle **vérifie** au lieu de
-## répéter.
+## sait rien de la façon dont la carte a été faite** : elle cherche où le village peut
+## s'installer, retrouve le replat par un parcours, compte les accès en marchant depuis la
+## lisière, et mesure la place à bâtir en essayant d'y poser une empreinte. C'est la condition
+## pour qu'elle **vérifie** au lieu de répéter.
 ##
 ## `CLAUDE.md` le dit d'une table et ça vaut d'un contrôle : deux chiffres qui viennent du
 ## même compteur ne prouvent rien en se ressemblant. Un audit à qui la génération dirait « j'ai
@@ -45,22 +45,35 @@ const DEPOSIT_TAGS: Array[StringName] = [&"stone"]
 const NEIGHBOURS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0),
 	Vector2i(0, 1)]
 
-## Ce que cette carte vaut, vue depuis cette cellule centrale, pour un marcheur qui enjambe
-## `climb` crans.
+## Case rendue quand la carte n'offre aucun site du tout. Hors grille, donc jamais confondue.
+const NOWHERE := Vector2i(-1, -1)
+
+## Ce que cette carte vaut pour un village qui s'installe au plus près de `centre`, et pour un
+## marcheur qui enjambe `climb` crans.
 ##
-## `centre` est le point de repère et non un résultat : c'est la case autour de laquelle la
-## génération a bâti son plateau, et celle que le harnais désigne pour poser sa question. Un
-## audit qui chercherait lui-même « le plus grand replat » rendrait un chiffre plus savant et
-## moins utile — la question posée est « le plateau **du milieu** tient-il ses promesses ».
+## **Le site est cherché, pas reçu**, et c'est le tour qu'a pris `T4` après avoir retiré la
+## mesa. Un relief bruité n'a aucune raison d'offrir une place à bâtir au milieu exact de la
+## carte : sur des crêtes, le centre géométrique est le plus souvent un **pic**, donc un replat
+## d'une seule case. Auditer là revenait à noter la carte sur un pixel, et rejetait des cartes
+## superbes dont le premier replat était trois cases plus loin.
 ##
-## Un centre dont le replat est minuscule est donc une carte ratée, et c'est bien ce qu'on
-## veut lire : le rapport rend 1 et l'appelant rejette.
-static func inspect(query: TerrainQuery, centre: Vector2i, climb: int) -> MapReport:
+## La règle est donc celle qu'un joueur devinerait en regardant la carte : **on fonde où le
+## terrain le permet, au plus près du centre.** `centre` reste le point de repère — il dit
+## vers quoi le village tend —, `need` dit ce qu'un replat doit offrir pour mériter qu'on s'y
+## installe, et ce qui en sort est un **résultat** que le rapport porte.
+##
+## Une carte où rien n'atteint `need` n'est pas pour autant sans rapport : on s'installe alors
+## sur le plus grand replat qu'il y ait, et `plateau()` dit de combien on manque. Un audit qui
+## rendrait `null` là obligerait l'appelant à distinguer deux cas au lieu de lire un chiffre.
+static func inspect(query: TerrainQuery, centre: Vector2i, climb: int,
+		need: int) -> MapReport:
 	assert(query != null, "audit sans carte")
 	assert(climb >= 0, "hauteur d'enjambée négative : %d" % climb)
 	assert(query.in_bounds(centre), "centre hors carte : %s" % centre)
+	assert(need >= 1, "un site sans place à bâtir : %d" % need)
 
-	var shelf := _shelf_at(query, centre)
+	var site := _site(query, centre, need)
+	var shelf := _shelf_at(query, site)
 	var buildable := 0
 	var deposits := 0
 	for cell in shelf:
@@ -69,7 +82,8 @@ static func inspect(query: TerrainQuery, centre: Vector2i, climb: int) -> MapRep
 		buildable += 1
 		if _is_deposit(query, cell):
 			deposits += 1
-	return MapReport.create(shelf.size(), buildable,
+	var drift := maxi(absi(site.x - centre.x), absi(site.y - centre.y))
+	return MapReport.create(site, drift, shelf.size(), buildable,
 		_entries(query, shelf, climb), _pads(query), deposits,
 		_edge_distance(query, shelf, climb))
 
@@ -83,8 +97,16 @@ static func shortcomings(report: MapReport, params: TerrainGenBalance) -> Packed
 	assert(report != null, "verdict sans rapport")
 	assert(params != null, "verdict sans réglages")
 	var missing := PackedStringArray()
+	# `inspect()` a cherché un replat de `min_plateau_cells` cases, donc cette ligne ne peut
+	# refuser que les cartes où il n'en existe **nulle part** — c'est-à-dire un relief si
+	# hachuré qu'aucun village n'y tiendrait, où que ce soit. Elle n'est pas tautologique pour
+	# autant, et c'est le genre de doublon apparent que `CLAUDE.md` demande de justifier : les
+	# deux chiffres ne viennent pas du même compteur, l'un est une consigne de recherche et
+	# l'autre ce que la recherche a trouvé.
 	if report.plateau() < params.min_plateau_cells:
 		missing.append("plateau")
+	if report.drift() > params.max_site_drift:
+		missing.append("site_drift")
 	if report.accesses() < params.min_accesses:
 		missing.append("accesses_too_few")
 	if report.accesses() > params.max_accesses:
@@ -99,6 +121,71 @@ static func shortcomings(report: MapReport, params: TerrainGenBalance) -> Packed
 	# jamais refusé quoi que ce soit ne prouve pas qu'il refuserait. Le chiffre reste au
 	# rapport, où il **mesure** au lieu de juger.
 	return missing
+
+# --- le site ----------------------------------------------------------------
+
+## Où le village s'installe : la case bâtissable la plus proche du centre dont le replat
+## offre `need` cases à bâtir.
+##
+## **Le repli compte autant que la règle.** Quand aucun replat n'atteint `need`, on s'installe
+## sur le plus grand qu'il y ait plutôt que de rendre « rien » : l'appelant lit alors un
+## `plateau()` trop court et rejette le seed, ce qui est exactement ce qu'on veut qu'il fasse.
+## Rendre une case hors carte l'aurait obligé à traiter un second cas pour arriver à la même
+## conclusion.
+static func _site(query: TerrainQuery, centre: Vector2i, need: int) -> Vector2i:
+	var room := _room_per_cell(query)
+	var found := _closest(query, centre, room, need)
+	if found != NOWHERE:
+		return found
+	var largest := 0
+	for cell in room:
+		largest = maxi(largest, room[cell])
+	if largest < 1:
+		return centre
+	return _closest(query, centre, room, largest)
+
+## Combien de cases à bâtir offre le replat de chaque cellule.
+##
+## Chaque replat n'est parcouru qu'une fois et son compte est recopié sur tous ses membres :
+## demander la question cellule par cellule aurait refait mille parcours par carte, et l'audit
+## tourne deux cents fois par revue. C'est la leçon du tableau alloué dans une boucle de
+## grille, une case plus loin.
+static func _room_per_cell(query: TerrainQuery) -> Dictionary[Vector2i, int]:
+	var extent := query.size()
+	var room: Dictionary[Vector2i, int] = {}
+	for y in extent.y:
+		for x in extent.x:
+			var cell := Vector2i(x, y)
+			if room.has(cell):
+				continue
+			var shelf := _shelf_at(query, cell)
+			var buildable := 0
+			for member in shelf:
+				if query.is_buildable(member):
+					buildable += 1
+			for member in shelf:
+				room[member] = buildable
+	return room
+
+## La case bâtissable la plus proche du centre dont le replat offre `need` places, ou NOWHERE.
+##
+## La distance est prise au carré et sans racine — comparer suffit —, et les égalités se
+## départagent par l'ordre de balayage. Deux lancements doivent fonder le même village.
+static func _closest(query: TerrainQuery, centre: Vector2i,
+		room: Dictionary[Vector2i, int], need: int) -> Vector2i:
+	var extent := query.size()
+	var best := NOWHERE
+	var best_reach := 0
+	for y in extent.y:
+		for x in extent.x:
+			var cell := Vector2i(x, y)
+			if room[cell] < need or not query.is_buildable(cell):
+				continue
+			var reach := (cell - centre).length_squared()
+			if best == NOWHERE or reach < best_reach:
+				best = cell
+				best_reach = reach
+	return best
 
 # --- le plateau -------------------------------------------------------------
 

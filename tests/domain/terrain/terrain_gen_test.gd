@@ -88,7 +88,7 @@ func test_a_generated_map_keeps_every_promise() -> void:
 	var params := _params()
 	var grid := TerrainGen.generate(SEED, SIZE, params)
 	var report := MapAudit.inspect(grid.to_query(), TerrainGen.centre_of(SIZE),
-		params.max_climb)
+		params.max_climb, params.min_plateau_cells)
 	assert_array(MapAudit.shortcomings(report, params)).is_empty()
 
 ## Le rejet du seed, joué pour de vrai. La promesse est serrée **d'après ce que le premier
@@ -98,7 +98,8 @@ func test_a_draft_that_breaks_a_promise_is_rejected_for_the_next() -> void:
 	var params := _params()
 	var centre := TerrainGen.centre_of(SIZE)
 	var first := TerrainGen.draft(TerrainGen.seed_for(SEED, 0), SIZE, params)
-	var refused := MapAudit.inspect(first.to_query(), centre, params.max_climb)
+	var refused := MapAudit.inspect(first.to_query(), centre, params.max_climb,
+		params.min_plateau_cells)
 	params.min_plateau_deposits = refused.deposits() + 1
 	assert_array(MapAudit.shortcomings(refused, params)) \
 		.override_failure_message("le premier essai devait manquer sa promesse") \
@@ -109,7 +110,8 @@ func test_a_draft_that_breaks_a_promise_is_rejected_for_the_next() -> void:
 		.override_failure_message("generate() a rendu l'essai qu'il devait rejeter") \
 		.is_false()
 	assert_array(MapAudit.shortcomings(
-		MapAudit.inspect(kept.to_query(), centre, params.max_climb), params)).is_empty()
+		MapAudit.inspect(kept.to_query(), centre, params.max_climb,
+			params.min_plateau_cells), params)).is_empty()
 
 # --- la décoration ---------------------------------------------------------
 
@@ -160,28 +162,43 @@ func test_forest_never_grows_above_its_ceiling() -> void:
 		.override_failure_message("aucune forêt : le plafond ne prouverait rien") \
 		.is_greater(0)
 
-## Relever le plafond de la forêt ne doit pas décaler le flux de dispersion : les
-## gisements, tirés dans une bande suivante, restent aux mêmes cellules.
-func test_the_forest_ceiling_does_not_shift_the_scatter_stream() -> void:
-	var low := _params()
-	low.forest_max_height = 0
-	var high := _params()
-	high.forest_max_height = 99
-	var low_grid := TerrainGen.draft(SEED, SIZE, low)
-	var high_grid := TerrainGen.draft(SEED, SIZE, high)
-	for cell in _cells(low_grid):
-		var low_is_stone := low_grid.terrain_at(cell) == low.stone
-		var high_is_stone := high_grid.terrain_at(cell) == high.stone
-		assert_bool(low_is_stone) \
-			.override_failure_message("gisement décalé en %s" % cell) \
-			.is_equal(high_is_stone)
+## Une famille prend une **part exacte** de la terre ferme, et non ce qu'un seuil laisse
+## passer. C'est ce que la dispersion par zones garantit et que le tirage par cellule ne
+## garantissait pas : comparer un bruit à une densité paraît équivalent et ne l'est pas — un
+## bruit se serre autour de sa moyenne. Le piège a déjà coûté une passe sur l'eau, où « douze
+## pour cent » avait rendu zéro case.
+##
+## Le gisement plutôt que la forêt, parce que lui n'a pas de plafond d'altitude : une part
+## mesurée sur une famille qu'un plafond peut brider mesurerait le plafond.
+func test_a_family_takes_exactly_its_share_of_the_dry_land() -> void:
+	var params := _params()
+	var grid := TerrainGen.draft(SEED, SIZE, params)
+	var dry := SIZE.x * SIZE.y - _count(grid, params.water)
+	assert_int(dry) \
+		.override_failure_message("carte sans terre ferme : le cas ne prouve rien") \
+		.is_greater(0)
+	assert_int(_count(grid, params.stone)) \
+		.override_failure_message("le gisement se prend au classement, pas au seuil") \
+		.is_equal(int(dry * params.stone_density))
+
+## Deux familles ne se marchent pas dessus : une cellule reçoit un terrain, pas deux. C'est le
+## tableau des cellules déjà prises qui le tient, et c'est la seule chose qui empêche la passe
+## du rocher de recouvrir la moitié de la forêt.
+func test_two_families_never_claim_the_same_cell() -> void:
+	var params := _params()
+	var grid := TerrainGen.draft(SEED, SIZE, params)
+	var dry := SIZE.x * SIZE.y - _count(grid, params.water)
+	assert_int(_count(grid, params.forest) + _count(grid, params.stone)
+			+ _count(grid, params.rock) + _count(grid, params.plain)) \
+		.override_failure_message("les familles se recouvrent ou laissent un trou") \
+		.is_equal(dry)
 
 # --- le montage -------------------------------------------------------------
 
 func _params() -> TerrainGenBalance:
 	var params := TerrainGenBalance.new()
 	params.map_size = SIZE
-	params.shape = TerrainGenBalance.Shape.CLEARING
+	params.relief = TerrainGenBalance.Relief.RIDGED
 	params.min_height = 0
 	params.max_height = 6
 	params.water_level = 1
@@ -194,12 +211,15 @@ func _params() -> TerrainGenBalance:
 	params.clearing_flatten = 0.55
 	params.clearing_calm = 0.3
 	params.noise_frequency = 0.1
+	params.decor_scale = 2.5
+	params.min_lake_cells = 4
 	params.noise_octaves = 3
 	params.forest_density = 0.3
 	params.stone_density = 0.1
 	params.rock_density = 0.05
 	params.forest_max_height = 4
-	params.min_plateau_cells = 1
+	params.min_plateau_cells = 9
+	params.max_site_drift = 6
 	params.min_accesses = 2
 	params.max_accesses = 3
 	params.min_build_pads = 0
