@@ -8,6 +8,11 @@ extends Node
 ## Pour changer de harnais : ajouter son script à HARNESS_SCRIPTS, mettre son
 ## identifiant dans HARNESS, relancer (F5). Un harnais hérite de Node et construit
 ## son arbre dans _ready().
+##
+## **Ou passer `--harness <id>` en ligne de commande**, ce que `T4` a ajouté : la mesure d'un
+## jalon vit chez le harnais de son système, alors que le défaut est celui du Run. Sans ce
+## drapeau, lancer la revue de deux cents seeds demandait d'éditer une constante et de
+## relancer — c'est-à-dire, en pratique, de ne pas la lancer.
 
 ## Marge du rapport de boot, en pixels.
 const REPORT_MARGIN := 16.0
@@ -51,15 +56,25 @@ const FULLSCREEN_KEY := KEY_F11
 
 func _ready() -> void:
 	EventBus.database_ready.connect(_on_database_ready)
-	if HARNESS.is_empty():
+	var wanted := _wanted_harness()
+	if wanted.is_empty():
 		add_child(_make_report_label())
 		return
-	var script_path: String = HARNESS_SCRIPTS.get(HARNESS, "")
-	assert(not script_path.is_empty(), "harnais inconnu : %s" % HARNESS)
+	var script_path: String = HARNESS_SCRIPTS.get(wanted, "")
+	assert(not script_path.is_empty(), "harnais inconnu : %s" % wanted)
 	var harness_script: GDScript = load(script_path)
 	var harness: Node = harness_script.new()
-	harness.name = String(HARNESS).to_pascal_case()
+	harness.name = String(wanted).to_pascal_case()
 	add_child(harness)
+
+## Le harnais demandé : `--harness <id>` s'il est passé, la constante sinon.
+##
+## La ligne de commande l'emporte parce que c'est elle qui sert à **mesurer** : une constante
+## se change pour travailler, un drapeau se passe pour prendre un chiffre. L'un n'a pas à
+## déranger l'autre.
+func _wanted_harness() -> StringName:
+	var asked := DevShot.argument(DevShot.HARNESS_FLAG)
+	return HARNESS if asked.is_empty() else StringName(asked)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey):

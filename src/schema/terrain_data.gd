@@ -18,6 +18,25 @@ enum Build {
 	BLOCKED = 2,
 }
 
+## Franchissabilité du terrain. Même forme que Build, et pour la même raison : sur un
+## bool, « non renseigné » et « infranchissable » seraient indiscernables.
+##
+## C'est la colonne **Franchissable** de DESIGN.md 3.1, qui existait dans le tableau du
+## document sans exister nulle part dans la data. Elle entre à T4 avec son premier
+## lecteur — la génération doit compter les accès à un plateau, donc marcher sur sa
+## propre carte —, et V1 la lira ensuite pour le chemin d'une vague.
+##
+## **Elle coïncide aujourd'hui avec Build sur les cinq terrains**, et ce n'est pas une
+## raison de la déduire. Les deux questions sont différentes — un marécage se traverse
+## sans qu'on y bâtisse, une dalle se bâtit sans qu'on la traverse — et le jour où l'une
+## d'elles arrive, une franchissabilité déduite se serait trompée en silence. Un champ
+## qu'on remplit est aussi ce qui oblige à répondre à la question en ajoutant un terrain.
+enum Walk {
+	UNSET = 0,
+	ALLOWED = 1,
+	BLOCKED = 2,
+}
+
 ## Couleur qu'on lit comme « non renseignée ».
 ##
 ## Le noir opaque est la valeur par défaut d'un Color en GDScript, donc exactement
@@ -32,6 +51,12 @@ const UNSET_COLOR := Color(0.0, 0.0, 0.0, 1.0)
 
 ## Peut-on poser un bâtiment sur cette cellule ?
 @export var build: Build
+
+## Peut-on marcher sur cette cellule ? Colonne **Franchissable** de DESIGN.md 3.1.
+##
+## Ce que le relief ajoute par-dessus — une marche trop haute barre aussi — n'est pas ici :
+## c'est une propriété du **marcheur**, pas de la case, et elle se pose là où l'on marche.
+@export var walk: Walk
 
 ## Tags lus par les règles d'adjacence : forest, stone, water, blocker.
 ## Un terrain sans tag est légitime — la plaine n'en porte aucun.
@@ -56,6 +81,14 @@ const UNSET_COLOR := Color(0.0, 0.0, 0.0, 1.0)
 func is_buildable() -> bool:
 	return build == Build.ALLOWED
 
+## Peut-on marcher sur ce terrain ? Un terrain non renseigné ne l'est pas.
+##
+## Le défaut prudent est le même que pour is_buildable(), et il l'est pour la raison
+## inverse : un terrain oublié qui serait franchissable ouvrirait un accès que personne
+## n'a voulu, et T4 compte les accès pour décider si une carte est jouable.
+func is_walkable() -> bool:
+	return walk == Walk.ALLOWED
+
 ## Ce terrain porte-t-il ce tag ?
 func has_tag(tag: StringName) -> bool:
 	return tags.has(tag)
@@ -71,6 +104,8 @@ func missing_fields() -> PackedStringArray:
 		missing.append("id")
 	if build == Build.UNSET:
 		missing.append("build")
+	if walk == Walk.UNSET:
+		missing.append("walk")
 	if color == UNSET_COLOR:
 		missing.append("color")
 	if decor != null:

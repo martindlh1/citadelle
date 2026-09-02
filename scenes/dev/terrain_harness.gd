@@ -45,12 +45,16 @@ var _metrics: TerrainMetrics
 var _world: DevWorld
 var _label: Label
 var _grid: HeightGrid
+var _audit: MapReport
 var _report_body: String
 var _seed := FIRST_SEED
 
 func _ready() -> void:
 	var balance := GameDatabase.get_balance()
 	_metrics = TerrainMetrics.from_balance(balance.terrain)
+	if DevShot.has_flag(DevShot.SURVEY_FLAG):
+		_write_survey()
+		return
 	var grid := _generate(FIRST_SEED)
 	_world = DevWorld.create(grid, _metrics, balance)
 	add_child(_world)
@@ -75,28 +79,125 @@ func _unhandled_input(event: InputEvent) -> void:
 ## Montre cette grille : le plateau la redessine, le harnais réécrit son rapport.
 func _show(grid: HeightGrid) -> void:
 	_grid = grid
+	_audit = _inspect(grid)
 	_world.show_grid(grid)
 	_publish(grid)
 
+## Ce que l'audit dit de cette carte. Gardé, parce que **deux lecteurs en ont besoin** : le
+## rapport l'imprime, et la capture y prend la case à désigner. Le rejouer pour la capture
+## aurait été une seconde mesure à tenir d'accord avec la première.
+func _inspect(grid: HeightGrid) -> MapReport:
+	var params := _params()
+	return MapAudit.inspect(grid.to_query(), TerrainGen.centre_of(grid.size()),
+		params.max_climb, params.min_plateau_cells)
+
 func _generate(new_seed: int) -> HeightGrid:
 	_seed = new_seed
-	var params := GameDatabase.get_balance().terrain_gen
+	var params := _params()
 	return TerrainGen.generate(_seed, params.map_size, params)
+
+## Variantes de génération que `--gen` sait poser, par-dessus `data/balance/`.
+##
+## **Des variantes et non des techniques.** La génération n'a que trois axes — la nature du
+## bruit, la colline, la clairière — et un enum exclusif les empêchait justement de se
+## combiner. Ce que ce drapeau nomme est donc un **jeu de réglages**, écrit ici parce que
+## c'est un outil d'exploration : le jour où l'on aura choisi, il ne restera qu'un `.tres`.
+const VARIANTS: Array[String] = ["raw", "dome", "ridges", "peak", "crest"]
+
+## Les réglages de `data/balance/`, éventuellement forcés sur une autre technique.
+##
+## La copie est **locale au harnais** et le domaine n'en sait rien : `TerrainGen` reçoit des
+## réglages comme d'habitude, sans jamais apprendre qu'une ligne de commande existe. C'est le
+## seul endroit où un drapeau touche à de l'équilibrage, et il le fait en dupliquant plutôt
+## qu'en mutant l'index — une `Resource` de `GameDatabase` est partagée par tout le jeu.
+##
+## **Tout ce qui rapporte passe par ici**, et pas seulement ce qui génère : un rapport qui
+## lirait l'équilibrage brut annoncerait la technique du `.tres` sous une carte faite par une
+## autre. C'est le défaut trouvé à la première comparaison — quatre captures différentes, le
+## même nom dessus.
+func _params() -> TerrainGenBalance:
+	var params := GameDatabase.get_balance().terrain_gen
+	var asked := DevShot.argument(DevShot.GEN_FLAG)
+	if asked.is_empty() or not VARIANTS.has(asked):
+		return params
+	var forced := params.duplicate() as TerrainGenBalance
+	# `raw` est le témoin : aucune règle du tout. `ridges` est ce que `data/` porte, gardé sous
+	# son nom parce que les captures se comparent par ce mot. Les deux derniers posent la même
+	# question sous deux formes — jusqu'où peut-on marquer la colline sans perdre autre chose.
+	match asked:
+		"raw":
+			forced.relief = TerrainGenBalance.Relief.FRACTAL
+			forced.dome_rise = 0.0
+		"dome":
+			forced.relief = TerrainGenBalance.Relief.FRACTAL
+		"ridges":
+			forced.relief = TerrainGenBalance.Relief.RIDGED
+		# Une colline forte **et large**. Forte et étroite noie la carte : la colline prend une
+		# part de l'amplitude, donc au-delà de sa portée il ne reste presque rien au bruit, et
+		# tout le pourtour passe sous la nappe. Trois enjambées différentes rendaient la même
+		# revue au chiffre près — c'est ce qui a désigné l'île plutôt que la marche.
+		"peak":
+			forced.relief = TerrainGenBalance.Relief.RIDGED
+			forced.dome_rise = params.dome_rise * 1.5
+			forced.dome_radius = 22
+		# La même, en donnant à la colline des crans **en plus** au lieu de les prendre au
+		# bruit. Le relief y gagne, les lacs y disparaissent : relever le toit relève tout.
+		"crest":
+			forced.relief = TerrainGenBalance.Relief.RIDGED
+			forced.max_height = 15
+			forced.dome_rise = 7.0
+			forced.dome_radius = 22
+			forced.forest_max_height = 12
+	return forced
+
+## Le nom de la variante en cours, pour les rapports. Une carte qu'on regarde doit dire d'où
+## elle vient, sans quoi deux captures ne se comparent pas.
+func _variant_name() -> String:
+	var asked := DevShot.argument(DevShot.GEN_FLAG)
+	return asked if VARIANTS.has(asked) else "data"
 
 func _publish(grid: HeightGrid) -> void:
 	_report_body = _report(grid)
 	print(_report_body)
 
 func _report(grid: HeightGrid) -> String:
-	var params := GameDatabase.get_balance().terrain_gen
+	var params := _params()
 	var lines := PackedStringArray()
 	lines.append("Terrain — seed %d, %d x %d" % [_seed, grid.size().x, grid.size().y])
-	lines.append("hauteurs %d..%d, nappe à %d"
-		% [params.min_height, params.max_height, params.water_level])
+	lines.append("%s — hauteurs %d..%d, nappe à %d, enjambée %d, colline %.1f, clairière %.2f" % [
+		_variant_name(), params.min_height, params.max_height, params.water_level,
+		params.max_climb, params.dome_rise, params.clearing_flatten])
+	lines.append("")
+	lines.append(_audit_block(params))
 	lines.append("")
 	lines.append(_terrain_tally(grid))
 	lines.append("")
 	lines.append(_height_tally(grid))
+	return "\n".join(lines)
+
+## Ce que l'audit dit de cette carte : où le village s'installe, et les cols qu'il a trouvés.
+##
+## **La première ligne est celle du jalon.** Le site est un résultat depuis qu'on a cessé de
+## fonder au centre, donc il se lit à côté du centre qu'il vise — deux cases côte à côte, et
+## l'écart entre elles est ce que `max_site_drift` borne. La capture pose le curseur dessus,
+## si bien que le chiffre et l'image désignent la même case.
+##
+## Les entrées sont nommées en clair : c'est la seule ligne de tout le projet qui désigne un
+## **col**, et le mot n'a de sens qu'attaché à des cases. Une carte s'y relit — on va voir
+## si ces cases-là sont bien les rampes qu'on voit à l'écran.
+func _audit_block(params: TerrainGenBalance) -> String:
+	var report := _audit
+	var lines := PackedStringArray()
+	lines.append("Audit")
+	lines.append("  village  %s   à %d case(s) du centre %s"
+		% [report.site(), report.drift(), TerrainGen.centre_of(_grid.size())])
+	lines.append("  plateau  %4d cases dont %d bâtissables, %d gisement(s)"
+		% [report.shelf(), report.plateau(), report.deposits()])
+	lines.append("  accès    %4d   %s" % [report.accesses(), report.entries()])
+	lines.append("  assises  %4d   lisière à %d pas" % [report.pads(), report.edge_distance()])
+	var missing := MapAudit.shortcomings(report, params)
+	lines.append("  promesses %s" % ("tenues" if missing.is_empty()
+		else "MANQUÉES : %s" % ", ".join(missing)))
 	return "\n".join(lines)
 
 ## Ce que le curseur désigne, en une ligne.
@@ -145,6 +246,147 @@ func _height_tally(grid: HeightGrid) -> String:
 		lines.append("  %3d %5d  %s" % [height, count, "#".repeat(count * HISTOGRAM_WIDTH / total)])
 	return "\n".join(lines)
 
+# --- la revue de seeds ------------------------------------------------------
+
+## Nombre de seeds parcourus par `--survey`. Celui que DESIGN.md 3.1 nomme.
+const SURVEY_SEEDS := 200
+
+## Accès énumérés dans l'histogramme avant qu'une colonne ne ramasse le reste.
+const SURVEY_ACCESS_BUCKETS := 7
+
+## Génère beaucoup de cartes sans écran et imprime ce qu'elles valent.
+##
+## **Ce que cette table doit montrer** : que la structure de `T4` tient ses promesses sur
+## autre chose qu'un seed bien choisi, et **à quel prix**. Une promesse que rien ne rejette
+## jamais est un seuil trop lâche — elle ne protège de rien ; une promesse qui rejette la
+## moitié des brouillons est soit trop serrée, soit le signe que la structure ne fait pas ce
+## qu'on croit. C'est la colonne des rejets qui porte le jalon, pas les moyennes.
+##
+## **Ce qu'elle ne montre pas** : si une carte est *agréable* à jouer. Aucun chiffre ici ne
+## dit qu'un col est au bon endroit ni qu'un plateau a une forme intéressante — ça se regarde
+## en capture, une carte à la fois. La table dit qu'une carte est **jouable**, ce qui est le
+## plancher et non l'objectif.
+##
+## **Elle mesure les brouillons, pas les cartes retenues**, et c'est délibéré : une
+## distribution prise après rejet serait bonne par construction, donc muette. Les deux
+## dernières lignes disent séparément ce que le jeu reçoit — combien d'essais il faut, et
+## si un seed a fini par ne rien rendre du tout.
+func _write_survey() -> void:
+	# La revue ne monte ni plateau ni caméra, et `quit()` ne prend effet qu'en fin d'image :
+	# sans ce coupe-circuit, `_process` tourne une fois sur un monde qui n'existe pas et
+	# noie la table sous deux erreurs de script.
+	set_process(false)
+	var params := _params()
+	var size := params.map_size
+	var centre := TerrainGen.centre_of(size)
+	print("[terrain_harness] revue de %d seeds — %d x %d, variante %s, hauteurs %d..%d"
+		% [SURVEY_SEEDS, size.x, size.y, _variant_name(), params.min_height,
+			params.max_height])
+	print("  Les chiffres portent sur les BROUILLONS, avant tout rejet : une distribution")
+	print("  mesurée après rejet serait bonne par construction, donc sans intérêt.")
+
+	var accesses: Dictionary[int, int] = {}
+	var drifts: Array[int] = []
+	var plateaus: Array[int] = []
+	var pads: Array[int] = []
+	var deposits: Array[int] = []
+	var depths: Array[int] = []
+	var refusals: Dictionary[String, int] = {}
+	var refused := 0
+	for index in SURVEY_SEEDS:
+		var run_seed := FIRST_SEED + index
+		var grid := TerrainGen.draft(TerrainGen.seed_for(run_seed, 0), size, params)
+		var report := MapAudit.inspect(grid.to_query(), centre, params.max_climb,
+			params.min_plateau_cells)
+		accesses[report.accesses()] = accesses.get(report.accesses(), 0) + 1
+		drifts.append(report.drift())
+		plateaus.append(report.plateau())
+		pads.append(report.pads())
+		deposits.append(report.deposits())
+		depths.append(report.edge_distance())
+		var missing := MapAudit.shortcomings(report, params)
+		if missing.is_empty():
+			continue
+		refused += 1
+		for reason in missing:
+			refusals[reason] = refusals.get(reason, 0) + 1
+
+	print("  accès      %s" % _access_histogram(accesses))
+	print("  dérive     %s cases entre le centre et le village (borne %d)"
+		% [_spread(drifts), params.max_site_drift])
+	print("  plateau    %s cases bâtissables" % _spread(plateaus))
+	print("  assises    %s emplacements 2x2" % _spread(pads))
+	print("  gisements  %s sur le plateau" % _spread(deposits))
+	print("  lisière    %s pas jusqu'au plateau (−1 : plateau injoignable)" % _spread(depths))
+	print("  rejets     %d/%d brouillons — %s"
+		% [refused, SURVEY_SEEDS, _refusal_tally(refusals)])
+	_survey_the_kept(params, size)
+	print("[terrain_harness] la table dit que les cartes sont jouables, pas qu'elles sont")
+	print("[terrain_harness] bonnes — ça se regarde en capture, une carte à la fois.")
+	get_tree().quit(OK)
+
+## Ce que le jeu reçoit vraiment : combien d'essais coûte une carte, et s'il en manque.
+##
+## Le compte vient de `TerrainGen.accepted_attempt()`, c'est-à-dire de **la boucle que
+## `generate()` emprunte**, et non d'une copie écrite ici. Une boucle recopiée aurait mesuré
+## la copie, ce qui est le raccourci que `CLAUDE.md` nomme depuis `F1` — et sous sa forme la
+## plus perfide, puisque les deux auraient été justes le jour où on les a écrites.
+func _survey_the_kept(params: TerrainGenBalance, size: Vector2i) -> void:
+	var spent := 0
+	var worst := 0
+	var lost := 0
+	for index in SURVEY_SEEDS:
+		var attempt := TerrainGen.accepted_attempt(FIRST_SEED + index, size, params)
+		if attempt < 0:
+			lost += 1
+			continue
+		spent += attempt + 1
+		worst = maxi(worst, attempt + 1)
+	var kept := SURVEY_SEEDS - lost
+	print("  retenues   %d/%d seeds, %.2f essai(s) en moyenne, %d au pire"
+		% [kept, SURVEY_SEEDS, float(spent) / float(maxi(kept, 1)), worst])
+
+## Combien de cartes par nombre d'accès, avec la borne des promesses en clair.
+func _access_histogram(counts: Dictionary[int, int]) -> String:
+	var parts := PackedStringArray()
+	var tail := 0
+	for value in counts:
+		if value >= SURVEY_ACCESS_BUCKETS:
+			tail += counts[value]
+	for value in SURVEY_ACCESS_BUCKETS:
+		parts.append("%d:%d" % [value, counts.get(value, 0)])
+	if tail > 0:
+		parts.append("%d+:%d" % [SURVEY_ACCESS_BUCKETS, tail])
+	return "  ".join(parts)
+
+## Le plus bas, la médiane et le plus haut d'une série. Copie triée : l'appelant garde
+## la sienne dans l'ordre où il l'a remplie.
+func _spread(values: Array[int]) -> String:
+	if values.is_empty():
+		return "—"
+	var sorted := values.duplicate()
+	sorted.sort()
+	return "min %4d  méd %4d  max %4d" % [sorted[0], sorted[sorted.size() / 2],
+		sorted[sorted.size() - 1]]
+
+## Les motifs de rejet, du plus fréquent au moins fréquent.
+##
+## Par motif et non en total, parce que c'est le **nom** qui sert : « deposits, deposits,
+## deposits » désigne le chiffre à tourner, là où « onze rejets » ne désigne rien.
+func _refusal_tally(refusals: Dictionary[String, int]) -> String:
+	if refusals.is_empty():
+		return "aucun"
+	var reasons: Array[String] = []
+	reasons.assign(refusals.keys())
+	reasons.sort_custom(func(first: String, second: String) -> bool:
+		if refusals[first] != refusals[second]:
+			return refusals[first] > refusals[second]
+		return first < second)
+	var parts := PackedStringArray()
+	for reason in reasons:
+		parts.append("%s %d" % [reason, refusals[reason]])
+	return ", ".join(parts)
+
 func _cell_count(grid: HeightGrid) -> int:
 	return grid.size().x * grid.size().y
 
@@ -178,8 +420,12 @@ func _capture_if_asked() -> void:
 	# survol réel tomberait hors de la carte. On coupe l'input du curseur et on désigne
 	# une cellule à la main : sans ça, aucune capture ne montrerait la surbrillance, et
 	# c'est justement ce qu'on cherche à regarder.
+	#
+	# La case désignée par défaut est **le site que l'audit a trouvé**, et non plus le milieu
+	# de la carte. C'est la seule façon de vérifier en image ce que le jalon décide : le
+	# curseur doit tomber sur un replat crédible, pas au sommet d'un pic ni dans un lac.
 	_world.cursor().input_enabled = false
-	_world.cursor().hover_cell(DevShot.hover_cell(_grid.size() / 2))
+	_world.cursor().hover_cell(DevShot.hover_cell(_audit.site()))
 	var turns := DevShot.argument(DevShot.SHOT_TURNS_FLAG).to_int()
 	if turns != 0:
 		_world.rig().rotate_steps(turns)

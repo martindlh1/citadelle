@@ -38,6 +38,42 @@ func is_buildable(cell: Vector2i) -> bool:
 		return false
 	return terrain_at(cell).is_buildable()
 
+## Peut-on marcher sur cette cellule ? False hors grille.
+##
+## Même asymétrie de bornes que is_buildable(), et pour la même raison : « puis-je passer
+## par là ? » a une réponse pour une cellule hors carte, et c'est non. Un parcours de grille
+## interroge en permanence des voisins qui n'existent pas.
+##
+## **Elle ne dit rien du relief**, et c'est délibéré. Ce qui barre est de deux natures : la
+## case — l'eau, le rocher — et la **marche**, qui dépend de qui grimpe. La première est une
+## propriété du terrain, donc elle est ici ; la seconde appartient au marcheur, donc elle
+## voyage avec lui — voir can_step(), qui reçoit sa hauteur d'enjambée en argument.
+func is_walkable(cell: Vector2i) -> bool:
+	if not in_bounds(cell):
+		return false
+	return terrain_at(cell).is_walkable()
+
+## Peut-on passer de cette cellule à celle-là, en enjambant au plus `climb` crans ?
+##
+## Les deux cellules doivent être dans la grille et franchissables. La **montée** est bornée
+## par `climb` ; la **descente** ne l'est pas, ce qui est la règle de DESIGN.md 3.1 en une
+## ligne : « monter coûte, une marche trop haute bloque, descendre ne coûte que le pas ».
+##
+## Elle ne vérifie **pas** que les deux cellules sont voisines : un appelant qui saute est un
+## bug d'appelant, et l'assert le dit. C'est la même convention que CellPicker, qui suppose
+## un rayon plutôt que de le valider.
+##
+## `climb` arrive en argument et non d'un champ de terrain parce que ce n'est pas le terrain
+## qui grimpe. La génération de T4 l'emprunte à `data/balance/` pour se vérifier elle-même ;
+## une vague de V1 l'aura de sa propre définition, et les deux poseront la même question.
+func can_step(from: Vector2i, to: Vector2i, climb: int) -> bool:
+	assert(climb >= 0, "hauteur d'enjambée négative : %d" % climb)
+	assert((from - to).length_squared() == 1,
+		"pas entre deux cellules non voisines : %s vers %s" % [from, to])
+	if not is_walkable(from) or not is_walkable(to):
+		return false
+	return height_at(to) - height_at(from) <= climb
+
 ## Le terrain de cette cellule porte-t-il ce tag ? False hors grille.
 func has_tag(cell: Vector2i, tag: StringName) -> bool:
 	if not in_bounds(cell):
@@ -50,9 +86,14 @@ func has_tag(cell: Vector2i, tag: StringName) -> bool:
 func is_area_buildable(area: Rect2i) -> bool:
 	if not _encloses(area):
 		return false
-	for cell in _cells_of(area):
-		if not terrain_at(cell).is_buildable():
-			return false
+	# Balayage direct plutôt que par un tableau de cellules : l'audit de T4 pose cette
+	# question mille fois par carte et deux cents fois par revue, et un tableau alloué à
+	# chaque appel s'y comptait en dizaines de millions. La sémantique ne bouge pas d'un
+	# pouce, et le helper qui les fabriquait n'avait plus d'appelant.
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			if not terrain_at(Vector2i(x, y)).is_buildable():
+				return false
 	return true
 
 ## Toutes les cellules de la zone sont-elles à la même hauteur ?
@@ -68,10 +109,11 @@ func height_span(area: Rect2i) -> int:
 	assert(_encloses(area), "zone hors grille : %s dans %s" % [area, size()])
 	var lowest := height_at(area.position)
 	var highest := lowest
-	for cell in _cells_of(area):
-		var height := height_at(cell)
-		lowest = mini(lowest, height)
-		highest = maxi(highest, height)
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var height := height_at(Vector2i(x, y))
+			lowest = mini(lowest, height)
+			highest = maxi(highest, height)
 	return highest - lowest
 
 ## La zone est-elle non vide et entièrement contenue dans la grille ?
@@ -79,12 +121,3 @@ func _encloses(area: Rect2i) -> bool:
 	if area.size.x <= 0 or area.size.y <= 0:
 		return false
 	return Rect2i(Vector2i.ZERO, size()).encloses(area)
-
-## Cellules de la zone, balayées en x puis en y. Ordre stable : le déterminisme de
-## tout ce qui itère sur une zone en dépend.
-func _cells_of(area: Rect2i) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
-	for y in range(area.position.y, area.end.y):
-		for x in range(area.position.x, area.end.x):
-			cells.append(Vector2i(x, y))
-	return cells

@@ -15,6 +15,7 @@ variation = 0.25
 script = ExtResource("1_terrain_data")
 id = &"stone"
 build = 1
+walk = 1
 tags = Array[StringName]([&"stone"])
 color = Color(0.61, 0.57, 0.47, 1)
 decor = SubResource("Resource_stone_decor")

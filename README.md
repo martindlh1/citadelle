@@ -65,9 +65,14 @@ Un harnais qui affiche quelque chose ne se vérifie ni au parsing ni aux tests :
 faut le regarder. Les harnais graphiques acceptent donc une capture en ligne de
 commande, qui rend une image puis quitte.
 
-C'est le harnais désigné par `HARNESS` qui répond. Les drapeaux sont les mêmes pour
-tous — ils vivent dans `scenes/dev/dev_shot.gd`, en un seul endroit, pour que la même
-commande marche partout.
+C'est le harnais désigné par `HARNESS` qui répond, **ou celui que `--harness` nomme**. Les
+drapeaux sont les mêmes pour tous — ils vivent dans `scenes/dev/dev_shot.gd`, en un seul
+endroit, pour que la même commande marche partout.
+
+`--harness` est entré à `T4`, et pour la raison qui a fait naître tous les autres : la revue
+de deux cents seeds vit chez le harnais Terrain alors que le défaut est le Run, donc la
+mesure du jalon n'était atteignable qu'en éditant une constante et en relançant — c'est-à-dire
+en pratique jamais. **Un harnais est un état comme un autre.**
 
 ```bash
 "$GODOT_BIN" --path . --resolution 1280x720 -- --shot /tmp/rendu.png --shot-turns 1 --shot-hover 16,16
@@ -78,6 +83,7 @@ obligatoire ; les autres sont optionnels :
 
 | Drapeau | Effet |
 |---|---|
+| `--harness id` | harnais à lancer, par-dessus `HARNESS` — `terrain`, `city` ou `run` |
 | `--shot chemin.png` | rend une image puis quitte |
 | `--shot-hover x,y` | cellule à désigner. À défaut, le centre de la carte |
 | `--shot-turns n` | quarts de tour appliqués à la **caméra** |
@@ -86,12 +92,25 @@ obligatoire ; les autres sont optionnels :
 | `--shot-select n` | bâtiment à choisir, numéroté comme au clavier *(harnais Run)* |
 | `--shot-unfounded` | ne pose pas le Cœur : capture l'écran de fondation *(harnais Run)* |
 | `--shot-sun f` | moment du cycle solaire : 0 aube, 0.25 midi, 0.5 crépuscule, 0.75 nuit *(harnais Run)* |
+| `--survey` | génère 200 cartes sans écran et imprime leur distribution, puis quitte *(harnais Terrain)* |
+| `--gen nom` | force une variante de génération par-dessus `data/balance/` — `raw`, `dome`, `ridges`, `peak`, `crest` *(harnais Terrain)* |
 | `--chronicle` | rejoue le run entier sans écran et imprime la table, puis quitte *(harnais Run)* |
 
 `--shot-hover` a une valeur par défaut plutôt que rien, parce qu'une capture qui ne
 montre pas la surbrillance ne prouve rien à son sujet, et que souris à `(0, 0)` le
 survol réel tomberait hors carte. `--shot-rotate` existe pour la même raison : sans
 lui, aucune capture ne montrerait jamais un bâtiment pivoté.
+
+Sur le harnais Terrain, cette valeur par défaut est **le site que l'audit a trouvé** depuis
+`T4`, et non plus le milieu de la carte. C'est la seule façon de vérifier en image ce que le
+jalon décide : le curseur doit tomber sur un replat crédible, pas au sommet d'un pic ni dans un
+lac. Le rapport imprime la même case, donc le chiffre et l'image se contredisent si l'un des
+deux ment.
+
+`--gen` est un drapeau d'**exploration** et il se retirera avec elle : il ne nomme pas des
+techniques mais des jeux de réglages, la génération n'ayant que deux axes — la nature du bruit
+et la colline centrale. Deux noms ont d'ailleurs été supprimés le jour où ils sont devenus
+identiques à `data/`, ce qui est une table annonçant une différence qu'elle ne montre plus.
 
 **Les drapeaux ont fondu avec les harnais, à `R0`**, et `I3` en rend deux. Il en restait
 quatorze avant le rescope, il en reste neuf. Les dix qui étaient partis servaient des harnais
@@ -119,6 +138,22 @@ commuter sur un état, vérifier **d'abord** qu'un drapeau atteint chacune de se
 **Écrire l'image hors du projet.** Une capture déposée dans l'arborescence est
 importée par le prochain scan de l'éditeur, qui lui colle un `.png.import` à ranger
 ensuite. Un chemin absolu hors de `res://` évite le ménage.
+
+Le harnais Terrain, lui, a **la revue de seeds** — le pendant de la chronique du Run, et ce
+que `DESIGN.md` 3.1 demande à `T4` en toutes lettres :
+
+```bash
+"$GODOT_BIN" --headless --path . -- --harness terrain --survey
+```
+
+Elle tire deux cents brouillons et imprime leur distribution — accès, dérive du village,
+plateau, assises, gisements, distance de la lisière — plus le décompte des rejets **par
+motif**, parce que c'est
+le nom qui sert : « deposits, deposits, deposits » désigne le chiffre à tourner, là où « onze
+rejets » ne désigne rien. Elle mesure les brouillons **avant** rejet, et le dit : une
+distribution prise après serait bonne par construction, donc muette. Deux lignes à part
+disent ce que le jeu reçoit vraiment, et elles viennent de la boucle que `generate()` emprunte
+plutôt que d'une copie.
 
 La capture du harnais Terrain imprime aussi une sonde : elle reprojette la cellule
 désignée vers l'écran, retire un rayon depuis cette position comme le ferait la souris,

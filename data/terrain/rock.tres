@@ -15,6 +15,7 @@ variation = 0.2
 script = ExtResource("1_terrain_data")
 id = &"rock"
 build = 2
+walk = 2
 tags = Array[StringName]([&"blocker"])
 color = Color(0.38, 0.37, 0.4, 1)
 decor = SubResource("Resource_rock_decor")
