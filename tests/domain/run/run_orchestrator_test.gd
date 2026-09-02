@@ -19,6 +19,10 @@ extends GdUnitTestSuite
 
 const SIZE := Vector2i(8, 8)
 const HEART := Vector2i(0, 0)
+
+## Le tag que les producteurs de ce fichier cherchent, et le pas de son semis.
+const SOIL_TAG := &"soil"
+const SOIL_STRIDE := 3
 const HEART_HIT_POINTS := 40
 
 ## Cellules libres hors de l'empreinte 2x2 du Cœur.
@@ -34,12 +38,32 @@ func before_test() -> void:
 	_grid = _flat_grid()
 	_balance = _make_balance(_economy(), _run())
 
+## Sol nu, semé d'un tag tous les trois pas.
+##
+## **Trois exactement, et c'est ce qui fait tenir tous les chiffres de ce fichier.** Depuis C3
+## un bâtiment ne produit que par voisinage : il lui faut donc une case taggée à portée, sans
+## quoi le placement le refuse et la récolte est nulle. Or trois entiers consécutifs contiennent
+## toujours un et un seul multiple de trois — donc la zone de rayon 1 d'un bâtiment d'une case
+## en contient exactement un, **où qu'il soit posé**. « +3 nourriture » reste « +3 nourriture »
+## et aucune attente n'a eu à bouger.
+##
+## Un semis uniforme aurait rendu neuf cases par zone, un semis clairsemé zéro ici et deux là :
+## dans les deux cas, ce fichier se serait mis à mesurer la géométrie du sol au lieu du tour.
 func _flat_grid() -> HeightGrid:
 	var plain := TerrainData.new()
 	plain.id = &"plain"
 	plain.build = TerrainData.Build.ALLOWED
 	plain.color = Color(0.4, 0.6, 0.3)
-	return HeightGrid.create(SIZE, 0, plain)
+	var soil := TerrainData.new()
+	soil.id = SOIL_TAG
+	soil.build = TerrainData.Build.ALLOWED
+	soil.color = Color(0.5, 0.45, 0.3)
+	soil.tags.append(SOIL_TAG)
+	var grid := HeightGrid.create(SIZE, 0, plain)
+	for y in range(0, SIZE.y, SOIL_STRIDE):
+		for x in range(0, SIZE.x, SOIL_STRIDE):
+			grid.set_terrain(Vector2i(x, y), soil)
+	return grid
 
 func _make_balance(economy: EconomyBalance, run: RunBalance) -> BalanceData:
 	var balance := (load("res://data/balance/balance.tres") as BalanceData).duplicate()
@@ -88,10 +112,17 @@ func _building(id: StringName, footprint: Array[Vector2i], site_turns: int, work
 	data.housing = housing
 	data.storage_bonus = storage
 	data.hit_points = hit_points
-	if not yields.is_empty():
-		var block := ProductionBlock.new()
-		block.yield_per_turn = yields
-		data.production = block
+	# Ce que le bâtiment rendait à plat devient une règle de voisinage par ressource : depuis
+	# C3 il n'y a plus d'autre source de production. Le tag est celui que `_ground()` pose sous
+	# chaque ancre, une case et une seule, de sorte que « +3 nourriture » reste « +3
+	# nourriture » et qu'aucune attente de ce fichier n'ait à bouger.
+	for resource in yields:
+		var rule := AdjacencyRule.new()
+		rule.tag = SOIL_TAG
+		rule.radius = 1
+		rule.resource = resource
+		rule.per_cell = yields[resource]
+		data.adjacency.append(rule)
 	return data
 
 func _catalogue() -> Dictionary[StringName, BuildingData]:

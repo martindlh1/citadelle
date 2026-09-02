@@ -33,12 +33,11 @@ extends PanelContainer
 ## village peut payer. Les deux se rejoignent dans `RunOrchestrator.open_site()`, qui pose la
 ## question du terrain avant celle des coûts.
 ##
-## *Ce paragraphe disait « elle ne connaît pas de cellule » jusqu'à `C3`, et l'adjacence l'a
-## nuancé sans le contredire.* Elle reçoit désormais ce que le voisinage de la case survolée
-## **rapporterait** — un fait sur cette case, calculé par le domaine —, et continue de ne
-## porter aucun verdict sur elle. La distinction est exactement celle du reste de la fiche :
-## « il te manque 5 bois » est une réponse du domaine, « tu ne peux pas poser ici » n'est pas
-## une phrase que cette vue prononce.
+## *`C3` a essayé d'y mettre l'adjacence, et l'a retirée le jour même.* La ligne était juste et
+## au mauvais endroit : ce qu'une case rapporte est une information de **placement**, et l'on
+## regarde la carte quand on choisit une case, pas un panneau dans un coin. Elle est passée sur
+## le fantôme, où elle se montre au lieu de se décrire. Cette fiche redevient ce qu'elle était —
+## ce que le village peut payer, sans jamais regarder le sol.
 ##
 ## Les nœuds sont construits une fois et **mis à jour sur place**, visibilité comprise : une
 ## ligne de coût qui n'existe pas est cachée, jamais retirée. Appelable à chaque image.
@@ -64,7 +63,6 @@ var _workers: HBoxContainer
 var _workers_amount: Label
 var _site: Label
 var _gives: Label
-var _neighbourhood: Label
 var _verdict: Label
 
 ## Fiche prête à être ajoutée à l'arbre, une colonne de coût par ressource du catalogue.
@@ -88,8 +86,6 @@ static func create(palette: CommodityPalette) -> BuildingCard:
 	column.add_child(card._make_costs())
 	card._gives = HudStyle.text("", HudStyle.LABEL_FONT_SIZE, HudStyle.LABEL_COLOR)
 	column.add_child(card._gives)
-	card._neighbourhood = HudStyle.text("", HudStyle.LABEL_FONT_SIZE, HudStyle.LABEL_COLOR)
-	column.add_child(card._neighbourhood)
 	card._verdict = HudStyle.text(AFFORDABLE, HudStyle.LABEL_FONT_SIZE, HudStyle.GAIN_COLOR)
 	column.add_child(card._verdict)
 	card.add_child(column)
@@ -103,7 +99,7 @@ static func create(palette: CommodityPalette) -> BuildingCard:
 ## calculer est ce qui garantit que la fiche et le refus disent la même chose : le jour où
 ## le seuil des bras bouge, il bouge une fois.
 func show_building(data: BuildingData, turns: int,
-		missing: Dictionary[StringName, int], hands: int, bonus: AdjacencyReport) -> void:
+		missing: Dictionary[StringName, int], hands: int) -> void:
 	assert(data != null, "fiche sans bâtiment — passer par show_nothing()")
 	_title.text = data.label
 	_title.add_theme_color_override("font_color", HudStyle.AMOUNT_COLOR)
@@ -114,7 +110,6 @@ func show_building(data: BuildingData, turns: int,
 	_site.visible = data.site_turns > 0
 	_gives.text = _gives_text(data)
 	_gives.visible = true
-	_show_neighbourhood(data, bonus)
 	_verdict.visible = true
 	_show_verdict(missing, hands)
 
@@ -135,7 +130,6 @@ func show_nothing(why: String) -> void:
 	_workers.visible = false
 	_site.visible = false
 	_gives.visible = false
-	_neighbourhood.visible = false
 	_verdict.visible = false
 
 # --- La mise à jour ---------------------------------------------------------------------
@@ -171,8 +165,9 @@ func _show_workers(data: BuildingData, hands: int) -> void:
 func _gives_text(data: BuildingData) -> String:
 	var parts := PackedStringArray()
 	if data.produces():
-		parts.append("%s par tour"
-			% _palette.bundle_text(data.production.yield_per_turn))
+		# Ce qu'il produit, sans dire combien : le combien dépend de la case, et c'est le
+		# fantôme qui le montre. Nommer un chiffre ici serait en inventer un second.
+		parts.append("%s au voisinage" % _harvest_of(data))
 	if data.housing > 0:
 		parts.append("loge %d" % data.housing)
 	if data.storage_bonus > 0:
@@ -180,46 +175,19 @@ func _gives_text(data: BuildingData) -> String:
 	parts.append("%d PV" % data.hit_points)
 	return " · ".join(parts)
 
-## Ce que le voisinage de la case survolée ajouterait, une entrée par règle.
+## Les ressources que ses règles versent, **nommées sans quantité**.
 ##
-## **C'est la ligne que `DESIGN.md` 3.2 exige en toutes lettres** : « sans retour visuel en
-## temps réel du delta, l'adjacence est invisible, donc inexistante ». Elle est ici et non dans
-## un panneau à part parce qu'elle se lit contre celle du dessus — « rend +2 bois par tour »,
-## puis « ici, +2 bois de plus » — et que deux moitiés d'une même phrase rangées dans deux
-## coins ne se lisent pas.
-##
-## Elle **ne nomme pas le tag cherché**, et c'est un manque assumé : `data/terrain/` n'a pas de
-## catalogue de libellés de tags, et en inventer un dans une vue serait du contenu écrit en
-## GDScript. Ce qu'un joueur a besoin de savoir tient dans le chiffre et le nombre de cases —
-## quelles cases, il les voit à l'écran.
-##
-## Une règle qui ne trouve rien s'affiche quand même, grisée. C'est le seul moyen d'apprendre
-## qu'un bâtiment **s'intéresse** à ce qui l'entoure : une ligne qui n'apparaît que sur les
-## bons emplacements ne s'y trouve que par hasard.
-func _show_neighbourhood(data: BuildingData, bonus: AdjacencyReport) -> void:
-	_neighbourhood.visible = not data.adjacency.is_empty()
-	if data.adjacency.is_empty():
-		return
-	var parts := PackedStringArray()
-	var gained := 0
-	for index in data.adjacency.size():
-		# Le rapport peut être plus court que la liste des règles : c'est le cas quand aucune
-		# case n'est survolée, et l'on annonce alors la **promesse** de la règle plutôt que de
-		# taire la ligne. Un panneau qui apparaît et disparaît sous le curseur se lit comme un
-		# défaut d'affichage, pas comme une information.
-		if index >= bonus.count():
-			var rule := data.adjacency[index]
-			parts.append("+%d %s par case (max %d)" % [rule.per_cell,
-				_palette.label_of(rule.resource), rule.at_most])
-			continue
-		var award := bonus.award(index)
-		gained += award
-		parts.append("+%d %s (%d case%s)" % [award,
-			_palette.label_of(data.adjacency[index].resource), bonus.cells(index),
-			"s" if bonus.cells(index) > 1 else ""])
-	_neighbourhood.text = "Voisinage : %s" % " · ".join(parts)
-	_neighbourhood.add_theme_color_override("font_color",
-		HudStyle.GAIN_COLOR if gained > 0 else HudStyle.EMPTY_COLOR)
+## Pas de chiffre, et c'est le point : ce qu'une case rapporte dépend de la case, donc tout
+## nombre écrit ici serait faux partout sauf à un endroit. Le fantôme le montre là où la
+## question se pose. `bundle_text()` ne convient pas pour la même raison — il écrit un lot,
+## c'est-à-dire des quantités.
+func _harvest_of(data: BuildingData) -> String:
+	var names := PackedStringArray()
+	for rule in data.adjacency:
+		var label := _palette.label_of(rule.resource)
+		if not names.has(label):
+			names.append(label)
+	return ", ".join(names)
 
 ## Ce qui manque pour l'ouvrir — les deux coûts ensemble, dans l'ordre où le domaine les
 ## demande.

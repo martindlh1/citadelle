@@ -309,9 +309,16 @@ func _refresh_preview() -> void:
 		return
 	_preview = PlacementValidator.validate(_state().city(), _state().terrain(), data,
 		hovered.cell(), _turns)
+	# Le relevé de voisinage vient du **même appel** que celui du résolveur de production —
+	# `Adjacency` ne sait pas si le bâtiment qu'on lui décrit est posé —, donc le fantôme ne
+	# peut pas promettre autre chose que ce que le tour versera. `DESIGN.md` 3.2 réclame ce
+	# delta en temps réel, et un second calcul écrit ici aurait été le doublon que le domaine
+	# a justement été taillé pour éviter.
+	var bonus := Adjacency.inspect(data, hovered.cell(), _turns, _state().terrain())
 	# La hauteur vient du survol et non du résultat : un refus n'en a pas, et c'est
 	# justement sur un refus qu'il faut voir le fantôme.
-	_ghost.show_at(data, hovered.cell(), _turns, hovered.height(), _preview)
+	_ghost.show_at(data, hovered.cell(), _turns, hovered.height(), _preview, bonus,
+		_state().terrain())
 
 ## Le bâtiment que le fantôme dessine : le Cœur tant qu'il n'est pas posé, la sélection
 ## ensuite. Le fantôme montre donc toujours ce que le clic gauche ferait.
@@ -344,24 +351,7 @@ func _show_card(city: CitySnapshot) -> void:
 		_card.show_nothing("Aucun bâtiment choisi")
 		return
 	_card.show_building(data, _turns, _state().ledger().shortfall(data.cost),
-		Staffing.hands_short(city, _state().people().headcount(), data.workers),
-		_neighbourhood_of(data))
-
-## Ce que le voisinage de la case survolée rapporterait à ce bâtiment.
-##
-## C'est le **même appel** que celui du résolveur de production — `Adjacency` ne sait pas si le
-## bâtiment qu'on lui décrit est posé —, donc la fiche ne peut pas promettre autre chose que ce
-## que le tour versera. `DESIGN.md` 3.2 réclame ce delta en temps réel, et un second calcul
-## écrit ici aurait été le doublon que le domaine a justement été taillé pour éviter.
-##
-## Rien de survolé rend un rapport **vide** et non un rapport à zéro : la fiche annonce alors
-## la promesse de la règle plutôt que de fausses nouvelles. La distinction est celle
-## qu'`AdjacencyReport.is_empty()` porte.
-func _neighbourhood_of(data: BuildingData) -> AdjacencyReport:
-	var hovered := _world.cursor().hovered()
-	if not hovered.is_hit():
-		return AdjacencyReport.none()
-	return Adjacency.inspect(data, hovered.cell(), _turns, _state().terrain())
+		Staffing.hands_short(city, _state().people().headcount(), data.workers))
 
 ## Redessine le bâti, endormis compris.
 ##
@@ -553,9 +543,26 @@ func _hover_line() -> String:
 		return "Survol : —"
 	var cell := hovered.cell()
 	var verdict := "posable" if _preview.is_ok() else String(_preview.reason())
-	return "Survol : (%d, %d)   h = %d   %s   %s   -> %s%s" % [
+	return "Survol : (%d, %d)   h = %d   %s   %s   -> %s%s%s" % [
 		cell.x, cell.y, hovered.height(), _grid.terrain_at(cell).id,
-		_orientation(_turns), verdict, _hovered_site()]
+		_orientation(_turns), verdict, _neighbourhood_line(cell), _hovered_site()]
+
+## Ce que le voisinage de cette case rapporterait, en toutes lettres.
+##
+## **Le cartouche du fantôme est une image, cette ligne est un chiffre**, et il faut les deux
+## pour les mêmes raisons qu'une table doit dire ce qu'elle montre : une capture prouve qu'un
+## nombre est *lisible*, elle ne prouve pas qu'il est *juste*. Les deux viennent du même appel,
+## donc un désaccord entre l'image et cette ligne ne peut venir que du dessin.
+func _neighbourhood_line(cell: Vector2i) -> String:
+	var data := _ghost_building()
+	if data == null or data.adjacency.is_empty():
+		return ""
+	var report := Adjacency.inspect(data, cell, _turns, _state().terrain())
+	var parts := PackedStringArray()
+	for index in report.size():
+		parts.append("%d %s -> +%d" % [report.count(index), report.rule(index).tag,
+			report.award(index)])
+	return "   voisinage : %s" % ", ".join(parts)
 
 func _hovered_site() -> String:
 	var building := _state().city().building_at(_world.cursor().hovered().cell())

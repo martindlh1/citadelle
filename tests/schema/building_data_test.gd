@@ -185,27 +185,15 @@ func test_a_building_without_any_economy_block_is_complete() -> void:
 	assert_bool(building.produces()).is_false()
 	assert_array(building.missing_fields()).is_empty()
 
-func test_a_building_with_a_coherent_block_reports_nothing() -> void:
+func test_a_building_with_a_coherent_rule_reports_nothing() -> void:
 	var building := _producer()
 	assert_bool(building.produces()).is_true()
 	assert_array(building.missing_fields()).is_empty()
 
-## Ce que E1 vérifiait ici est parti dans ProductionBlock, et il n'en reste que la
-## couture : ce qui manque au bloc remonte préfixé, comme TerrainData préfixe
-## « decor. ». Sans le préfixe, un « yield_per_turn » nu dans le rapport de boot ne dirait
-## pas d'où il vient le jour où BuildingData portera plusieurs blocs.
-func test_an_incomplete_block_is_reported_under_its_prefix() -> void:
-	var building := _producer()
-	building.production.yield_per_turn = {} as Dictionary[StringName, int]
-	assert_array(building.missing_fields()).contains(["production.yield_per_turn"])
-
-## Et le préfixe descend jusqu'aux lignes de rendement, qui portent déjà un point.
-func test_a_bad_yield_line_keeps_both_levels_of_prefix() -> void:
-	var building := _producer()
-	var per_turn: Dictionary[StringName, int] = {}
-	per_turn[&"wood"] = -2
-	building.production.yield_per_turn = per_turn
-	assert_array(building.missing_fields()).contains(["production.yield_per_turn.wood"])
+## « Produire » veut dire « avoir une raison de produire » depuis C3, et ce cas fixe la
+## bascule : un bâtiment sans règle ne produit rien, quoi qu'il porte par ailleurs.
+func test_a_building_without_a_rule_does_not_produce() -> void:
+	assert_bool(_building(_l_shape()).produces()).is_false()
 
 ## Une règle d'adjacence creuse remonte sous **son rang** et non sous son tag, et le cas le
 ## montre en oubliant justement le tag : « adjacency[].tag » ne désignerait aucune ligne du
@@ -360,14 +348,15 @@ func test_the_starting_building_is_the_one_the_shelter_rule_skips() -> void:
 	assert_int(heart.workers).is_equal(0)
 	assert_int(heart.housing).is_greater(0)
 
-## Un producteur cohérent : un rendement par tour, et c'est tout ce que N1 lui demande.
+## Un producteur cohérent : une règle de voisinage, et c'est tout ce qu'on lui demande.
 func _producer() -> BuildingData:
 	var building := _building(_l_shape())
-	var block := ProductionBlock.new()
-	var per_turn: Dictionary[StringName, int] = {}
-	per_turn[&"wood"] = 2
-	block.yield_per_turn = per_turn
-	building.production = block
+	var rule := AdjacencyRule.new()
+	rule.tag = &"forest"
+	rule.radius = 1
+	rule.resource = &"wood"
+	rule.per_cell = 2
+	building.adjacency = [rule] as Array[AdjacencyRule]
 	return building
 
 ## Un L : l'ancre, la cellule à sa droite, la cellule en dessous. Rendu neuf à chaque

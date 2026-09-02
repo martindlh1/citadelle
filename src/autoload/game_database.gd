@@ -156,18 +156,10 @@ func _assert_resources_are_known() -> void:
 			continue
 		for resource in building.cost:
 			_assert_known(known, resource, "buildings/%s.tres → cost" % id)
-		# Avant le garde de produces(), et non après : un bâtiment peut porter une règle
-		# d'adjacence sans produire par ailleurs, et le ranger après l'aurait dispensé du
-		# contrôle exactement dans le cas où personne ne le relit.
 		for rule in building.adjacency:
 			if rule != null:
 				_assert_known(known, rule.resource,
 					"buildings/%s.tres → adjacency.resource" % id)
-		if not building.produces():
-			continue
-		for resource in building.production.yield_per_turn:
-			_assert_known(known, resource,
-				"buildings/%s.tres → production.yield_per_turn" % id)
 ## Cette ressource figure-t-elle au catalogue ?
 ## Existe-t-il un bâtiment qui loge sans coûter de travailleur ?
 ##

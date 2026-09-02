@@ -12,8 +12,16 @@ extends RefCounted
 ## orchestre la journée qui enchaîne les deux questions. REASON_INSUFFICIENT_RESOURCES
 ## rejoindra PlacementResult ce jour-là, sans que rien d'ici ne bouge.
 ##
-## Aucun prérequis d'adjacence non plus : « requiert un gisement voisin » a été écarté
-## du placement, et l'adjacence reste entièrement la couche de rendement de C3.
+## **Un prérequis d'adjacence, en revanche, est entré à C3.** Ce docstring disait le contraire :
+## « requiert un gisement voisin » avait été écarté du placement, l'adjacence restant la couche
+## de rendement. La décision était juste tant que les deux couches étaient distinctes — depuis
+## que le voisinage est la **seule** source de production, elles n'en font plus qu'une, et un
+## bâtiment sans voisin n'est pas un bâtiment qui rend peu : c'est un bâtiment qui ne rend rien.
+##
+## Il reste conforme au premier paragraphe : la question se pose au **terrain**, pas à une
+## bourse. Elle passe par `TerrainQuery.tagged_within()`, le même balayage dont l'Économie tire
+## le rendement — un second comptage écrit ici aurait pu accepter une case dont la récolte, un
+## tour plus tard, ne verserait rien.
 
 ## Peut-on poser ce bâtiment sur cette ancre ?
 ##
@@ -55,4 +63,24 @@ static func validate(city: CityState, terrain: TerrainQuery,
 	for cell in cells:
 		if terrain.height_at(cell) != height:
 			return PlacementResult.refused(PlacementResult.REASON_UNEVEN_GROUND)
+	# En dernier, et c'est le seul ordre défendable : les quatre règles au-dessus disent que
+	# la case est **utilisable**, celle-ci qu'elle est **utile**. Un « il n'y a pas d'arbre »
+	# rendu sur une case sous l'eau serait exact et hors sujet.
+	if not _has_a_neighbour(terrain, data, cells):
+		return PlacementResult.refused(PlacementResult.REASON_NO_NEIGHBOUR)
 	return PlacementResult.accepted(cells, height)
+
+## Au moins une règle de ce bâtiment trouve-t-elle une case ? Vrai s'il n'en porte aucune.
+##
+## « Au moins une » et non « toutes » : un bâtiment à deux règles a deux façons de mériter sa
+## place, et en exiger deux ferait d'une carte généreuse la seule carte jouable. C'est aussi
+## exactement la condition qui garantit que tout bâtiment posable **rend quelque chose**,
+## puisqu'une règle qui trouve une case verse au moins son `per_cell`, lequel vaut au minimum 1.
+static func _has_a_neighbour(terrain: TerrainQuery, data: BuildingData,
+		cells: Array[Vector2i]) -> bool:
+	if data.adjacency.is_empty():
+		return true
+	for rule in data.adjacency:
+		if not terrain.tagged_within(cells, rule.tag, rule.radius).is_empty():
+			return true
+	return false

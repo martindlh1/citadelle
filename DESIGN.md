@@ -305,15 +305,38 @@ placement fantôme : **sans retour visuel en temps réel du delta, l'adjacence e
 donc inexistante.** Cette phrase était déjà dans l'ancien document et elle n'a jamais été
 aussi vraie.
 
-*La forme est tranchée à `C3`, et elle l'a été devant une carte générée comme ce paragraphe
-l'exigeait.* Une règle porte **cinq** choses : un tag de terrain, un rayon, une ressource, ce
-que chaque case rapporte, et un **plafond**.
+*Ce retour est **sur le fantôme** et non dans un panneau de HUD*, et `C3` l'a d'abord mis au
+mauvais endroit avant de le déplacer. Une ligne de texte dans un coin de l'écran **décrit** ce
+qu'une case rapporte ; le fantôme le **montre** — la portée de la règle, les cases qui
+comptent, et le total posé sur le bâtiment. La différence tient à ce qu'on regarde au moment
+où l'on choisit une case : on regarde la carte. Une information de placement rangée ailleurs
+oblige à faire l'aller-retour, ce qui revient à ne pas l'avoir.
 
-Le plafond est le cinquième nombre, et il n'est pas décoratif. `T4` rend des cartes couvertes
-à 22 % de forêt **en bosquets** : un camp de bûcheron posé au milieu d'une futaie a ses huit
-voisines boisées, donc sans plafond il rend `+2` de base et `+8` de bonus. Le placement cesse
-alors d'être un choix pour devenir un gros lot, et le reste de la carte n'a plus d'intérêt. Ce
-qu'on veut est qu'un bon emplacement **double** à peu près un bâtiment, pas qu'il le quintuple.
+*La forme est tranchée à `C3`, et elle l'a été devant une carte générée comme ce paragraphe
+l'exigeait.* Une règle porte **quatre** choses : un tag de terrain, un rayon, une ressource, et
+ce que chaque case rapporte.
+
+**Le voisinage est la seule source de production.** C'est le renversement du jalon, et il
+change la nature de la couche : l'adjacence n'est plus un bonus posé sur un rendement de base,
+elle **est** le rendement. Un camp de bûcheron ne produit pas du bois parce qu'il existe, il en
+produit parce qu'il y a des arbres autour de lui — et deux fois plus s'il y en a deux fois plus.
+`ProductionBlock` disparaît : plus aucun bâtiment ne déclare de rendement à plat.
+
+*Une première version portait un cinquième nombre, un **plafond**, et il est retiré le jour
+même.* Il se défendait tant que l'adjacence était un supplément — il empêchait qu'un bosquet
+devienne un gros lot. Comme source unique il fait exactement l'inverse de ce qu'on veut : au
+plafond, un emplacement à deux arbres et un emplacement à dix rendent la même chose, et le
+choix de la case cesse de compter. Un jeu dont le placement est l'essence ne peut pas aplatir
+la seule mesure qui distingue deux cases.
+
+**Et un bâtiment qui ne trouve aucun voisin ne se pose pas.** C'est un prérequis **dur**, pas
+un rendement nul : une cabane de bûcheron au milieu d'une plaine serait un bâtiment qui coûte
+des bras, occupe une case et ne rend rien — donc un piège, et un piège qu'on ne repère qu'après
+avoir payé. Le refus se lit sur le fantôme avant le clic, comme les quatre autres.
+
+*Cela revient sur une décision de `C1`*, qui avait écarté « requiert un gisement voisin » du
+placement en réservant l'adjacence au rendement. La décision était juste tant que les deux
+couches étaient distinctes ; elles n'en font plus qu'une.
 
 **Le rayon compte l'empreinte, pas seulement le pourtour.** Le mot « voisin » ci-dessus était
 plus étroit que ce qu'on veut : bâtir une carrière **sur** le gisement doit être le bon geste,
@@ -327,20 +350,20 @@ bâtiment n'a pas de tags aujourd'hui, et lui en donner sans qu'aucune règle le
 champ ajouté d'avance que ce projet refuse depuis `E1b`. C'est un mot de plus dans le schéma le
 jour où une règle le veut.
 
-| Bâtiment | Règle | Plafond |
+| Bâtiment | Règle | Un bon emplacement |
 |---|---|---|
-| Camp de bûcheron | +1 bois par case `forest` à 1 | +2 |
-| Carrière | +1 pierre par case `stone` à 1 | +2 |
-| Mine | +1 minerai par case `stone` à 1 | +2 |
-| Ferme | +2 nourriture par case `water` à 1 | +4 |
+| Camp de bûcheron | +1 bois par case `forest` à 1 | 4 à 6 bois |
+| Carrière | +1 pierre par case `stone` à 1 | 2 à 4 pierre |
+| Mine | +1 minerai par case `stone` à 1 | 2 à 4 minerai |
+| Ferme | +2 nourriture par case `water` à 1 | 4 à 8 nourriture |
 
-Le rendement de base n'est **pas** répété ici : il est dans la table de 4.1, et le recopier
-serait deux chiffres à tenir d'accord. Les plafonds sont réglés pour à peu près doubler chaque
-bâtiment — mais contre ce que `data/` verse aujourd'hui, pas contre 4.1 : *la ligne de la ferme
-a dérivé*, le document annonce `+3 nourriture` et le `.tres` en verse 8. C'est la table de 4.1
-qui a raison de se dire « chiffres de départ », et l'écart est noté ici plutôt que corrigé en
-passant — retoucher un équilibrage au détour d'un jalon d'adjacence serait le changer sans
-l'avoir mesuré.
+La troisième colonne n'est pas un réglage : c'est ce qu'une carte de `T4` **offre** en pratique,
+et c'est la seule façon honnête de chiffrer une règle dont le rendement n'existe qu'en fonction
+du sol. Les extrêmes vont de 1 — le minimum, sans quoi on ne pose pas — à 9 sur une case au
+cœur d'un bosquet, ou 16 pour une ferme de deux par deux cernée d'eau, ce qui n'arrive pas.
+
+*La colonne **Production** de la table de 4.1 devient donc caduque pour ces quatre lignes*, et
+elle est corrigée là-bas plutôt que doublée ici.
 
 La ferme est la seule dont le tag est **inconstructible**, et c'est ce qui la distingue : elle
 ne peut jamais se poser *sur* ce qu'elle veut, seulement à côté. Elle est aussi la raison pour
@@ -356,16 +379,16 @@ cibles, au même titre que la table de 4.1. C'est `B1`.
 
 ### 3.3 Économie
 
-> **Contrat** — `CitySnapshot` + `PopulationState` → `ProductionReport`. Ne connaît ni la
-> grille ni les `Node` : tout lui est fourni.
+> **Contrat** — `CitySnapshot` + `PopulationState` + `TerrainQuery` → `ProductionReport`. Ne
+> connaît aucun `Node` : tout lui est fourni.
 
-*Ce contrat portait un `TerrainQuery` jusqu'à `I3`, et il l'a perdu là.* Le relief y était
-parce que le jeu d'avant laissait jouer une carte **à cru** sur une case, auquel cas le tag
-de cette case décidait du rendement ; ce geste n'existe plus. Un bâtiment rend son bloc, et
-rien dans le résolveur ne pourrait aujourd'hui faire quoi que ce soit d'un relief — le
-passer serait un champ ajouté d'avance, avec en prime une signature qui ment sur ce qu'elle
-lit. **Le relief revient dans l'Économie à `C3`**, avec l'adjacence, qui est son premier
-consommateur réel.
+*Ce contrat a perdu son `TerrainQuery` à `I3` et l'a retrouvé à `C3`*, ce qui est l'aller et
+le retour d'un même pari. Il l'avait perdu parce que le geste qui le justifiait — jouer une
+carte **à cru** sur une case, dont le tag décidait du rendement — était parti avec les cartes,
+et que le garder aurait été un champ ajouté d'avance avec une signature qui ment sur ce
+qu'elle lit. Il l'a retrouvé **avec ce qui le lit**, l'adjacence, qui est désormais la seule
+source de production. Deux jalons se sont écoulés entre les deux, et le résolveur n'a rien eu
+à défaire.
 
 **Conservé** : le `Ledger` en **réserve commune** — les cent unités sont partagées entre
 toutes les ressources, remplir de bois c'est renoncer à stocker de la pierre —, l'écrêtage
@@ -754,17 +777,22 @@ Chiffres de départ, pas des cibles. **Chantier** = nombre de tours pour l'achev
 | Bâtiment | Coût | Chantier | Production | Trav. | Loge | PV | Portée | Dégâts | Cadence |
 |---|---|---|---|---|---|---|---|---|---|
 | Cœur | posé au départ | — | — | 0 | 4 | 40 | — | — | — |
-| Camp de bûcheron | 0 | 1 | +2 bois | 2 | 0 | 6 | — | — | — |
-| Ferme | 10 bois | 2 | +3 nourriture | 4 | 0 | 6 | — | — | — |
-| Carrière | 15 bois | 2 | +2 pierre | 3 | 0 | 8 | — | — | — |
-| Mine | 25 bois, 10 pierre | 3 | +2 minerai | 4 | 0 | 10 | — | — | — |
+| Camp de bûcheron | 0 | 1 | *voisinage* | 2 | 0 | 6 | — | — | — |
+| Ferme | 10 bois | 2 | *voisinage* | 4 | 0 | 6 | — | — | — |
+| Carrière | 15 bois | 2 | *voisinage* | 3 | 0 | 8 | — | — | — |
+| Mine | 25 bois, 10 pierre | 3 | *voisinage* | 4 | 0 | 10 | — | — | — |
 | **Habitation** | 20 bois | 2 | — | **0** | 4 | 6 | — | — | — |
 | Entrepôt | 20 bois | 2 | +100 de réserve | 1 | 0 | 8 | — | — | — |
 | Palissade | 5 bois | 1 | — | 0 | 0 | 8 | — | — | — |
 | Tour de guet | 15 bois, 10 pierre | 3 | — | 1 | 0 | 12 | 4 | 3 | 20 |
 | Baliste | 30 bois, 20 pierre | 4 | — | 2 | 0 | 14 | 7 | 6 | 45 |
 
-Quatre remarques sur cette table.
+**« Voisinage » n'est pas une omission**, c'est le renversement de `C3` : ces quatre-là ne
+déclarent plus aucun rendement à plat, et ce qu'ils rendent dépend entièrement de ce qui les
+entoure *(cf. 3.2)*. Un chiffre dans cette colonne serait un second rendement à tenir d'accord
+avec la règle, et il serait faux sur toutes les cases sauf une.
+
+Cinq remarques sur cette table.
 
 **Tous les bâtiments ont des points de vie et se réparent.** Il n'y a aucune exception, pas
 même le Cœur : ce qui tient debout peut être abîmé et remis à neuf. Un bâtiment abîmé

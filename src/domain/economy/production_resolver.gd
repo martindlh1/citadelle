@@ -16,10 +16,13 @@ extends RefCounted
 ## n'existait que pour donner un emploi aux cartes. » Le résolveur d'avant partait des
 ## actions posées ; celui-ci part de la ville, et il est plus court d'un tiers pour ça.
 ##
-## **Trois conditions, et pas une de plus.** Achevé, actif, et porteur de **quelque chose à
-## verser** — un bloc de production, des règles d'adjacence, ou les deux. La troisième s'est
-## élargie à `C3` : rien n'oblige un bâtiment qui se bonifie au voisinage à produire par
-## ailleurs, et la refuser aurait été une règle de contenu écrite dans un résolveur.
+## **Trois conditions, et pas une de plus.** Achevé, actif, porteur de règles de voisinage.
+##
+## La troisième a changé de nature à `C3` sans changer de forme : elle demandait « un bloc de
+## production », elle demande « une raison de produire ». Un bâtiment qui en a une **rend
+## forcément quelque chose**, parce que le placement a refusé de le poser là où il n'aurait
+## rien trouvé — c'est le seul endroit du domaine où une règle de la Construction garantit un
+## invariant de l'Économie, et il vaut d'être noté plutôt que redécouvert.
 ##
 ## **Tout ou rien, jamais au prorata.** Un bâtiment à moitié servi qui produirait à moitié
 ## serait un chiffre mou et une explication à donner ; « cette ferme dort, il me manque un
@@ -38,7 +41,7 @@ extends RefCounted
 ## est `Adjacency`. Deux jalons se sont écoulés entre le retrait et le retour, et le fichier
 ## n'a rien eu à défaire : c'est ce que le pari valait.
 ##
-## **Le bonus est calculé ici, pas stocké sur le bâtiment.** Un rendement figé à la pose se
+## **La récolte est calculée ici, pas stockée sur le bâtiment.** Un rendement figé à la pose se
 ## périmerait au premier terrassement de `C5` — et il aurait fallu se souvenir de le
 ## recalculer, ce qui est la forme d'oubli la plus silencieuse qui soit : le chiffre reste
 ## juste jusqu'au jour où il ne l'est plus, sans que rien ne bouge.
@@ -70,19 +73,15 @@ static func resolve(city: CitySnapshot, plan: StaffingPlan, terrain: TerrainQuer
 	var dormant: Array[Vector2i] = []
 	for building in city.completed():
 		var data := building.data()
-		if not data.produces() and data.adjacency.is_empty():
+		if not data.produces():
 			continue
 		if not plan.is_active(building.anchor()):
 			dormant.append(building.anchor())
 			continue
 		producers.append(building.anchor())
-		if data.produces():
-			for resource in data.production.yield_per_turn:
-				produced[resource] = produced.get(resource, 0) \
-					+ data.production.yield_per_turn[resource]
-		var bonus := Adjacency.bonus(data, building.anchor(), building.turns(), terrain)
-		for resource in bonus:
-			produced[resource] = produced.get(resource, 0) + bonus[resource]
+		var harvest := Adjacency.bonus(data, building.anchor(), building.turns(), terrain)
+		for resource in harvest:
+			produced[resource] = produced.get(resource, 0) + harvest[resource]
 
 	var stored := ledger.deposit(produced)
 	return ProductionReport.create(produced, stored, producers, dormant)

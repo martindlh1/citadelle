@@ -1,6 +1,6 @@
 class_name PlacementValidatorTest
 extends GdUnitTestSuite
-## Les quatre règles de placement, et l'ordre dans lequel elles se prononcent.
+## Les cinq règles de placement, et l'ordre dans lequel elles se prononcent.
 ##
 ## Grille de travail, 6 x 6. Plaine à hauteur 0 partout, sauf :
 ##   - (4, 0) eau, (5, 1) rocher — les deux terrains sur lesquels on ne bâtit pas ;
@@ -165,6 +165,41 @@ func _ell() -> BuildingData:
 	var offsets: Array[Vector2i] = [Vector2i.ZERO, Vector2i(1, 0), Vector2i(0, 1)]
 	return _building(&"ell", offsets)
 
+# --- la cinquième règle : trouver un voisin ---------------------------------
+
+## **Le prérequis dur de C3**, et il revient sur une décision de C1. Un bâtiment qui ne trouve
+## aucune case pour ses règles ne rend rien du tout, puisque le voisinage est la seule source de
+## production : le poser serait payer des bras pour un bâtiment vide, et ne s'en apercevoir
+## qu'après.
+func test_a_building_that_finds_no_neighbour_is_refused() -> void:
+	assert_str(_validate(_thirsty(), Vector2i(0, 3)).reason()) \
+		.is_equal(PlacementResult.REASON_NO_NEIGHBOUR)
+
+## Le pendant, sans quoi le cas ci-dessus passerait aussi bien sur un validateur qui refuse
+## tout : la case d'à côté de l'eau l'accepte.
+func test_the_same_building_is_accepted_beside_the_water() -> void:
+	var beside := WATER_CELL + Vector2i(-1, 1)
+	assert_bool(_validate(_thirsty(), beside).is_ok()) \
+		.override_failure_message("une case au contact de l'eau doit accepter") \
+		.is_true()
+
+## Un bâtiment **sans règle** ne se voit rien réclamer. Cinq bâtiments sur neuf sont dans ce
+## cas, et une palissade qui exigerait un arbre serait une règle inventée par le validateur.
+func test_a_building_without_rules_is_never_refused_for_that() -> void:
+	assert_bool(_validate(_hut(), Vector2i(0, 3)).is_ok()).is_true()
+
+## L'ordre compte : « il n'y a pas d'eau » rendu sur une case sous l'eau serait exact et hors
+## sujet. Les quatre règles de terrain se prononcent d'abord.
+func test_an_unbuildable_cell_is_named_before_the_missing_neighbour() -> void:
+	assert_str(_validate(_thirsty(), ROCK_CELL).reason()) \
+		.override_failure_message("le rocher doit se dire avant le voisinage") \
+		.is_equal(PlacementResult.REASON_NOT_BUILDABLE)
+
+## Et la case d'eau elle-même : elle contenterait la règle, et elle reste inconstructible.
+func test_standing_in_the_water_is_still_refused() -> void:
+	assert_str(_validate(_thirsty(), WATER_CELL).reason()) \
+		.is_equal(PlacementResult.REASON_NOT_BUILDABLE)
+
 ## Deux cellules côte à côte, pour poser une empreinte à cheval sur un bord.
 func _wide() -> BuildingData:
 	var offsets: Array[Vector2i] = [Vector2i.ZERO, Vector2i(1, 0)]
@@ -174,6 +209,18 @@ func _building(id: StringName, offsets: Array[Vector2i]) -> BuildingData:
 	var building := BuildingData.new()
 	building.id = id
 	building.footprint = offsets
+	return building
+
+## Une cabane qui exige un voisin d'eau à un anneau. `WATER_CELL` est la seule case qui la
+## contente, donc le montage sait d'avance où elle se pose et où elle ne se pose pas.
+func _thirsty() -> BuildingData:
+	var building := _building(&"thirsty", [Vector2i.ZERO] as Array[Vector2i])
+	var rule := AdjacencyRule.new()
+	rule.tag = &"water"
+	rule.radius = 1
+	rule.resource = &"food"
+	rule.per_cell = 1
+	building.adjacency = [rule] as Array[AdjacencyRule]
 	return building
 
 func _make_terrain(id: StringName, build: TerrainData.Build, tag: StringName = &"") -> TerrainData:

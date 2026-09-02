@@ -80,6 +80,68 @@ func has_tag(cell: Vector2i, tag: StringName) -> bool:
 		return false
 	return terrain_at(cell).has_tag(tag)
 
+## Cases portant ce tag à `radius` anneaux ou moins de l'une de `cells`, `cells` comprises.
+##
+## **Elle est ici, sur le contrat, parce que deux systèmes du domaine la franchissent** : la
+## Construction s'en sert pour refuser un bâtiment qui ne trouve aucun voisin, l'Économie pour
+## calculer ce qu'il rend. C'est le critère nommé dans `CLAUDE.md` — un contrat s'écrit quand
+## deux systèmes le traversent vraiment, jamais avant —, et il est rempli au mot près : sans
+## elle, l'un des deux devrait dépendre des internes de l'autre, ou les deux compteraient
+## séparément et finiraient par ne plus compter pareil.
+##
+## Ce serait la pire des divergences, parce qu'elle serait **muette** : le fantôme accepterait
+## une case dont la récolte, un tour plus tard, ne verserait rien.
+##
+## En anneaux et non en pas, donc les diagonales comptent pour un : à rayon 1, la zone est la
+## couronne qui entoure l'empreinte. C'est ce qu'on voit en regardant autour d'une cabane, et
+## c'est la métrique que `MapAudit` emploie déjà pour dire que deux cols qui se touchent par un
+## coin n'en font qu'un.
+##
+## Les cases de `cells` comptent, si elles portent le tag : bâtir une carrière **sur** le
+## gisement est le geste qu'un joueur essaie en premier, et le terrain n'est pas consommé par
+## la pose. Hors grille ne compte rien, ce qui est le cas normal d'un fantôme promené au bord.
+##
+## L'ordre du résultat est celui du balayage, donc identique d'un appel et d'un run à l'autre :
+## le fantôme le dessine, et une liste qui changerait d'ordre ferait scintiller la carte.
+func tagged_within(cells: Array[Vector2i], tag: StringName,
+		radius: int) -> Array[Vector2i]:
+	assert(radius >= 0, "rayon de voisinage négatif : %d" % radius)
+	var found: Array[Vector2i] = []
+	if cells.is_empty():
+		return found
+	var area := _spanning(cells).grow(radius)
+	for y in range(area.position.y, area.end.y):
+		for x in range(area.position.x, area.end.x):
+			var cell := Vector2i(x, y)
+			if not has_tag(cell, tag):
+				continue
+			if _rings_between(cells, cell) <= radius:
+				found.append(cell)
+	return found
+
+## Rectangle englobant de ces cellules. Précondition : non vide.
+##
+## Il ne sert qu'à **borner le balayage** : sur une empreinte en L il couvre des cases que le
+## bâtiment n'occupe pas, et c'est `_rings_between()` qui rattrape. Compter depuis l'enveloppe
+## aurait donné le même chiffre sur les quatre bâtiments d'aujourd'hui — tous rectangulaires —
+## et un chiffre faux, en silence, le jour d'un producteur en L.
+func _spanning(cells: Array[Vector2i]) -> Rect2i:
+	var low := cells[0]
+	var high := cells[0]
+	for cell in cells:
+		low = Vector2i(mini(low.x, cell.x), mini(low.y, cell.y))
+		high = Vector2i(maxi(high.x, cell.x), maxi(high.y, cell.y))
+	return Rect2i(low, high - low + Vector2i.ONE)
+
+## Anneaux qui séparent cette cellule du plus proche membre de `cells`.
+func _rings_between(cells: Array[Vector2i], cell: Vector2i) -> int:
+	var nearest := -1
+	for member in cells:
+		var rings := maxi(absi(cell.x - member.x), absi(cell.y - member.y))
+		if nearest < 0 or rings < nearest:
+			nearest = rings
+	return nearest
+
 ## Toutes les cellules de la zone sont-elles constructibles ?
 ## False si la zone déborde de la grille, ce qui est le cas d'une empreinte posée
 ## trop près d'un bord.
