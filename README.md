@@ -93,12 +93,24 @@ obligatoire ; les autres sont optionnels :
 | `--shot-unfounded` | ne pose pas le Cœur : capture l'écran de fondation *(harnais Run)* |
 | `--shot-sun f` | moment du cycle solaire : 0 aube, 0.25 midi, 0.5 crépuscule, 0.75 nuit *(harnais Run)* |
 | `--survey` | génère 200 cartes sans écran et imprime leur distribution, puis quitte *(harnais Terrain)* |
+| `--gen nom` | force une variante de génération par-dessus `data/balance/` — `raw`, `dome`, `ridges`, `peak`, `crest` *(harnais Terrain)* |
 | `--chronicle` | rejoue le run entier sans écran et imprime la table, puis quitte *(harnais Run)* |
 
 `--shot-hover` a une valeur par défaut plutôt que rien, parce qu'une capture qui ne
 montre pas la surbrillance ne prouve rien à son sujet, et que souris à `(0, 0)` le
 survol réel tomberait hors carte. `--shot-rotate` existe pour la même raison : sans
 lui, aucune capture ne montrerait jamais un bâtiment pivoté.
+
+Sur le harnais Terrain, cette valeur par défaut est **le site que l'audit a trouvé** depuis
+`T4`, et non plus le milieu de la carte. C'est la seule façon de vérifier en image ce que le
+jalon décide : le curseur doit tomber sur un replat crédible, pas au sommet d'un pic ni dans un
+lac. Le rapport imprime la même case, donc le chiffre et l'image se contredisent si l'un des
+deux ment.
+
+`--gen` est un drapeau d'**exploration** et il se retirera avec elle : il ne nomme pas des
+techniques mais des jeux de réglages, la génération n'ayant que deux axes — la nature du bruit
+et la colline centrale. Deux noms ont d'ailleurs été supprimés le jour où ils sont devenus
+identiques à `data/`, ce qui est une table annonçant une différence qu'elle ne montre plus.
 
 **Les drapeaux ont fondu avec les harnais, à `R0`**, et `I3` en rend deux. Il en restait
 quatorze avant le rescope, il en reste neuf. Les dix qui étaient partis servaient des harnais
@@ -134,8 +146,9 @@ que `DESIGN.md` 3.1 demande à `T4` en toutes lettres :
 "$GODOT_BIN" --headless --path . -- --harness terrain --survey
 ```
 
-Elle tire deux cents brouillons et imprime leur distribution — accès, plateau, assises,
-gisements, distance de la lisière — plus le décompte des rejets **par motif**, parce que c'est
+Elle tire deux cents brouillons et imprime leur distribution — accès, dérive du village,
+plateau, assises, gisements, distance de la lisière — plus le décompte des rejets **par
+motif**, parce que c'est
 le nom qui sert : « deposits, deposits, deposits » désigne le chiffre à tourner, là où « onze
 rejets » ne désigne rien. Elle mesure les brouillons **avant** rejet, et le dit : une
 distribution prise après serait bonne par construction, donc muette. Deux lignes à part

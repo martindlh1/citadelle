@@ -175,32 +175,41 @@ l'essence du jeu, une carte sans topographie est une partie sans jeu.
 
 Elle devient donc un **producteur de topographie jouable**, avec des garanties nommées :
 
-- un **plateau central constructible** d'au moins *N* cellules, pour le Cœur et ses premiers
-  voisins ;
+- un **replat constructible** d'au moins *N* cellules pour le Cœur et ses premiers voisins,
+  trouvé **au plus près du centre** et non *sur* le centre ;
 - un nombre **borné d'accès distincts** à ce plateau — deux à quatre, jamais un, jamais
   douze ;
 - une **surface plate totale** minimale, sans quoi la boucle économique ne démarre pas ;
 - des **gisements atteignables**, c'est-à-dire du côté constructible des accès.
 
-**La méthode : poser la structure, décorer au bruit.** L'inverse — bruiter puis espérer —
-est ce qui ne peut pas donner de garantie. Et la génération **se vérifie elle-même** : elle
-compte ses corridors d'approche par un parcours de grille, mesure sa surface plate, et
-**rejette le seed** s'il ne tient pas ses promesses.
+**La méthode : du bruit, penché par des règles qui ne se voient pas, et un village qui
+s'installe où le terrain le permet.** Et la génération **se vérifie elle-même** : elle compte
+ses corridors d'approche par un parcours de grille, mesure sa surface plate, et **rejette le
+seed** s'il ne tient pas ses promesses.
 
-*La forme retenue à `T4` est une **mesa**, et elle mérite d'être nommée parce que le document
-laissait le choix ouvert.* Un plateau central surélevé, une plaine plus basse tout autour, et
-des **rampes** taillées en marches franchissables pour seules montées. C'est la lecture qui
-rend littérale la phrase ci-dessus — le relief *fabrique* les goulots — et elle a une
-propriété qu'aucune autre n'avait : la plaine est bruitée dans une amplitude **bornée sous le
-seuil d'enjambée**, si bien qu'aucun bruit ne peut ouvrir un accès que personne n'a voulu. La
-garantie des accès n'est pas vérifiée après coup, elle est **structurelle** — et c'est
-`TerrainGenBalance` qui la tient, en refusant au boot un réglage où la plaine toucherait le
-plateau.
+*`T4` a d'abord essayé l'inverse — poser la structure et décorer au bruit — sous la forme d'une
+**mesa** : un plateau central surélevé, une plaine plus basse, des rampes taillées en marches
+pour seules montées.* La méthode tenait toutes ses promesses **par construction**, ce qui était
+son argument, et elle a été retirée entière parce qu'elle échouait sur ce qu'aucune promesse ne
+mesure : on y lisait le générateur au lieu d'y lire un paysage. Une garantie structurelle ne
+vaut rien si la carte qui la porte n'est pas une carte qu'on a envie de regarder.
 
-Ce qui reste vérifié l'est donc vraiment, et c'est la décoration qui le met en jeu : un étang
-qui coupe le pied d'une rampe, deux rochers qui la bouchent, un plateau où aucun gisement
-n'est tombé. Mesuré sur deux cents seeds, **quatorze brouillons sur deux cents** sont rejetés,
-tous pour la même raison — deux rampes qui se sont rejointes en un seul col.
+Ce qui la remplace est le bruit d'avant, **penché** : un centre un peu plus haut, des crêtes
+qui barrent parce qu'elles sont hautes et non parce qu'on les a posées là. Aucune de ces règles
+n'a de bord — elles s'ajoutent au relief *avant* qu'il soit découpé en crans, donc aucune ne
+laisse de trace qu'on puisse montrer du doigt.
+
+**Et le village descend du centre.** C'est la décision qui rend le reste tenable : un bruit n'a
+aucune raison de laisser une place à bâtir sur une case désignée d'avance, et sur des crêtes le
+centre géométrique est le plus souvent un **pic**. On cherche donc le replat jouable le plus
+proche du milieu, et ce qu'on borne est la **distance** entre les deux. C'est aussi la seule
+des deux règles qu'un joueur puisse deviner en regardant la carte.
+
+Le prix de ce renversement est que plus rien n'est garanti par construction : c'est l'audit qui
+tient les promesses, seed après seed. Mesuré sur deux cents brouillons, **cent neuf sont
+rejetés** — un accès unique le plus souvent, puis un village trop loin du milieu, puis un
+plateau sans gisement — et il en coûte **2,15 essais** pour une carte, neuf au pire. Les deux
+cents seeds rendent tous une carte.
 
 **La franchissabilité entre en data au même jalon.** La colonne *Franchissable* du tableau
 ci-dessus n'existait nulle part ailleurs que dans ce document ; elle est maintenant un champ
@@ -210,7 +219,7 @@ fallait deux champs : une franchissabilité déduite se serait trompée en silen
 marécage.
 
 **`OUVERT`** — où vit la hauteur d'enjambée. Elle est dans `TerrainGenBalance` parce que la
-génération en est le seul lecteur : elle y taille ses rampes et y compte ses accès. `V1`
+génération en est le seul lecteur : c'est avec elle qu'elle compte ses accès. `V1`
 donnera la sienne à une vague, et le jour où les deux doivent être le même chiffre, le champ
 déménage. Inventer maintenant un bloc commun pour un consommateur qui n'existe pas est ce que
 ce projet refuse depuis toujours.
@@ -872,8 +881,9 @@ survit, ce qui garde le journal lisible ; `R` et `N` sont neuves.
 ### `T` — le terrain
 
 - **T4** — **La génération garantie.** `TerrainGen` réécrit en producteur de topographie :
-  plateau central, accès comptés, surface plate minimale, vérification par parcours, rejet
-  du seed. Le harnais mesure deux cents seeds et imprime la distribution.
+  relief bruité et penché, village trouvé au plus près du centre, accès comptés, surface plate
+  minimale, vérification par parcours, rejet du seed. Le harnais mesure deux cents seeds et
+  imprime la distribution.
 - **T5** — **L'occlusion**, si une capture montre que c'en est une.
 
 ### `C` — la construction

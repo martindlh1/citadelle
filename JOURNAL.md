@@ -4,7 +4,112 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-09-02 — `T4` (suite) : la mesa jetée, et un village qui descend du centre
+
+**État : en cours.** Branche `feat/t4-terrain-gen`. La règle de fondation est posée et
+vérifiée ; ce qui reste ouvert est la **force de la colline centrale**, qui se tranche en
+regardant trois captures. Les quatre commandes passent, et les deux suites touchées sont
+vertes — 109 cas sur `tests/domain/terrain/`, 99 sur `tests/schema/`. La suite complète n'a
+pas tourné : le jalon est en itération, et c'est ce qui a été demandé.
+
+### La mesa est jetée, et le motif ne se mesure pas
+
+Le verdict est tombé en une phrase : *« le terrain fait complètement artificiel, on perd tout
+le charme de la map »*. La mesa tenait pourtant toutes ses promesses **par construction**,
+c'était son argument, et la revue de deux cents seeds le disait en chiffres.
+
+C'est très exactement ce qui rend le cas intéressant. **Aucune table du projet ne sait rendre
+ce critère-là**, et l'entrée d'hier le disait déjà sans en tirer la conséquence : « la table
+dit qu'une carte est jouable, ce qui est le plancher et non l'objectif ». Un plancher tenu ne
+rachète pas un résultat qu'on n'a pas envie de regarder. La leçon est montée dans `CLAUDE.md`,
+parce qu'elle ne concerne pas que le terrain.
+
+Ce qui la remplace est le bruit d'avant, **penché** : un centre un peu plus haut, des crêtes
+qui barrent parce qu'elles sont hautes et non parce qu'on les a taillées. Trois techniques
+empilées dans un `enum` exclusif sont devenues **deux axes qui se composent** — la nature du
+bruit, la colline —, parce que l'`enum` interdisait justement la combinaison qu'on cherchait :
+des crêtes *et* une colline au milieu.
+
+### L'ordre des opérations, raté deux fois de suite
+
+Pencher le bruit **puis** l'étaler donne une **île** : la colline pousse le centre bien
+au-dessus de l'amplitude, l'étalement ramène tout le monde dedans, et le pourtour se retrouve
+poussé sous la nappe. Pencher **puis borner** donne un sommet **plat de cent cases**,
+c'est-à-dire la mesa qu'on venait de retirer, revenue par la porte de derrière.
+
+Étaler d'abord règle les deux, et la colline prend ensuite une **part** de l'amplitude au lieu
+de s'y ajouter. Le corollaire s'est payé plus tard : une colline forte et **étroite** ne laisse
+presque rien au bruit au-delà de sa portée, donc noie le pourtour — c'est la même île sous un
+autre nom, et il a fallu une revue rendant le **même chiffre pour trois enjambées différentes**
+pour cesser d'accuser la marche et regarder l'eau.
+
+### La décision du jalon : le village descend du centre
+
+L'audit ne reçoit plus son plateau, il le **cherche**. Un relief bruité n'a aucune raison de
+laisser une place à bâtir sur une case nommée d'avance : sur des crêtes, le centre géométrique
+est le plus souvent un **pic**, donc un replat d'une seule case — la revue disait « plateau
+1 case » sur les plus belles cartes du lot. Auditer là revenait à noter une carte sur un pixel.
+
+La règle est donc celle qu'un joueur devinerait tout seul : **on fonde où le terrain le permet,
+au plus près du centre.** `min_plateau_cells` cesse d'être un seuil et devient une **consigne de
+recherche** ; le seuil qui juge est la **dérive**, la distance entre le village et le milieu.
+Sur deux cents brouillons, le replat de seize cases se trouve à deux cases du centre en médiane.
+
+Trois choses en sont tombées d'elles-mêmes :
+
+- **La clairière centrale ne sert plus à rien**, et c'est mieux ainsi. Un replat trouvé en
+  marchant est plat *parce qu'il a été trouvé plat* ; la clairière, elle, rabotait au passage
+  les gisements sur lesquels le village démarre — médiane 0 avec, 3 sans.
+- **Deux noms de variante sont devenus identiques à `data/`** le jour où la clairière est
+  passée à zéro. Une table qui annonce une différence qu'elle ne montre plus est le défaut que
+  ce projet traque depuis `F1` ; les deux sont supprimés.
+- **La capture désigne le site trouvé** au lieu du milieu de la carte. C'est la règle
+  d'`R0` — un état qu'aucune capture n'atteint est un état que personne ne regardera — et ici
+  elle a un bonus : le rapport imprime la même case, donc l'image et le chiffre se contredisent
+  si l'un des deux ment.
+
+### Les promesses mordent enfin
+
+Elles ne refusaient rien : 0 rejet sur 200. Trois sont maintenant serrées sur ce que
+`DESIGN.md` 3.1 dit depuis toujours — **jamais un seul accès, jamais douze** — et la revue rend
+109 rejets pour **2,15 essais** par carte, neuf au pire, les deux cents seeds rendant tous une
+carte. La quatrième, la surface bâtissable, reste un plancher pour une molette tournée demain,
+et c'est un **cas de test** qui le fait refuser plutôt qu'une revue serrée à la main puis
+desserrée : le contrôle reste, là où le serrage manuel s'oublie.
+
+### Un test qui prouvait une propriété qu'on venait de retirer
+
+`test_the_forest_ceiling_does_not_shift_the_scatter_stream` a échoué trente-deux fois. Il avait
+raison : la dispersion en **bandes** posait chaque famille sur un tirage par cellule, donc un
+plafond de forêt ne consommait rien et les gisements ne bougeaient pas. La dispersion **par
+zones** prend une part exacte au classement — d'où des bosquets et des éboulis plutôt qu'un
+semis —, et le classement de la forêt change ce que la passe suivante trouve libre.
+
+Le réflexe à ne pas avoir était de le rafistoler. Il a été remplacé par ce que le nouveau modèle
+garantit **et** que l'ancien ne garantissait pas : une famille prend une part **exacte** de la
+terre ferme, et deux familles ne réclament jamais la même case. C'est le piège du seuil qui
+avait déjà coûté une passe sur l'eau, où « douze pour cent » avait rendu zéro case.
+
+### Ce qui n'est pas tranché
+
+**La force de la colline.** Trois captures posent la question : `ridges` (ce que `data/` porte),
+`peak` (colline forte et large) et `crest` (amplitude 0..15). Les deux dernières coûtent quelque
+chose de mesurable — `peak` ouvre plus d'accès donc moins de goulots, `crest` **assèche la
+carte**, un toit plus haut relevant tout le monde au-dessus de la nappe. C'est un arbitrage de
+goût sur une base chiffrée, donc il attend l'humain.
+
+**Et aucun chiffre n'est équilibré.** Densités, portée de la colline, taille minimale d'un lac :
+des points de départ choisis pour que la carte se lise. C'est `B1`.
+
+---
+
 ## 2026-09-01 — `T4` : la mesa, et deux défauts qu'aucune image ne montrait
+
+> **Renversée le lendemain.** La mesa décrite ci-dessous a été retirée entière : elle tenait
+> ses promesses et ne ressemblait à rien. Ce qui suit reste tel quel — un journal enregistre ce
+> qui a été décidé, pas ce qu'on aurait voulu décider —, et deux choses lui survivent :
+> `MapAudit`, qui n'a pas eu à bouger d'une ligne, et la doctrine des tables. Voir l'entrée
+> au-dessus.
 
 **État : terminé.** Branche `feat/t4-terrain-gen`, tirée de **`feat/n2-population-view`** et
 non de `master` — `N2` n'est pas encore fusionnée, et travailler sur un arbre sans le HUD du

@@ -610,36 +610,48 @@ geste est possible, faute de quoi elle avale les clics en silence.
 
 **Une vue sur laquelle on clique porte `MOUSE_FILTER_STOP`**, à l'inverse des vues de lecture, qui laissent passer en `IGNORE` pour que le curseur de cellule continue de piocher dessous. Le geste tombe alors dans le `gui_input` de la vue et n'atteint jamais `_unhandled_input` du harnais, ce qui est exactement le partage voulu — sans quoi un clic sur une fiche jouerait aussi la carte tenue sur la case cachée derrière.
 
-### Génération de terrain — structure d'abord
+### Génération de terrain — du bruit penché, un village trouvé
 
-*(Écrit à `T4`.)* `TerrainGen` pose une **mesa** : un plateau central, une plaine plus basse,
-et des rampes en marches pour seules montées. Le bruit ne fait que décorer ce que la structure
-a déjà décidé.
+*(Écrit à `T4`.)* `TerrainGen` pose du **bruit**, penché par deux règles qui ne se voient pas :
+un centre un peu plus haut, des crêtes qui barrent parce qu'elles sont hautes. Les règles
+s'ajoutent **avant** le découpage en crans, donc aucune ne laisse de bord.
 
-**Une garantie structurelle vaut mieux qu'une garantie vérifiée**, et c'est la décision qui
-porte le jalon. La plaine est bruitée dans une amplitude **bornée sous le seuil d'enjambée**,
-donc aucun bruit ne peut ouvrir un accès que personne n'a voulu — ce n'est pas contrôlé, c'est
-impossible. Ce qui reste contrôlé est ce que la structure ne peut pas tenir seule : un étang
-qui coupe le pied d'une rampe, un rocher qui la bouche, un plateau sans gisement.
-`TerrainGenBalance.missing_fields()` refuse au boot un réglage où la plaine toucherait le
-plateau, ce qui est le même geste que le bloc `production` nullable — rendre la cohérence
-structurelle au lieu de vérifiée.
+**Une mesa a été écrite d'abord, et retirée entière.** Un plateau central, une plaine plus
+basse, des rampes numérotées : elle tenait toutes ses promesses *par construction*, ce qui
+était son argument, et elle a été jetée sur ce qu'aucune promesse ne mesure — on y lisait le
+générateur au lieu d'y lire un paysage. La leçon vaut au-delà du terrain : **une garantie
+structurelle ne rachète pas un résultat qu'on n'a pas envie de regarder**, et c'est le seul
+critère qu'aucune table du projet ne sait rendre.
 
-**Le vérificateur ne sait rien du générateur.** `MapAudit` retrouve le plateau par un
-parcours, compte les accès en marchant depuis la lisière, et mesure la place à bâtir en
-essayant d'y poser une empreinte. C'est la condition pour qu'il **vérifie** au lieu de
-répéter : un audit à qui l'on dirait « j'ai creusé trois rampes » rendrait trois accès sur une
-carte dont deux se touchent. C'est la règle des tables, transposée à un contrôle.
+**Le village s'installe où le terrain le permet, au plus près du centre.** C'est ce qui rend le
+bruit tenable, et c'est le renversement du jalon : on ne peut pas exiger d'un relief tiré au
+sort qu'il laisse une place à bâtir sur une case nommée d'avance — sur des crêtes, le centre
+géométrique est le plus souvent un **pic**, donc un replat d'une seule case, et l'auditer là
+revenait à noter la carte sur un pixel. `min_plateau_cells` est donc devenu une **consigne de
+recherche** et non un seuil ; le seuil qui juge est la **dérive**, la distance entre le village
+et le milieu.
 
-**Un seuil qui n'a jamais refusé se vérifie en le faisant refuser.** Trois des quatre
-promesses sont des **planchers** — taille du plateau, surface bâtissable, gisements — et elles
-ne mordent pas sur les réglages du jour : c'est leur métier, elles protègent d'une molette
-tournée demain. Elles ont donc été serrées une fois exprès, et la revue est passée de 14
-rejets sur 200 à 185 : elles refusent. La quatrième, la fourchette d'accès, est le vrai filtre.
+Corollaire immédiat, et il a supprimé un réglage : la clairière centrale ne sert plus à rien.
+Un replat trouvé en marchant est plat **parce qu'il a été trouvé plat**, pas parce qu'on l'a
+aplani — et la clairière rabotait au passage les gisements sur lesquels le village démarre.
+
+**Le vérificateur ne sait rien du générateur.** `MapAudit` cherche le site par un parcours,
+retrouve le replat par un parcours, compte les accès en marchant depuis la lisière, et mesure
+la place à bâtir en essayant d'y poser une empreinte. C'est la condition pour qu'il **vérifie**
+au lieu de répéter — et c'est ce qui a permis d'échanger une mesa contre du bruit sans en
+toucher une ligne. Un audit taillé sur une technique aurait été à réécrire avec elle.
+
+**Un seuil qui n'a jamais refusé se vérifie en le faisant refuser.** Trois des quatre promesses
+mordent sur les réglages du jour — accès, dérive, gisements —, et la revue de deux cents
+brouillons dit lesquels : 109 rejets, 2,15 essais par carte. La quatrième, la surface
+bâtissable, est un **plancher** qui protège d'une molette tournée demain ; c'est un cas de test
+qui le fait refuser, ce qui est mieux qu'une revue serrée une fois à la main puis desserrée.
 
 **Un `Array` alloué dans une boucle de grille se paie au million.** `is_area_buildable()`
 fabriquait ses cellules ; l'audit lui pose mille questions par carte et deux cents fois par
-revue. Le balayage direct rend les mêmes réponses.
+revue. Le balayage direct rend les mêmes réponses. Même geste pour la recherche du site : le
+replat de chaque cellule se calcule **une fois par replat** et se recopie sur ses membres,
+plutôt qu'une fois par cellule.
 
 ### Sélection de cellule
 
