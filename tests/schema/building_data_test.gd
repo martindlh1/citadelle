@@ -207,6 +207,19 @@ func test_a_bad_yield_line_keeps_both_levels_of_prefix() -> void:
 	building.production.yield_per_turn = per_turn
 	assert_array(building.missing_fields()).contains(["production.yield_per_turn.wood"])
 
+## Une règle d'adjacence creuse remonte sous **son rang** et non sous son tag, et le cas le
+## montre en oubliant justement le tag : « adjacency[].tag » ne désignerait aucune ligne du
+## .tres, là où un indice en désigne toujours une.
+func test_a_hollow_adjacency_rule_is_reported_under_its_index() -> void:
+	var building := _building([Vector2i.ZERO])
+	building.adjacency = [AdjacencyRule.new()] as Array[AdjacencyRule]
+	assert_array(building.missing_fields()).contains(["adjacency[0].tag",
+		"adjacency[0].radius", "adjacency[0].resource"])
+
+## Une liste vide est parfaitement légitime : cinq bâtiments sur neuf n'ont aucune règle.
+func test_no_adjacency_rule_at_all_is_not_a_lack() -> void:
+	assert_array(_building([Vector2i.ZERO]).missing_fields()).is_empty()
+
 ## Une ligne de coût à zéro ne veut rien dire : on l'omet. L'écrire est une faute de
 ## contenu, pas une gratuité.
 func test_a_null_cost_line_is_reported() -> void:

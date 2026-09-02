@@ -138,6 +138,20 @@ const QUARTER_TURNS := 4
 ## d'exploration — sont partis avec les systèmes qui les justifiaient, à R0.
 @export var production: ProductionBlock
 
+## Ce que le voisinage lui rapporte en plus, une entrée par règle. Vide s'il ne s'intéresse
+## pas à ce qui l'entoure — ce qui est le cas de cinq bâtiments sur neuf.
+##
+## Une **liste** et non un bloc nullable, à l'inverse de `production` juste au-dessus, et la
+## différence tient à ce que la nullité achète : là-haut elle rend la doctrine du zéro
+## applicable à trois champs qui vivent ou meurent ensemble. Ici chaque règle est déjà une
+## `Resource` qui réclame ses cinq champs, donc un bloc englobant n'ajouterait rien — et un
+## bâtiment peut vouloir deux règles, ce qu'un bloc unique interdirait.
+##
+## Rien n'exige qu'un bâtiment qui en porte une **produise** par ailleurs. Aucun des quatre
+## d'aujourd'hui n'est dans ce cas, mais une palissade qui rapporterait à longer un lac serait
+## une règle de contenu parfaitement écrivable, et le résolveur n'a pas à la refuser.
+@export var adjacency: Array[AdjacencyRule]
+
 ## Ce qu'il ajoute à la réserve commune. 0 pour tout ce qui n'est pas un entrepôt.
 ##
 ## En réserve commune, ce chiffre ne relève pas trois compteurs indépendants mais la
@@ -292,6 +306,7 @@ func missing_fields() -> PackedStringArray:
 	if hit_points <= 0:
 		missing.append("hit_points")
 	missing.append_array(_economy_fields())
+	missing.append_array(_adjacency_fields())
 	if footprint.is_empty():
 		missing.append("footprint")
 		return missing
@@ -328,6 +343,26 @@ func _economy_fields() -> PackedStringArray:
 		return missing
 	for field in production.missing_fields():
 		missing.append("production.%s" % field)
+	return missing
+
+## Incohérences des règles d'adjacence, préfixées par leur rang.
+##
+## Le rang plutôt que le tag, parce qu'une règle dont le **tag** est justement le champ oublié
+## se nommerait « adjacency[].tag » et ne désignerait rien. Un indice désigne toujours une
+## ligne du .tres, y compris quand c'est son identité qui manque.
+##
+## Une liste vide est parfaitement légitime : cinq bâtiments sur neuf n'ont aucune règle. Ce
+## qui ne l'est pas est une règle **présente et creuse**, et c'est ce que la doctrine du zéro
+## attrape ici entièrement — voir AdjacencyRule.
+func _adjacency_fields() -> PackedStringArray:
+	var missing := PackedStringArray()
+	for index in adjacency.size():
+		var rule := adjacency[index]
+		if rule == null:
+			missing.append("adjacency[%d]" % index)
+			continue
+		for field in rule.missing_fields():
+			missing.append("adjacency[%d].%s" % [index, field])
 	return missing
 
 ## L'empreinte nomme-t-elle deux fois la même cellule ?

@@ -344,7 +344,24 @@ func _show_card(city: CitySnapshot) -> void:
 		_card.show_nothing("Aucun bâtiment choisi")
 		return
 	_card.show_building(data, _turns, _state().ledger().shortfall(data.cost),
-		Staffing.hands_short(city, _state().people().headcount(), data.workers))
+		Staffing.hands_short(city, _state().people().headcount(), data.workers),
+		_neighbourhood_of(data))
+
+## Ce que le voisinage de la case survolée rapporterait à ce bâtiment.
+##
+## C'est le **même appel** que celui du résolveur de production — `Adjacency` ne sait pas si le
+## bâtiment qu'on lui décrit est posé —, donc la fiche ne peut pas promettre autre chose que ce
+## que le tour versera. `DESIGN.md` 3.2 réclame ce delta en temps réel, et un second calcul
+## écrit ici aurait été le doublon que le domaine a justement été taillé pour éviter.
+##
+## Rien de survolé rend un rapport **vide** et non un rapport à zéro : la fiche annonce alors
+## la promesse de la règle plutôt que de fausses nouvelles. La distinction est celle
+## qu'`AdjacencyReport.is_empty()` porte.
+func _neighbourhood_of(data: BuildingData) -> AdjacencyReport:
+	var hovered := _world.cursor().hovered()
+	if not hovered.is_hit():
+		return AdjacencyReport.none()
+	return Adjacency.inspect(data, hovered.cell(), _turns, _state().terrain())
 
 ## Redessine le bâti, endormis compris.
 ##

@@ -26,6 +26,7 @@ func _ready() -> void:
 	_assert_buildings_are_complete()
 	_assert_commodities_are_complete()
 	_assert_resources_are_known()
+	_assert_adjacency_tags_are_known()
 	_assert_a_shelter_is_free()
 	EventBus.database_ready.emit.call_deferred()
 
@@ -155,6 +156,13 @@ func _assert_resources_are_known() -> void:
 			continue
 		for resource in building.cost:
 			_assert_known(known, resource, "buildings/%s.tres → cost" % id)
+		# Avant le garde de produces(), et non après : un bâtiment peut porter une règle
+		# d'adjacence sans produire par ailleurs, et le ranger après l'aurait dispensé du
+		# contrôle exactement dans le cas où personne ne le relit.
+		for rule in building.adjacency:
+			if rule != null:
+				_assert_known(known, rule.resource,
+					"buildings/%s.tres → adjacency.resource" % id)
 		if not building.produces():
 			continue
 		for resource in building.production.yield_per_turn:
@@ -212,6 +220,44 @@ func _assert_a_shelter_is_free() -> void:
 	assert(false,
 		"aucun bâtiment constructible de data/buildings/ ne loge sans coûter de travailleur : "
 		+ "une partie dont tout le monde est immobilisé ne pourrait plus rien bâtir")
+
+## Toute règle d'adjacence cherche-t-elle un tag qu'un terrain pose vraiment ?
+##
+## Le pendant exact de `_assert_resources_are_known()`, sur l'autre moitié d'une règle, et il
+## se justifie par la même phrase : c'est le seul contrôle qu'aucune `Resource` de
+## `src/schema/` ne peut faire seule, puisqu'il faut voir **les deux catalogues à la fois**.
+##
+## Il en faut un ici plus qu'ailleurs, parce qu'un tag mal orthographié ne casse rien du tout.
+## Un `&"forrest"` dans `lumberjack_hut.tres` charge sans broncher, compile, passe les tests, et
+## rend zéro — tous les tours, pour toujours. Ce qu'on verrait est un bonus d'adjacence qui
+## n'arrive jamais, ce qui ressemble exactement à un mauvais emplacement.
+##
+## Le catalogue des tags n'est pas indexé comme les autres : ce n'est pas un dossier de
+## `data/`, mais un champ libre de `TerrainData`. On le reconstruit ici, ce qui est tolérable
+## pour un contrôle qui tourne une fois au boot.
+func _assert_adjacency_tags_are_known() -> void:
+	var known: Array[StringName] = []
+	for id in list_terrain_ids():
+		var terrain := get_terrain(id)
+		if terrain == null:
+			continue
+		for tag in terrain.tags:
+			if not known.has(tag):
+				known.append(tag)
+	if known.is_empty():
+		return
+	for id in list_building_ids():
+		var building := get_building(id)
+		if building == null:
+			continue
+		for rule in building.adjacency:
+			if rule == null or known.has(rule.tag):
+				continue
+			var catalogue := PackedStringArray()
+			for tag in _sorted(known):
+				catalogue.append(String(tag))
+			assert(false, "tag inconnu « %s » dans data/buildings/%s.tres → adjacency.tag "
+				% [rule.tag, id] + "— data/terrain/ en pose : %s" % ", ".join(catalogue))
 
 func _assert_known(known: Array[StringName], resource: StringName, where: String) -> void:
 	if known.has(resource):

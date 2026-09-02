@@ -45,9 +45,21 @@ func _city(buildings: Array[BuildingData], progress: Array[int] = []) -> CitySna
 		placed.append(BuildingSnapshot.create(buildings[i], Vector2i(i, 0), 0, 0, done))
 	return CitySnapshot.create(placed)
 
-func _resolve(city: CitySnapshot, headcount: int, ledger: Ledger) -> ProductionReport:
-	return ProductionResolver.resolve(city, Staffing.resolve(city, headcount), ledger,
-		_balance())
+## Terrain sous la ville. **Nu par défaut, et sans un seul tag** : tous les cas qui parlent de
+## production veulent une récolte que rien n'augmente, sinon leurs chiffres mesureraient
+## l'adjacence par-dessus le marché. Les cas qui en veulent le posent eux-mêmes.
+func _ground() -> HeightGrid:
+	var plain := TerrainData.new()
+	plain.id = &"plain"
+	plain.build = TerrainData.Build.ALLOWED
+	plain.walk = TerrainData.Walk.ALLOWED
+	return HeightGrid.create(Vector2i(8, 8), 0, plain)
+
+func _resolve(city: CitySnapshot, headcount: int, ledger: Ledger,
+		ground: HeightGrid = null) -> ProductionReport:
+	var grid := ground if ground != null else _ground()
+	return ProductionResolver.resolve(city, Staffing.resolve(city, headcount),
+		grid.to_query(), ledger, _balance())
 
 # --- ce qui produit ----------------------------------------------------------
 
@@ -165,6 +177,82 @@ func test_a_resource_entirely_clipped_is_absent_from_what_was_stored() -> void:
 	var report := _resolve(_city([_farm(&"farm")]), 4, ledger)
 	assert_bool(report.stored().has(&"food")).is_false()
 	assert_int(report.overflow()).is_equal(3)
+
+# --- l'adjacence -------------------------------------------------------------
+
+## Le bonus s'ajoute au rendement de base et tombe dans la réserve avec lui. Le résolveur ne
+## le distingue pas : ce que le village reçoit est une récolte, et c'est la fiche de placement
+## qui explique **d'où elle vient**, avant qu'on pose.
+func test_the_neighbourhood_bonus_lands_with_the_yield() -> void:
+	var ground := _ground()
+	ground.set_terrain(Vector2i(0, 0), _woods())
+	var ledger := Ledger.create(CAPACITY)
+	var report := _resolve(_city([_wooded_farm(&"farm")]), 4, ledger, ground)
+	assert_int(report.produced()[&"food"]) \
+		.override_failure_message("3 de base + 1 de voisinage") \
+		.is_equal(4)
+	assert_int(ledger.amount(&"food")).is_equal(4)
+
+## Un bâtiment endormi ne touche **rien du tout**, bonus compris. La règle de DESIGN.md est
+## « tout ou rien » ; verser l'adjacence d'un bâtiment à l'arrêt en aurait fait une exception
+## que rien n'annonce.
+func test_a_dormant_building_gets_no_bonus_either() -> void:
+	var ground := _ground()
+	ground.set_terrain(Vector2i(0, 0), _woods())
+	var ledger := Ledger.create(CAPACITY)
+	var report := _resolve(_city([_wooded_farm(&"farm", 9)]), 2, ledger, ground)
+	assert_array(report.dormant()) \
+		.override_failure_message("le bâtiment devait dormir : le cas ne prouve rien") \
+		.is_equal([Vector2i(0, 0)])
+	assert_bool(report.is_empty()).is_true()
+
+## La troisième condition s'est élargie à C3 : un bâtiment qui n'a **pas de bloc** mais des
+## règles verse quand même. Rien n'oblige un bâtiment qui se bonifie au voisinage à produire
+## par ailleurs, et le refuser aurait été une règle de contenu écrite dans un résolveur.
+func test_a_building_with_rules_but_no_block_still_pays() -> void:
+	var ground := _ground()
+	ground.set_terrain(Vector2i(0, 0), _woods())
+	var data := _building(&"lodge", 1, {} as Dictionary[StringName, int])
+	assert_bool(data.produces()) \
+		.override_failure_message("le bâtiment devait n'avoir aucun bloc") \
+		.is_false()
+	data.adjacency = [_rule()] as Array[AdjacencyRule]
+	var ledger := Ledger.create(CAPACITY)
+	var report := _resolve(_city([data]), 4, ledger, ground)
+	assert_array(report.producers()).is_equal([Vector2i(0, 0)])
+	assert_int(ledger.amount(&"food")).is_equal(1)
+
+## Une règle qui ne trouve rien laisse la récolte exactement où elle était. Sans ce cas, un
+## résolveur qui verserait le plafond sans regarder le sol passerait les deux d'au-dessus.
+func test_a_rule_that_finds_nothing_changes_nothing() -> void:
+	var ledger := Ledger.create(CAPACITY)
+	var report := _resolve(_city([_wooded_farm(&"farm")]), 4, ledger)
+	assert_int(report.produced()[&"food"]).is_equal(3)
+
+## Une ferme qui sait regarder les bois autour d'elle.
+func _wooded_farm(id: StringName, workers := 2) -> BuildingData:
+	var data := _farm(id, workers)
+	data.adjacency = [_rule()] as Array[AdjacencyRule]
+	return data
+
+## Le terrain d'un bosquet, taggé comme data/terrain/forest.tres l'est.
+func _woods() -> TerrainData:
+	var data := TerrainData.new()
+	data.id = &"forest"
+	data.build = TerrainData.Build.ALLOWED
+	data.walk = TerrainData.Walk.ALLOWED
+	data.tags.append(&"forest")
+	return data
+
+## +1 nourriture par case de forêt à un anneau, au plus 2.
+func _rule() -> AdjacencyRule:
+	var rule := AdjacencyRule.new()
+	rule.tag = &"forest"
+	rule.radius = 1
+	rule.resource = &"food"
+	rule.per_cell = 1
+	rule.at_most = 2
+	return rule
 
 # --- déterminisme ------------------------------------------------------------
 

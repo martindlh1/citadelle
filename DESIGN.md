@@ -305,8 +305,54 @@ placement fantôme : **sans retour visuel en temps réel du delta, l'adjacence e
 donc inexistante.** Cette phrase était déjà dans l'ancien document et elle n'a jamais été
 aussi vraie.
 
-**`OUVERT`** — la forme exacte des règles, et leur chiffrage. À décider devant une carte
-générée, pas dans l'abstrait.
+*La forme est tranchée à `C3`, et elle l'a été devant une carte générée comme ce paragraphe
+l'exigeait.* Une règle porte **cinq** choses : un tag de terrain, un rayon, une ressource, ce
+que chaque case rapporte, et un **plafond**.
+
+Le plafond est le cinquième nombre, et il n'est pas décoratif. `T4` rend des cartes couvertes
+à 22 % de forêt **en bosquets** : un camp de bûcheron posé au milieu d'une futaie a ses huit
+voisines boisées, donc sans plafond il rend `+2` de base et `+8` de bonus. Le placement cesse
+alors d'être un choix pour devenir un gros lot, et le reste de la carte n'a plus d'intérêt. Ce
+qu'on veut est qu'un bon emplacement **double** à peu près un bâtiment, pas qu'il le quintuple.
+
+**Le rayon compte l'empreinte, pas seulement le pourtour.** Le mot « voisin » ci-dessus était
+plus étroit que ce qu'on veut : bâtir une carrière **sur** le gisement doit être le bon geste,
+c'est ce qu'un joueur essaie en premier et ce que tout jeu de bâtisseur lui a appris. Le terrain
+n'est d'ailleurs pas consommé par la pose — la forêt reste sous la cabane —, donc rien ne s'y
+oppose. La distance est en anneaux (Chebyshev) depuis la case la plus proche de l'empreinte, ce
+qui fait qu'un rayon 1 est bien « la couronne autour du bâtiment, empreinte comprise ».
+
+**Le terrain, et pas encore les bâtiments voisins.** La règle lit un tag de `data/terrain/`. Un
+bâtiment n'a pas de tags aujourd'hui, et lui en donner sans qu'aucune règle les lise serait le
+champ ajouté d'avance que ce projet refuse depuis `E1b`. C'est un mot de plus dans le schéma le
+jour où une règle le veut.
+
+| Bâtiment | Règle | Plafond |
+|---|---|---|
+| Camp de bûcheron | +1 bois par case `forest` à 1 | +2 |
+| Carrière | +1 pierre par case `stone` à 1 | +2 |
+| Mine | +1 minerai par case `stone` à 1 | +2 |
+| Ferme | +2 nourriture par case `water` à 1 | +4 |
+
+Le rendement de base n'est **pas** répété ici : il est dans la table de 4.1, et le recopier
+serait deux chiffres à tenir d'accord. Les plafonds sont réglés pour à peu près doubler chaque
+bâtiment — mais contre ce que `data/` verse aujourd'hui, pas contre 4.1 : *la ligne de la ferme
+a dérivé*, le document annonce `+3 nourriture` et le `.tres` en verse 8. C'est la table de 4.1
+qui a raison de se dire « chiffres de départ », et l'écart est noté ici plutôt que corrigé en
+passant — retoucher un équilibrage au détour d'un jalon d'adjacence serait le changer sans
+l'avoir mesuré.
+
+La ferme est la seule dont le tag est **inconstructible**, et c'est ce qui la distingue : elle
+ne peut jamais se poser *sur* ce qu'elle veut, seulement à côté. Elle est aussi la raison pour
+laquelle `T4` a insisté sur les **vrais lacs** plutôt que sur des flaques d'une case — une
+flaque qu'on ne contourne pas est aussi une flaque qui ne nourrit personne.
+
+La carrière et la mine cherchent le **même** tag, ce qui est voulu : `DESIGN.md` 3.1 décrit un
+Gisement et un Filon, et le second n'existe pas encore en data. Le jour où `ore` arrive, c'est
+un mot à changer dans `mine.tres` — et rien d'autre nulle part.
+
+**`OUVERT`** — le chiffrage lui-même. Ces quatre lignes sont des points de départ, pas des
+cibles, au même titre que la table de 4.1. C'est `B1`.
 
 ### 3.3 Économie
 

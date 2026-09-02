@@ -182,7 +182,8 @@ static func end_turn(state: RunState) -> TurnReport:
 	# a. les bâtiments finis produisent, sur la ville d'avant.
 	var city := state.city().to_snapshot()
 	var plan := Staffing.resolve(city, state.people().headcount())
-	var production := ProductionResolver.resolve(city, plan, state.ledger(), economy)
+	var production := ProductionResolver.resolve(city, plan, state.terrain(),
+		state.ledger(), economy)
 
 	# b. les chantiers actifs avancent, et ceux qui s'achèvent deviennent des bâtiments.
 	var advanced: Array[Vector2i] = []
