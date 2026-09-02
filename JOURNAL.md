@@ -6,11 +6,10 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ## 2026-09-02 — `T4` (suite) : la mesa jetée, et un village qui descend du centre
 
-**État : en cours.** Branche `feat/t4-terrain-gen`. La règle de fondation est posée et
-vérifiée ; ce qui reste ouvert est la **force de la colline centrale**, qui se tranche en
-regardant trois captures. Les quatre commandes passent, et les deux suites touchées sont
-vertes — 109 cas sur `tests/domain/terrain/`, 99 sur `tests/schema/`. La suite complète n'a
-pas tourné : le jalon est en itération, et c'est ce qui a été demandé.
+**État : terminé.** Branche `feat/t4-terrain-gen`, tirée de `feat/n2-population-view` — `N2`
+n'était pas encore fusionnée, et les deux le sont ensemble, dans cet ordre. Les quatre
+commandes passent et **433 tests sont verts**. Le relief est resté sur `ridges` : `peak` ouvre
+trop d'accès, `crest` assèche la carte.
 
 ### La mesa est jetée, et le motif ne se mesure pas
 
@@ -90,16 +89,19 @@ garantit **et** que l'ancien ne garantissait pas : une famille prend une part **
 terre ferme, et deux familles ne réclament jamais la même case. C'est le piège du seuil qui
 avait déjà coûté une passe sur l'eau, où « douze pour cent » avait rendu zéro case.
 
-### Ce qui n'est pas tranché
+### La force de la colline, tranchée en capture
 
-**La force de la colline.** Trois captures posent la question : `ridges` (ce que `data/` porte),
-`peak` (colline forte et large) et `crest` (amplitude 0..15). Les deux dernières coûtent quelque
-chose de mesurable — `peak` ouvre plus d'accès donc moins de goulots, `crest` **assèche la
-carte**, un toit plus haut relevant tout le monde au-dessus de la nappe. C'est un arbitrage de
-goût sur une base chiffrée, donc il attend l'humain.
+Trois variantes posaient la question, et les deux qui poussaient la colline coûtaient chacune
+quelque chose de **mesurable**, ce qui a rendu l'arbitrage court : `peak` — colline forte et
+large — ouvre plus d'accès, donc moins de goulots ; `crest` — amplitude 0..15 — **assèche la
+carte**, un toit plus haut relevant tout le monde au-dessus de la nappe, et la ligne `water`
+disparaît du tableau. `ridges` garde ses 7,9 % d'eau et son découpage. C'est lui qui reste.
 
-**Et aucun chiffre n'est équilibré.** Densités, portée de la colline, taille minimale d'un lac :
-des points de départ choisis pour que la carte se lise. C'est `B1`.
+`--gen` survit au choix, avec ses cinq noms : la question « jusqu'où pencher » se reposera à
+`B1`, et un drapeau qui la rejoue coûte moins que de la réoutiller.
+
+**Aucun chiffre n'est équilibré pour autant.** Densités, portée de la colline, taille minimale
+d'un lac : des points de départ choisis pour que la carte se lise.
 
 ---
 
