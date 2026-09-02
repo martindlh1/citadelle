@@ -86,13 +86,13 @@ func _generate(new_seed: int) -> HeightGrid:
 	var params := _params()
 	return TerrainGen.generate(_seed, params.map_size, params)
 
-## Noms de technique acceptés par `--gen`, dans l'ordre de l'enum.
-const SHAPES: Dictionary[String, int] = {
-	"raw": TerrainGenBalance.Shape.RAW,
-	"dome": TerrainGenBalance.Shape.DOME,
-	"clearing": TerrainGenBalance.Shape.CLEARING,
-	"ridges": TerrainGenBalance.Shape.RIDGES,
-}
+## Variantes de génération que `--gen` sait poser, par-dessus `data/balance/`.
+##
+## **Des variantes et non des techniques.** La génération n'a que trois axes — la nature du
+## bruit, la colline, la clairière — et un enum exclusif les empêchait justement de se
+## combiner. Ce que ce drapeau nomme est donc un **jeu de réglages**, écrit ici parce que
+## c'est un outil d'exploration : le jour où l'on aura choisi, il ne restera qu'un `.tres`.
+const VARIANTS: Array[String] = ["raw", "dome", "hill", "clearing", "ridges", "crown"]
 
 ## Les réglages de `data/balance/`, éventuellement forcés sur une autre technique.
 ##
@@ -108,19 +108,41 @@ const SHAPES: Dictionary[String, int] = {
 func _params() -> TerrainGenBalance:
 	var params := GameDatabase.get_balance().terrain_gen
 	var asked := DevShot.argument(DevShot.GEN_FLAG)
-	if asked.is_empty() or not SHAPES.has(asked):
+	if asked.is_empty() or not VARIANTS.has(asked):
 		return params
 	var forced := params.duplicate() as TerrainGenBalance
-	forced.shape = SHAPES[asked] as TerrainGenBalance.Shape
+	# `raw` est le témoin : aucune règle du tout. Les autres allument un axe à la fois, puis
+	# les combinent — c'est `crown` qui porte la question du jour, des crêtes ET une colline.
+	match asked:
+		"raw":
+			forced.relief = TerrainGenBalance.Relief.FRACTAL
+			forced.dome_rise = 0.0
+			forced.clearing_flatten = 0.0
+			forced.clearing_calm = 1.0
+		"dome":
+			forced.relief = TerrainGenBalance.Relief.FRACTAL
+			forced.clearing_flatten = 0.0
+			forced.clearing_calm = 1.0
+		"hill":
+			forced.relief = TerrainGenBalance.Relief.FRACTAL
+			forced.dome_rise = params.dome_rise * 1.8
+			forced.clearing_flatten = 0.0
+			forced.clearing_calm = 1.0
+		"clearing":
+			forced.relief = TerrainGenBalance.Relief.FRACTAL
+		"ridges":
+			forced.relief = TerrainGenBalance.Relief.RIDGED
+			forced.clearing_flatten = 0.0
+			forced.clearing_calm = 1.0
+		"crown":
+			forced.relief = TerrainGenBalance.Relief.RIDGED
 	return forced
 
-## Le nom d'une technique, pour les rapports. Une carte qu'on regarde doit dire d'où elle
-## vient, sans quoi deux captures de deux techniques ne se comparent pas.
-func _shape_name(shape: TerrainGenBalance.Shape) -> String:
-	for name in SHAPES:
-		if SHAPES[name] == shape:
-			return name
-	return "?"
+## Le nom de la variante en cours, pour les rapports. Une carte qu'on regarde doit dire d'où
+## elle vient, sans quoi deux captures ne se comparent pas.
+func _variant_name() -> String:
+	var asked := DevShot.argument(DevShot.GEN_FLAG)
+	return asked if VARIANTS.has(asked) else "data"
 
 func _publish(grid: HeightGrid) -> void:
 	_report_body = _report(grid)
@@ -130,9 +152,9 @@ func _report(grid: HeightGrid) -> String:
 	var params := _params()
 	var lines := PackedStringArray()
 	lines.append("Terrain — seed %d, %d x %d" % [_seed, grid.size().x, grid.size().y])
-	lines.append("technique %s, hauteurs %d..%d, nappe à %d, enjambée %d" % [
-		_shape_name(params.shape), params.min_height, params.max_height,
-		params.water_level, params.max_climb])
+	lines.append("%s — hauteurs %d..%d, nappe à %d, enjambée %d, colline %.1f, clairière %.2f" % [
+		_variant_name(), params.min_height, params.max_height, params.water_level,
+		params.max_climb, params.dome_rise, params.clearing_flatten])
 	lines.append("")
 	lines.append(_audit_block(grid, params))
 	lines.append("")
@@ -239,8 +261,8 @@ func _write_survey() -> void:
 	var params := _params()
 	var size := params.map_size
 	var centre := TerrainGen.centre_of(size)
-	print("[terrain_harness] revue de %d seeds — %d x %d, technique %s, hauteurs %d..%d"
-		% [SURVEY_SEEDS, size.x, size.y, _shape_name(params.shape), params.min_height,
+	print("[terrain_harness] revue de %d seeds — %d x %d, variante %s, hauteurs %d..%d"
+		% [SURVEY_SEEDS, size.x, size.y, _variant_name(), params.min_height,
 			params.max_height])
 	print("  Les chiffres portent sur les BROUILLONS, avant tout rejet : une distribution")
 	print("  mesurée après rejet serait bonne par construction, donc sans intérêt.")

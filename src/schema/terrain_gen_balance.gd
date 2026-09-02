@@ -35,23 +35,21 @@ extends Resource
 ## légitime — et transite correctement, puisque Godot omet alors la ligne du .tres et
 ## que le chargement rend bien 0.
 
-## Les façons de pencher le bruit. UNSET vaut 0 pour rester détectable, comme partout.
+## La nature du bruit de fond. UNSET vaut 0 pour rester détectable, comme partout.
 ##
-## - `RAW` — le bruit nu, celui d'avant `T4`. Aucune règle, aucune garantie ; il sert de
-##   témoin, parce qu'on ne sait pas ce qu'une règle apporte sans la carte qui n'en a pas.
-## - `DOME` — le bruit plus un relèvement radial **doux** du centre. La carte reste du bruit
-##   de bout en bout ; elle a seulement tendance à culminer au milieu.
-## - `CLEARING` — le dôme, plus un lissage progressif du centre et une décoration éclaircie
-##   au même endroit. C'est « une zone centrale un peu surélevée et pas trop occupée » pris
-##   au mot, sans qu'aucun bord ne soit dessiné.
-## - `RIDGES` — deux échelles de bruit, dont une **en crêtes**, plus le dôme. Les barrières
-##   sont des lignes de relief, donc les cols apparaissent là où une crête s'affaisse.
-enum Shape {
+## **Deux valeurs et non quatre**, parce que ce ne sont pas quatre techniques mais **trois
+## axes qui se combinent** : la nature du bruit, la colline centrale, et la clairière. Les
+## avoir empilés dans un seul enum interdisait justement la combinaison qu'on voulait — des
+## crêtes *et* une colline au milieu. Les deux autres axes sont des nombres, et un nombre à
+## zéro éteint son effet.
+##
+## - `FRACTAL` — le bruit fractal ordinaire : des collines rondes, des vallées larges.
+## - `RIDGED` — le même en crêtes : des arêtes, des cirques, des cols. Plus beau et plus
+##   découpé, donc moins de place à bâtir — c'est l'arbitrage de cet axe.
+enum Relief {
 	UNSET = 0,
-	RAW = 1,
-	DOME = 2,
-	CLEARING = 3,
-	RIDGES = 4,
+	FRACTAL = 1,
+	RIDGED = 2,
 }
 
 @export_group("Relief")
@@ -59,8 +57,8 @@ enum Shape {
 ## Taille de carte que les appelants passent à TerrainGen.generate(), en cellules.
 @export var map_size: Vector2i
 
-## La façon de pencher le bruit. Champ d'exploration : voir Shape.
-@export var shape: Shape
+## La nature du bruit de fond. Voir Relief.
+@export var relief: Relief
 
 ## Hauteur la plus basse que la génération peut produire, en crans.
 @export_range(-32, 32, 1) var min_height: int
@@ -113,7 +111,7 @@ enum Shape {
 ## Portée de ce relèvement, en cellules.
 @export_range(0, 128, 1) var dome_radius: int
 
-## Portée du lissage central, en cellules. 0 = pas de lissage. Lu par `CLEARING`.
+## Portée du lissage central, en cellules. **0 = pas de lissage du tout.**
 @export_range(0, 128, 1) var clearing_radius: int
 
 ## Force de ce lissage au centre même, de 0 à 1.
@@ -122,15 +120,39 @@ enum Shape {
 ## 0,7 il garde son grain tout en offrant de quoi bâtir, ce qui est le point de la règle.
 @export_range(0.0, 1.0, 0.01) var clearing_flatten: float
 
-## Part de la décoration qui subsiste au centre même, de 0 à 1. Lu par `CLEARING`.
+## Part de la décoration qui subsiste au centre même, de 0 à 1. **1 = rien n'est éclairci.**
 ##
 ## « Pas trop occupée » : moins de rochers et moins d'arbres au milieu, sans que la limite
 ## se voie. La décroissance est la même cloche que le reste.
 @export_range(0.0, 1.0, 0.01) var clearing_calm: float
 
+@export_group("Eau")
+
+## Cellules qu'une étendue d'eau doit compter pour rester. En dessous, elle est comblée.
+##
+## **Un lac ou rien.** Un relief découpé en crans laisse partout des cuvettes d'une ou deux
+## cases sous le niveau de la nappe, et chacune devient une flaque : la carte se retrouve
+## mouchetée de bleu, ce qui est laid et surtout **sans conséquence** — une flaque d'une case
+## ne barre rien, ne se contourne pas, ne veut rien dire. Ce qu'on veut est un lac : quelque
+## chose qu'on longe.
+@export_range(1, 512, 1) var min_lake_cells: int
+
 @export_group("Dispersion")
 
+## Finesse des zones de décoration, en multiple de la fréquence du relief.
+##
+## La décoration suit son **propre bruit**, pas un tirage par cellule : c'est ce qui fait des
+## bosquets, des futaies et des éboulis au lieu d'un semis uniforme. Plus haut que 1, les
+## taches sont plus petites que les reliefs — une forêt tient dans une vallée plutôt que de
+## couvrir la moitié de la carte.
+@export_range(0.5, 16.0, 0.1) var decor_scale: float
+
 ## Part des cellules non aquatiques couvertes de forêt, avant filtre d'altitude.
+##
+## Une **part exacte** et non un seuil : les cellules sont classées par le bruit de la famille
+## et l'on prend les meilleures jusqu'à ce compte. Comparer le bruit au chiffre paraît
+## équivalent et ne l'est pas — un bruit se serre autour de sa moyenne, donc « vingt pour
+## cent » y donne à peu près n'importe quoi. Le piège a déjà coûté une passe sur l'eau.
 @export_range(0.0, 1.0, 0.01) var forest_density: float
 
 ## Part des cellules non aquatiques portant un gisement.
@@ -139,8 +161,21 @@ enum Shape {
 ## Part des cellules non aquatiques bloquées par un rocher.
 @export_range(0.0, 1.0, 0.01) var rock_density: float
 
-## Altitude au-dessus de laquelle la forêt ne pousse plus. Une cellule tirée en
-## forêt trop haut retombe en plaine, sans décaler les bandes suivantes.
+## Penchant de la forêt pour l'altitude : négatif pour les fonds, positif pour les hauteurs.
+##
+## C'est la seconde moitié de la « logique » d'une carte, et elle compte autant que les
+## taches : une forêt qui pousse aussi bien au bord d'un lac qu'au sommet d'une crête n'a pas
+## l'air d'avoir poussé. Le penchant s'ajoute au bruit de la famille avant le classement, donc
+## il **incline** sans jamais interdire — on trouve encore un bosquet en hauteur.
+@export_range(-2.0, 2.0, 0.05) var forest_height_bias: float
+
+## Penchant du gisement pour l'altitude.
+@export_range(-2.0, 2.0, 0.05) var stone_height_bias: float
+
+## Penchant du rocher pour l'altitude. Positif, les éboulis coiffent les sommets.
+@export_range(-2.0, 2.0, 0.05) var rock_height_bias: float
+
+## Altitude au-dessus de laquelle la forêt ne pousse plus, quel que soit son penchant.
 @export_range(-32, 32, 1) var forest_max_height: int
 
 @export_group("Promesses")
@@ -189,8 +224,8 @@ func missing_fields() -> PackedStringArray:
 	var missing := PackedStringArray()
 	if map_size.x <= 0 or map_size.y <= 0:
 		missing.append("map_size")
-	if shape == Shape.UNSET:
-		missing.append("shape")
+	if relief == Relief.UNSET:
+		missing.append("relief")
 	if max_height < min_height:
 		missing.append("max_height")
 	if max_climb < 1:
@@ -201,6 +236,10 @@ func missing_fields() -> PackedStringArray:
 		missing.append("noise_octaves")
 	if detail_scale < 1.0:
 		missing.append("detail_scale")
+	if decor_scale <= 0.0:
+		missing.append("decor_scale")
+	if min_lake_cells < 1:
+		missing.append("min_lake_cells")
 	if forest_density + stone_density + rock_density > 1.0:
 		missing.append("densities_sum")
 	if min_plateau_cells < 1:
