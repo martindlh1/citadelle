@@ -1,6 +1,6 @@
 class_name TerrainGen
 extends RefCounted
-## Génération de terrain seedée, et **garantie**.
+## Génération de terrain seedée, et vérifiée.
 ##
 ## Fonction pure : même seed et mêmes réglages rendent exactement la même grille.
 ## C'est ce qui rend un run rejouable et un bug d'équilibrage reproductible à partir
@@ -12,41 +12,29 @@ extends RefCounted
 ##
 ## ---
 ##
-## **T4 la retourne, et DESIGN.md 3.1 dit pourquoi.** Ce qui existait était du bruit de
-## Perlin plus des seuils : du relief crédible, et **aucune promesse**. Ça n'avait pas
-## d'importance tant que le relief ne faisait que gêner la pose ; depuis le rescope il *est*
-## la carte de tower-defense, et une carte sans topographie est une partie sans jeu.
+## **Du bruit, penché par des règles qui ne se voient pas.** La première version de `T4`
+## dessinait la topographie en clair — un plateau, une plaine, des rampes numérotées — et
+## rendait des cartes qui tenaient toutes leurs promesses en ayant perdu ce qui faisait leur
+## intérêt : on y lisait le générateur au lieu d'y lire un paysage. Elle est retirée.
 ##
-## **La méthode est « poser la structure, décorer au bruit ».** L'inverse — bruiter puis
-## espérer — est exactement ce qui ne peut rien garantir, et c'est ce que faisait la version
-## d'avant. Ici la forme est posée en clair :
+## Ce qui reste est le bruit d'avant, **penché** : un centre un peu plus haut, un centre un
+## peu plus calme, des crêtes qui barrent parce qu'elles sont hautes. Aucune de ces règles
+## n'a de bord ; toutes s'ajoutent au bruit **avant** qu'il soit découpé en crans, si bien
+## qu'aucune ne laisse de trace qu'on puisse montrer du doigt.
 ##
-##     1. une plaine basse, ondulée dans une amplitude **bornée**, et ses étangs ;
-##     2. un plateau central au-dessus, hors d'enjambée de cette plaine ;
-##     3. deux à quatre rampes, seules montées, taillées en marches franchissables ;
-##     4. la décoration — forêts, gisements, rochers — par-dessus tout ça.
+## Le prix est que la carte ne garantit plus rien **par construction** : c'est le bruit qui
+## décide, donc un seed peut rendre une carte sans centre bâtissable ou sans aucun goulot.
+## D'où l'audit et le **rejet du seed** — et d'où le fait que `MapAudit` ne sache rien de ce
+## fichier. Il retrouve le replat en marchant et compte les accès en marchant, ce qui le rend
+## indifférent à la technique employée : c'est ce qui permet de les essayer.
 ##
-## **La borne du 1 est ce qui rend le 2 inviolable**, et c'est `TerrainGenBalance` qui la
-## tient : tant que le plateau surplombe la plaine de plus d'une enjambée, aucun bruit jeté
-## sur la plaine ne peut ouvrir un accès que personne n'a voulu. La garantie n'est pas
-## vérifiée après coup, elle est **structurelle**.
-##
-## **Et ce qui reste vérifié l'est vraiment.** La décoration, elle, peut encore défaire une
-## promesse : un étang qui coupe le pied d'une rampe, deux rochers qui la bouchent, un
-## plateau où aucun gisement n'est tombé. D'où l'audit et le **rejet du seed** — et d'où le
-## fait que `MapAudit` ne sait rien de ce fichier : il retrouve le plateau et compte les
-## accès en marchant, sinon il ne ferait que répéter ce qu'on vient d'écrire.
-##
-## L'aléatoire reste entier partout ailleurs : où sont les accès, comment le relief se
-## plisse, où tombent les étangs, les gisements et les forêts.
+## `TerrainGenBalance.Shape` dit laquelle on essaie. C'est un champ d'**exploration**, et il
+## se réduira à ce qu'on aura retenu.
 
-## Décorrèle les quatre flux de bruit. Sans ces décalages ils partiraient tous du même seed
-## et leurs motifs seraient corrélés — des forêts qui suivent les lignes de crête, des
-## étangs qui épousent le bord du plateau.
+## Décorrèle les flux de bruit. Sans ces décalages ils partiraient tous du même seed et
+## leurs motifs seraient corrélés — des forêts qui suivent les lignes de crête.
 const RELIEF_SEED_SALT := 0x1E5C0F17
-const WATER_SEED_SALT := 0x2B7A9C41
-const PLATEAU_SEED_SALT := 0x3F1D6E83
-const RAMP_SEED_SALT := 0x4C8B2D59
+const DETAIL_SEED_SALT := 0x2B7A9C41
 const SCATTER_SEED_SALT := 0x5CA77E12
 
 ## Écart entre deux essais successifs d'un même seed.
@@ -57,16 +45,12 @@ const SCATTER_SEED_SALT := 0x5CA77E12
 ## rejeté pour le même motif, autant de fois qu'il y a d'essais.
 const ATTEMPT_STRIDE := 0x9E3779B9
 
-## Garde-fou de marche pour la taille d'une rampe, en cellules.
-const RAMP_MARCH_LIMIT := 64
-
 ## Le centre d'une carte de cette taille.
 ##
 ## Une fonction plutôt qu'un calcul recopié, parce que **trois endroits doivent tomber
-## d'accord** : la génération y bâtit son plateau, l'audit y cherche le sien, et le harnais y
-## pose sa question. Deux divisions entières écrites séparément finissent par différer d'une
-## case sur les tailles impaires, et l'audit rendrait alors un plateau d'une cellule sans que
-## rien n'explique pourquoi.
+## d'accord** : la génération y penche son relief, l'audit y cherche son replat, et le harnais
+## y pose sa question. Deux divisions entières écrites séparément finissent par différer d'une
+## case sur les tailles impaires.
 static func centre_of(size: Vector2i) -> Vector2i:
 	return size / 2
 
@@ -107,10 +91,6 @@ static func generate(run_seed: int, size: Vector2i, params: TerrainGenBalance) -
 ## écriture. Une boucle recopiée dans le harnais aurait mesuré la copie — c'est le raccourci
 ## que `CLAUDE.md` nomme depuis `F1`, et il se serait présenté sous sa forme la plus
 ## trompeuse, puisque les deux boucles auraient été justes le jour où on les a écrites.
-##
-## Le prix est un brouillon de plus, redessiné par `generate()` une fois le rang connu. C'est
-## une carte de mille cellules ; ce que ça achète est qu'une table ne puisse pas diverger de
-## ce que le jeu joue.
 static func accepted_attempt(run_seed: int, size: Vector2i,
 		params: TerrainGenBalance) -> int:
 	var centre := centre_of(size)
@@ -124,264 +104,122 @@ static func accepted_attempt(run_seed: int, size: Vector2i,
 ## Une carte, **sans audit ni rejet**. C'est ce que `generate()` essaie.
 ##
 ## Publique parce que la mesure en a besoin : le harnais tire deux cents brouillons pour
-## imprimer la distribution de ce que la structure produit *avant* qu'on en écarte quoi que
+## imprimer la distribution de ce que la technique produit *avant* qu'on en écarte quoi que
 ## ce soit. Une distribution mesurée après rejet ne dirait pas si les promesses sont serrées
 ## ou lâches — elle serait bonne par construction.
+##
+## Trois passes, et les deux dernières sont communes à toutes les techniques : le relief, la
+## nappe, la dispersion. Ce qui distingue une technique d'une autre tient donc entièrement
+## dans `_carve_relief()`, ce qui est ce qui permet de les comparer à décor égal.
 static func draft(run_seed: int, size: Vector2i, params: TerrainGenBalance) -> HeightGrid:
 	assert(size.x > 0 and size.y > 0, "taille de carte non positive : %s" % size)
 	assert(params != null, "réglages de génération null")
-	var grid := HeightGrid.create(size, params.lowland_height, params.plain)
-	# Le plateau est **dessiné avant d'être posé**, et la plaine se range autour de lui : sans
-	# ça, `water_share` compterait une part de la carte entière dont le plateau reprendrait
-	# ensuite le milieu, et le champ mentirait sur ce qu'il noie.
-	var plateau := _plateau_cells(size, run_seed, params)
-	_lay_lowland(grid, run_seed, params, plateau)
-	_raise_plateau(grid, params, plateau)
-	_carve_ramps(grid, run_seed, params)
+	var grid := HeightGrid.create(size, params.min_height, params.plain)
+	_carve_relief(grid, run_seed, params)
 	_scatter(grid, run_seed, params)
 	return grid
 
-# --- 1. la plaine et ses étangs ---------------------------------------------
+# --- le relief --------------------------------------------------------------
 
-## Ondule la plaine dans son amplitude bornée, et y creuse ses étangs.
+## Pose la hauteur de chaque cellule, et l'eau partout où le relief passe au niveau
+## de la nappe ou en dessous. L'eau est aplanie : une nappe est plate.
 ##
-## L'amplitude est `lowland_relief` crans au-dessus de la base, **et pas un de plus** : c'est
-## la moitié structurelle de la garantie, celle qui empêche le bruit de fabriquer un accès.
-##
-## **Les étangs sont une part et non un seuil.** La première version comparait le bruit à
-## `water_share` directement, ce qui paraissait la même chose et ne l'était pas : un bruit
-## simplex se serre autour de sa moyenne, si bien qu'un « douze pour cent » demandé rendait
-## **zéro** case d'eau sur mille. Le champ portait un nom de proportion et faisait un seuil.
-## On classe donc les cases de plaine par leur bruit et l'on noie les plus basses, ce qui
-## rend au champ le sens qu'il annonce — et garde les étangs d'un tenant, puisque le bruit
-## est lissé.
-static func _lay_lowland(grid: HeightGrid, run_seed: int, params: TerrainGenBalance,
-		plateau: Array[Vector2i]) -> void:
-	var on_plateau: Dictionary[Vector2i, bool] = {}
-	for cell in plateau:
-		on_plateau[cell] = true
-	var relief := _noise(run_seed ^ RELIEF_SEED_SALT, params)
-	var levels := params.lowland_relief + 1
-	var lowland: Array[Vector2i] = []
+## Le champ de hauteurs est calculé **en flottant** puis découpé en crans une seule fois, à
+## la toute fin. C'est ce qui rend les règles invisibles : un relèvement du centre ajouté
+## après le découpage se lirait comme une marche, ajouté avant il ne se lit pas du tout.
+static func _carve_relief(grid: HeightGrid, run_seed: int,
+		params: TerrainGenBalance) -> void:
+	var relief := _noise(run_seed ^ RELIEF_SEED_SALT, params, params.noise_frequency)
+	var detail := _noise(run_seed ^ DETAIL_SEED_SALT, params,
+		params.noise_frequency * params.detail_scale)
+	if params.shape == TerrainGenBalance.Shape.RIDGES:
+		relief.fractal_type = FastNoiseLite.FRACTAL_RIDGED
+	var centre := centre_of(grid.size())
 	var extent := grid.size()
+
+	# Le champ est calculé en flottant, puis **étalé sur l'amplitude déclarée**, puis
+	# seulement découpé en crans.
+	#
+	# L'étalement n'est pas de la coquetterie : un bruit fractal ne visite pas toute sa
+	# plage, et un bruit **en crêtes** encore moins — il se serre vers le haut. Sans lui, la
+	# technique `ridges` rendait une carte dont le point le plus bas était deux crans
+	# au-dessus de la nappe, donc **sans un seul lac**, alors que `min_height` et
+	# `water_level` disaient le contraire. Le réglage était juste, la carte ne l'était pas.
+	#
+	# Avec lui, `min_height..max_height` veut dire ce qu'il annonce pour toutes les
+	# techniques : chaque carte descend jusqu'à son point bas et monte jusqu'à son sommet.
+	var field := PackedFloat32Array()
+	field.resize(extent.x * extent.y)
+	var lowest := INF
+	var highest := -INF
+	for y in extent.y:
+		for x in extent.x:
+			var unit := _relief_at(Vector2i(x, y), centre, relief, detail, params)
+			field[y * extent.x + x] = unit
+			lowest = minf(lowest, unit)
+			highest = maxf(highest, unit)
+
+	var span := maxf(highest - lowest, 0.0001)
+	var levels := params.max_height - params.min_height + 1
 	for y in extent.y:
 		for x in extent.x:
 			var cell := Vector2i(x, y)
-			if on_plateau.has(cell):
-				continue
-			lowland.append(cell)
-			var step := mini(int(_unit(relief, cell) * levels), levels - 1)
-			grid.set_cell(cell, params.lowland_height + step, params.plain)
-	for cell in _drowned(lowland, run_seed, params):
-		grid.set_cell(cell, params.water_level, params.water)
+			var unit := (field[y * extent.x + x] - lowest) / span
+			var height := params.min_height + mini(int(unit * levels), levels - 1)
+			if height <= params.water_level:
+				grid.set_cell(cell, params.water_level, params.water)
+			else:
+				grid.set_cell(cell, height, params.plain)
 
-## Les cellules de plaine que la nappe recouvre : la part `water_share` dont le bruit d'eau
-## est le plus bas.
+## La hauteur de cette cellule, en fraction de l'amplitude, avant découpage en crans.
 ##
-## Le tri départage à valeur égale par la position, jamais par l'ordre du tableau : deux
-## lancements doivent noyer les mêmes cases.
-static func _drowned(lowland: Array[Vector2i], run_seed: int,
-		params: TerrainGenBalance) -> Array[Vector2i]:
-	var count := int(float(lowland.size()) * params.water_share)
-	if count <= 0:
-		return []
-	var pools := _noise(run_seed ^ WATER_SEED_SALT, params)
-	var sorted := lowland.duplicate()
-	sorted.sort_custom(func(first: Vector2i, second: Vector2i) -> bool:
-		var left := _unit(pools, first)
-		var right := _unit(pools, second)
-		if not is_equal_approx(left, right):
-			return left < right
-		if first.y != second.y:
-			return first.y < second.y
-		return first.x < second.x)
-	return sorted.slice(0, mini(count, sorted.size()))
+## C'est le seul endroit où les techniques diffèrent, et elles diffèrent **par addition** :
+## chacune part du même bruit et lui ajoute ce qui la caractérise. `RAW` n'ajoute rien et sert
+## de témoin — on ne sait pas ce qu'une règle apporte sans la carte qui ne l'a pas.
+static func _relief_at(cell: Vector2i, centre: Vector2i, relief: FastNoiseLite,
+		detail: FastNoiseLite, params: TerrainGenBalance) -> float:
+	var unit := _unit(relief, cell)
+	if params.shape == TerrainGenBalance.Shape.RIDGES and params.detail_share > 0.0:
+		unit = lerpf(unit, _unit(detail, cell), params.detail_share)
+	if params.shape == TerrainGenBalance.Shape.RAW:
+		return clampf(unit, 0.0, 1.0)
 
-# --- 2. le plateau ----------------------------------------------------------
+	var levels := float(maxi(params.max_height - params.min_height, 1))
+	unit += params.dome_rise / levels * _falloff(cell, centre, params.dome_radius)
+	if params.shape == TerrainGenBalance.Shape.CLEARING:
+		# Un lissage **vers la hauteur du centre**, et non un aplanissement : à pleine force
+		# on retrouverait la mesa qu'on vient de retirer. Le grain survit, il se calme.
+		var pull := params.clearing_flatten * _falloff(cell, centre, params.clearing_radius)
+		unit = lerpf(unit, _unit(relief, centre) + params.dome_rise / levels, pull)
+	return clampf(unit, 0.0, 1.0)
 
-## Les cellules du plateau central : un disque au bord déformé, ramené à ce qui tient au
-## centre.
+## Ce qui reste de l'effet à cette distance du centre : 1 au centre même, 0 au-delà de la
+## portée, en cloche entre les deux.
 ##
-## **Seule la partie rattachée au centre est gardée.** Le bruit de bord détache volontiers
-## des îlots à la limite du rayon, et un îlot à hauteur de plateau au milieu de la plaine
-## serait une table volante qu'aucune règle ne justifie — infranchissable, inatteignable, et
-## comptée nulle part. Les jeter garde la structure lisible : il y a **un** plateau.
-static func _plateau_cells(size: Vector2i, run_seed: int,
-		params: TerrainGenBalance) -> Array[Vector2i]:
-	var edge := _noise(run_seed ^ PLATEAU_SEED_SALT, params)
-	var centre := centre_of(size)
-	var claimed: Dictionary[Vector2i, bool] = {}
-	for y in size.y:
-		for x in size.x:
-			var cell := Vector2i(x, y)
-			var reach := float(params.plateau_radius) \
-				* (1.0 + params.plateau_jitter * edge.get_noise_2d(x, y))
-			if Vector2(cell - centre).length() <= reach:
-				claimed[cell] = true
-	return _linked_to(claimed, centre)
+## En cloche et non linéaire, parce qu'une décroissance linéaire laisse une **arête** à la
+## portée — la dérivée y saute — et cette arête finit par se voir comme un cercle sur la
+## carte. C'est exactement le genre de bord qu'on cherche à ne pas dessiner.
+static func _falloff(cell: Vector2i, centre: Vector2i, reach: int) -> float:
+	if reach <= 0:
+		return 0.0
+	var near := Vector2(cell - centre).length() / float(reach)
+	if near >= 1.0:
+		return 0.0
+	return 1.0 - near * near * (3.0 - 2.0 * near)
 
-## Pose ces cellules à la hauteur du plateau.
-static func _raise_plateau(grid: HeightGrid, params: TerrainGenBalance,
-		plateau: Array[Vector2i]) -> void:
-	for cell in plateau:
-		grid.set_cell(cell, params.plateau_height, params.plain)
-
-## Les cellules réclamées qui se rattachent au centre de proche en proche.
-static func _linked_to(claimed: Dictionary[Vector2i, bool],
-		centre: Vector2i) -> Array[Vector2i]:
-	if not claimed.has(centre):
-		return []
-	var kept: Array[Vector2i] = [centre]
-	var seen: Dictionary[Vector2i, bool] = { centre: true }
-	var head := 0
-	while head < kept.size():
-		var cell := kept[head]
-		head += 1
-		for step in MapAudit.NEIGHBOURS:
-			var side := cell + step
-			if seen.has(side) or not claimed.has(side):
-				continue
-			seen[side] = true
-			kept.append(side)
-	return kept
-
-# --- 3. les rampes ----------------------------------------------------------
-
-## Taille les seules montées du plateau, réparties tout autour.
-##
-## Le nombre est tiré dans l'intervalle des promesses, et les directions sont **étalées** —
-## une part de tour chacune, plus un écart borné à la moitié de cette part. Tirer des angles
-## indépendants aurait laissé deux rampes se coller la moitié du temps, donc rendu un accès
-## là où l'on en voulait deux : le rejet aurait alors mesuré la maladresse du tirage plutôt
-## que la carte.
-## **Toutes les rampes sont planifiées avant d'être posées, et le plus haut l'emporte.**
-##
-## C'est le correctif d'un défaut qui a coûté une heure et que seule une carte imprimée en
-## chiffres montrait. Une rampe en diagonale passe par des cases d'angle, ses voies se
-## chevauchent d'un cran à l'autre, et « le dernier qui écrit gagne » veut alors dire que le
-## cran **bas** efface le cran haut. L'escalier y perdait une marche, donc devenait une
-## marche de deux crans, donc infranchissable : la rampe était parfaitement dessinée à
-## l'écran et ne se montait pas. Deux des cinq crans d'une rampe disparaissaient ainsi, sans
-## rien casser et sans qu'aucune image ne le dise.
-##
-## Garder le maximum rend l'escalier **monotone par construction**, ce qui est la seule forme
-## de garantie que ce fichier accepte : il n'y a plus à vérifier qu'une rampe se monte.
-##
-## Le nombre est tiré dans l'intervalle des promesses, et les directions sont **étalées** —
-## une part de tour chacune, plus un écart borné au quart de cette part. Tirer des angles
-## indépendants aurait laissé deux rampes se coller la moitié du temps, donc rendu un accès
-## là où l'on en voulait deux : le rejet aurait alors mesuré la maladresse du tirage plutôt
-## que la carte.
-static func _carve_ramps(grid: HeightGrid, run_seed: int,
-		params: TerrainGenBalance) -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = run_seed ^ RAMP_SEED_SALT
-	var count := rng.randi_range(params.min_accesses, params.max_accesses)
-	var share := TAU / float(count)
-	var start := rng.randf() * TAU
-	var carved: Dictionary[Vector2i, int] = {}
-	for index in count:
-		var jitter := rng.randf_range(-share * 0.25, share * 0.25)
-		_plan_ramp(grid, params, start + share * float(index) + jitter, carved)
-	# Une rampe est un **remblai** et jamais une tranchée : elle ne descend rien de ce qui
-	# était là. Le plateau n'est donc pas entamé par une voie qui mord son bord, et un étang
-	# traversé se comble au lieu de garder son trou.
-	# Les voies d'un cran peuvent déborder de la carte : c'est le plan qui les porte, la pose
-	# qui les écarte. Filtrer plus tôt aurait demandé la grille à une fonction qui n'a rien à
-	# y lire.
-	for cell in carved:
-		if grid.in_bounds(cell):
-			grid.set_cell(cell, maxi(carved[cell], grid.height_at(cell)), params.plain)
-
-## Taille une rampe depuis le bord du plateau, dans cette direction.
-##
-## Elle descend d'une enjambée par cran et s'arrête **au niveau de la base** de la plaine, et
-## non à son plafond : une plaine ondulée porte des cases à la base comme au plafond, et un
-## pied de rampe posé au plafond serait injoignable depuis les premières. Finir en bas rend
-## le pied atteignable de partout, ce qui est ce qu'on veut d'un col — visible et ouvert.
-static func _plan_ramp(grid: HeightGrid, params: TerrainGenBalance, angle: float,
-		carved: Dictionary[Vector2i, int]) -> void:
-	var direction := Vector2(cos(angle), sin(angle))
-	var side := Vector2(-direction.y, direction.x)
-	var cells := _ray_cells(grid, centre_of(grid.size()), direction)
-	# On sort du plateau en marchant : c'est son bord **réel**, déformé par le bruit, et non
-	# le rayon nominal. Une rampe calée sur le rayon aurait commencé dans le vide sur les
-	# secteurs creusés et dans le plateau sur les secteurs bombés.
-	var index := 0
-	while index < cells.size() and grid.height_at(cells[index]) == params.plateau_height:
-		index += 1
-	var height := params.plateau_height - params.max_climb
-	while index < cells.size():
-		_plan_rank(params, cells[index], side, maxi(height, params.lowland_height), carved)
-		if height <= params.lowland_height:
-			return
-		height -= params.max_climb
-		index += 1
-
-## Les cellules distinctes que traverse un rayon parti du centre, dans l'ordre, **sans jamais
-## sauter en diagonale**.
-##
-## Le détour par la case intermédiaire n'est pas de l'esthétique : un marcheur se déplace en
-## quatre voisins, donc une rampe dont deux crans successifs ne se touchent que par un coin
-## **ne se monte pas**. Elle serait pourtant parfaitement dessinée à l'écran, et l'audit
-## rendrait un accès de moins sans que rien ne dise pourquoi — le pire des deux mondes.
-##
-## Il s'arrête au bord de la carte, et c'est la seule façon dont une rampe se tronque : une
-## rampe qui n'atteint pas la plaine n'ouvre aucun accès, l'audit en compte un de moins, et
-## le seed se fait rejeter. Mieux vaut ça qu'une rampe qui déborderait en silence.
-static func _ray_cells(grid: HeightGrid, from: Vector2i, direction: Vector2) -> Array[Vector2i]:
-	var cells: Array[Vector2i] = []
-	var probe := Vector2(from) + Vector2(0.5, 0.5)
-	var last := from
-	cells.append(from)
-	for _step in RAMP_MARCH_LIMIT * 2:
-		probe += direction * 0.5
-		var cell := Vector2i(floori(probe.x), floori(probe.y))
-		if cell == last:
-			continue
-		# Le pas en x d'abord, toujours : un choix arbitraire mais **fixe**, sans quoi deux
-		# rampes symétriques ne se ressembleraient pas.
-		if cell.x != last.x and cell.y != last.y:
-			var corner := Vector2i(cell.x, last.y)
-			if not grid.in_bounds(corner):
-				break
-			cells.append(corner)
-		if not grid.in_bounds(cell):
-			break
-		cells.append(cell)
-		last = cell
-	return cells
-
-## Inscrit un cran de rampe au plan, large de `ramp_width`, centré sur l'axe.
-##
-## **La largeur se compte sur un axe entier**, celui des deux que la perpendiculaire suit le
-## plus. Étaler les voies sur la perpendiculaire réelle paraissait plus juste et ne l'était
-## pas : sur une rampe en diagonale, un décalage d'un demi-pas arrondit sur la **même**
-## cellule, si bien qu'une rampe déclarée large de deux n'en faisait qu'une. Rien ne le
-## disait — elle se dessinait, elle se montait, elle était simplement deux fois plus fragile
-## qu'annoncé.
-##
-## Le terrain repassera en plaine à la pose : une rampe est un **col**, donc une case où l'on
-## bâtit, et un rocher ou un étang qui y traînait la fermerait avant même que la décoration
-## n'ait son tour. Ce que la décoration y jettera ensuite, en revanche, y reste — et c'est ce
-## que l'audit constate.
-static func _plan_rank(params: TerrainGenBalance, cell: Vector2i, side: Vector2,
-		height: int, carved: Dictionary[Vector2i, int]) -> void:
-	var axis := Vector2i(1, 0) if absf(side.x) >= absf(side.y) else Vector2i(0, 1)
-	var first := -(params.ramp_width - 1) / 2
-	for lane in params.ramp_width:
-		var here := cell + axis * (first + lane)
-		carved[here] = maxi(carved.get(here, height), height)
-
-# --- 4. la décoration -------------------------------------------------------
+# --- la dispersion ----------------------------------------------------------
 
 ## Répartit forêt, gisement et rocher sur les cellules émergées, en bandes cumulées.
+##
+## `CLEARING` y éclaircit le centre : les trois bandes y sont resserrées de `clearing_calm`,
+## donc moins d'arbres et surtout moins de rochers là où l'on fonde. C'est la seconde moitié
+## de « pas trop occupée », et elle compte autant que la première — un centre plat couvert de
+## rochers ne se bâtit pas davantage qu'une pente.
 static func _scatter(grid: HeightGrid, run_seed: int, params: TerrainGenBalance) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = run_seed ^ SCATTER_SEED_SALT
-	var forest_band := params.forest_density
-	var stone_band := forest_band + params.stone_density
-	var rock_band := stone_band + params.rock_density
+	var centre := centre_of(grid.size())
+	var clearing := params.shape == TerrainGenBalance.Shape.CLEARING
 	var extent := grid.size()
 	for y in extent.y:
 		for x in extent.x:
@@ -391,6 +229,13 @@ static func _scatter(grid: HeightGrid, run_seed: int, params: TerrainGenBalance)
 			# Le tirage est consommé même quand il ne donne rien : relever
 			# forest_max_height ne doit pas décaler tout le reste du flux.
 			var draw := rng.randf()
+			var calm := 1.0
+			if clearing:
+				calm = lerpf(1.0, params.clearing_calm,
+					_falloff(cell, centre, params.clearing_radius))
+			var forest_band := params.forest_density * calm
+			var stone_band := forest_band + params.stone_density * calm
+			var rock_band := stone_band + params.rock_density * calm
 			if draw < forest_band:
 				if grid.height_at(cell) <= params.forest_max_height:
 					grid.set_terrain(cell, params.forest)
@@ -401,10 +246,11 @@ static func _scatter(grid: HeightGrid, run_seed: int, params: TerrainGenBalance)
 
 # --- le bruit ---------------------------------------------------------------
 
-static func _noise(noise_seed: int, params: TerrainGenBalance) -> FastNoiseLite:
+static func _noise(noise_seed: int, params: TerrainGenBalance,
+		frequency: float) -> FastNoiseLite:
 	var noise := FastNoiseLite.new()
 	noise.seed = noise_seed
-	noise.frequency = params.noise_frequency
+	noise.frequency = frequency
 	noise.fractal_octaves = params.noise_octaves
 	return noise
 

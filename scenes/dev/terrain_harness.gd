@@ -83,19 +83,55 @@ func _show(grid: HeightGrid) -> void:
 
 func _generate(new_seed: int) -> HeightGrid:
 	_seed = new_seed
-	var params := GameDatabase.get_balance().terrain_gen
+	var params := _params()
 	return TerrainGen.generate(_seed, params.map_size, params)
+
+## Noms de technique acceptés par `--gen`, dans l'ordre de l'enum.
+const SHAPES: Dictionary[String, int] = {
+	"raw": TerrainGenBalance.Shape.RAW,
+	"dome": TerrainGenBalance.Shape.DOME,
+	"clearing": TerrainGenBalance.Shape.CLEARING,
+	"ridges": TerrainGenBalance.Shape.RIDGES,
+}
+
+## Les réglages de `data/balance/`, éventuellement forcés sur une autre technique.
+##
+## La copie est **locale au harnais** et le domaine n'en sait rien : `TerrainGen` reçoit des
+## réglages comme d'habitude, sans jamais apprendre qu'une ligne de commande existe. C'est le
+## seul endroit où un drapeau touche à de l'équilibrage, et il le fait en dupliquant plutôt
+## qu'en mutant l'index — une `Resource` de `GameDatabase` est partagée par tout le jeu.
+##
+## **Tout ce qui rapporte passe par ici**, et pas seulement ce qui génère : un rapport qui
+## lirait l'équilibrage brut annoncerait la technique du `.tres` sous une carte faite par une
+## autre. C'est le défaut trouvé à la première comparaison — quatre captures différentes, le
+## même nom dessus.
+func _params() -> TerrainGenBalance:
+	var params := GameDatabase.get_balance().terrain_gen
+	var asked := DevShot.argument(DevShot.GEN_FLAG)
+	if asked.is_empty() or not SHAPES.has(asked):
+		return params
+	var forced := params.duplicate() as TerrainGenBalance
+	forced.shape = SHAPES[asked] as TerrainGenBalance.Shape
+	return forced
+
+## Le nom d'une technique, pour les rapports. Une carte qu'on regarde doit dire d'où elle
+## vient, sans quoi deux captures de deux techniques ne se comparent pas.
+func _shape_name(shape: TerrainGenBalance.Shape) -> String:
+	for name in SHAPES:
+		if SHAPES[name] == shape:
+			return name
+	return "?"
 
 func _publish(grid: HeightGrid) -> void:
 	_report_body = _report(grid)
 	print(_report_body)
 
 func _report(grid: HeightGrid) -> String:
-	var params := GameDatabase.get_balance().terrain_gen
+	var params := _params()
 	var lines := PackedStringArray()
 	lines.append("Terrain — seed %d, %d x %d" % [_seed, grid.size().x, grid.size().y])
-	lines.append("plaine %d..%d, plateau à %d, nappe à %d, enjambée %d" % [
-		params.lowland_height, params.lowland_ceiling(), params.plateau_height,
+	lines.append("technique %s, hauteurs %d..%d, nappe à %d, enjambée %d" % [
+		_shape_name(params.shape), params.min_height, params.max_height,
 		params.water_level, params.max_climb])
 	lines.append("")
 	lines.append(_audit_block(grid, params))
@@ -200,12 +236,12 @@ func _write_survey() -> void:
 	# sans ce coupe-circuit, `_process` tourne une fois sur un monde qui n'existe pas et
 	# noie la table sous deux erreurs de script.
 	set_process(false)
-	var params := GameDatabase.get_balance().terrain_gen
+	var params := _params()
 	var size := params.map_size
 	var centre := TerrainGen.centre_of(size)
-	print("[terrain_harness] revue de %d seeds — %d x %d, plateau à %d sur une plaine %d..%d"
-		% [SURVEY_SEEDS, size.x, size.y, params.plateau_height, params.lowland_height,
-			params.lowland_ceiling()])
+	print("[terrain_harness] revue de %d seeds — %d x %d, technique %s, hauteurs %d..%d"
+		% [SURVEY_SEEDS, size.x, size.y, _shape_name(params.shape), params.min_height,
+			params.max_height])
 	print("  Les chiffres portent sur les BROUILLONS, avant tout rejet : une distribution")
 	print("  mesurée après rejet serait bonne par construction, donc sans intérêt.")
 

@@ -70,50 +70,17 @@ func test_every_cell_carries_a_terrain() -> void:
 			.override_failure_message("terrain null en %s" % cell) \
 			.is_not_null()
 
-## L'amplitude du relief n'est plus une entrée depuis T4 : c'est la **conséquence** de la
-## structure, de la nappe au plateau. Rien ne doit sortir de cet intervalle.
-func test_heights_stay_between_the_water_and_the_plateau() -> void:
+## Rien ne doit sortir de l'amplitude déclarée, quelle que soit la technique : les règles qui
+## penchent le bruit s'ajoutent AVANT le découpage en crans, donc elles ne peuvent pas le
+## déborder.
+func test_heights_stay_within_the_declared_bounds() -> void:
 	var params := _params()
 	var grid := TerrainGen.generate(SEED, SIZE, params)
 	for cell in _cells(grid):
 		var height := grid.height_at(cell)
 		assert_int(height) \
 			.override_failure_message("hauteur %d hors structure en %s" % [height, cell]) \
-			.is_between(params.water_level, params.plateau_height)
-
-func test_the_centre_sits_on_the_plateau() -> void:
-	var params := _params()
-	var grid := TerrainGen.generate(SEED, SIZE, params)
-	assert_int(grid.height_at(TerrainGen.centre_of(SIZE))).is_equal(params.plateau_height)
-
-## **Le cas qui porte le jalon.** La plaine ne peut pas toucher le plateau : tout ce qui
-## enjambe jusqu'à lui est du terrain **taillé**, c'est-à-dire une rampe.
-##
-## C'est la garantie de DESIGN.md 3.1 dite à l'envers, et c'est ce qui permet à la génération
-## de ne pas espérer : le bruit a beau plisser la plaine, il est borné sous le seuil, donc il
-## n'ouvre jamais un accès que personne n'a voulu. Un `lowland_relief` relevé d'un cran de
-## trop ferait tomber ce cas — et `missing_fields()` refuserait le réglage avant lui.
-func test_only_carved_ground_can_step_onto_the_plateau() -> void:
-	var params := _params()
-	var grid := TerrainGen.generate(SEED, SIZE, params)
-	var query := grid.to_query()
-	var touching := 0
-	for cell in _cells(grid):
-		if grid.height_at(cell) == params.plateau_height:
-			continue
-		for step in MapAudit.NEIGHBOURS:
-			var side := cell + step
-			if not query.in_bounds(side) or grid.height_at(side) != params.plateau_height:
-				continue
-			if not query.can_step(cell, side, params.max_climb):
-				continue
-			touching += 1
-			assert_int(grid.height_at(cell)) \
-				.override_failure_message("la plaine touche le plateau en %s" % cell) \
-				.is_greater(params.lowland_ceiling())
-	assert_int(touching) \
-		.override_failure_message("aucune case ne monte : le cas ne prouve rien") \
-		.is_greater(0)
+			.is_between(params.water_level, params.max_height)
 
 # --- les promesses ---------------------------------------------------------
 
@@ -160,20 +127,6 @@ func test_water_sits_exactly_at_the_water_level() -> void:
 			assert_int(height) \
 				.override_failure_message("terre à %d sous la nappe en %s" % [height, cell]) \
 				.is_greater(params.water_level)
-
-## `water_share` est une **part** et non un seuil, et ce cas est ce qui l'épingle : la
-## première version comparait le bruit au chiffre, ce qui rendait zéro case d'eau pour douze
-## pour cent demandés — un bruit simplex se serre autour de sa moyenne.
-func test_the_water_share_is_really_a_share() -> void:
-	var params := _params()
-	params.water_share = 0.25
-	var wet := _count(TerrainGen.draft(SEED, SIZE, params), params.water)
-	params.water_share = 0.05
-	var dry := _count(TerrainGen.draft(SEED, SIZE, params), params.water)
-	assert_int(wet) \
-		.override_failure_message("un quart demandé, %d cases noyées sur %d"
-			% [wet, SIZE.x * SIZE.y]) \
-		.is_greater(dry * 2)
 
 func test_zero_forest_density_places_no_forest() -> void:
 	var params := _params()
@@ -228,15 +181,18 @@ func test_the_forest_ceiling_does_not_shift_the_scatter_stream() -> void:
 func _params() -> TerrainGenBalance:
 	var params := TerrainGenBalance.new()
 	params.map_size = SIZE
-	params.plateau_height = 5
-	params.plateau_radius = 4
-	params.plateau_jitter = 0.2
-	params.lowland_height = 1
-	params.lowland_relief = 1
-	params.water_level = 0
+	params.shape = TerrainGenBalance.Shape.CLEARING
+	params.min_height = 0
+	params.max_height = 6
+	params.water_level = 1
 	params.max_climb = 1
-	params.ramp_width = 2
-	params.water_share = 0.1
+	params.detail_share = 0.35
+	params.detail_scale = 3.0
+	params.dome_rise = 1.6
+	params.dome_radius = 12
+	params.clearing_radius = 7
+	params.clearing_flatten = 0.55
+	params.clearing_calm = 0.3
 	params.noise_frequency = 0.1
 	params.noise_octaves = 3
 	params.forest_density = 0.3

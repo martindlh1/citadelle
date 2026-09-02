@@ -98,6 +98,13 @@ const SHOT_SELECT_FLAG := "--shot-select"
 ## atteint chacune de ses valeurs.
 const SHOT_UNFOUNDED_FLAG := "--shot-unfounded"
 
+## Technique de génération à essayer, par-dessus le champ `shape` de `data/balance/`.
+##
+## Drapeau d'**exploration** : il existe pour comparer plusieurs façons de pencher le bruit
+## sur le même seed et la même caméra, ce qui est la seule façon de choisir. Il disparaîtra
+## avec les techniques qu'on n'aura pas retenues.
+const GEN_FLAG := "--gen"
+
 ## Génère un grand nombre de cartes sans écran et imprime leur distribution, puis quitte.
 ## Drapeau **nu**.
 ##
