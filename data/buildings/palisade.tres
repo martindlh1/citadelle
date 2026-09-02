@@ -5,6 +5,7 @@
 [resource]
 script = ExtResource("1_building_data")
 id = &"palisade"
+label = "Palissade"
 color = Color(0.42, 0.33, 0.26, 1)
 height = 0.45
 site_turns = 1

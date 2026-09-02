@@ -83,6 +83,8 @@ obligatoire ; les autres sont optionnels :
 | `--shot-turns n` | quarts de tour appliqués à la **caméra** |
 | `--shot-rotate n` | quarts de tour appliqués au **bâtiment** à poser *(harnais Construction et Run)* |
 | `--shot-passes n` | tours à résoudre avant de capturer *(harnais Run)* |
+| `--shot-select n` | bâtiment à choisir, numéroté comme au clavier *(harnais Run)* |
+| `--shot-unfounded` | ne pose pas le Cœur : capture l'écran de fondation *(harnais Run)* |
 | `--shot-sun f` | moment du cycle solaire : 0 aube, 0.25 midi, 0.5 crépuscule, 0.75 nuit *(harnais Run)* |
 | `--chronicle` | rejoue le run entier sans écran et imprime la table, puis quitte *(harnais Run)* |
 
@@ -92,9 +94,16 @@ survol réel tomberait hors carte. `--shot-rotate` existe pour la même raison :
 lui, aucune capture ne montrerait jamais un bâtiment pivoté.
 
 **Les drapeaux ont fondu avec les harnais, à `R0`**, et `I3` en rend deux. Il en restait
-quatorze avant le rescope, il en reste sept. Les dix qui étaient partis servaient des harnais
+quatorze avant le rescope, il en reste neuf. Les dix qui étaient partis servaient des harnais
 supprimés ; `--shot-passes` remplace `--shot-evenings` pour un tour au lieu d'une journée en
 phases, et `--chronicle` revient tel quel parce que la question qu'il pose n'a pas changé.
+
+**`N2` en ajoute deux**, et tous deux par le corollaire de `P1a` cité plus bas. La fiche de
+bâtiment commute sur quatre états — coût couvert, réserve courte, bras courts, les deux —,
+et « réserve courte » n'était atteignable qu'en désignant un bâtiment qu'on ne peut pas
+payer : d'où `--shot-select`. Elle décrit par ailleurs le **Cœur** tant que le run n'est pas
+fondé, or toute capture fondait d'office pour ne pas photographier une carte nue : d'où
+`--shot-unfounded`. Les deux états existaient depuis le jalon ; aucun n'était joignable.
 
 *Attention, ils n'étaient partis que du README.* `R0` les avait retirés du tableau ci-dessus
 sans les retirer de `scenes/dev/dev_shot.gd`, si bien que le code et cette page se sont
@@ -121,7 +130,7 @@ Celle du harnais Construction imprime à la place la ligne de survol : la cellul
 son terrain, et le verdict du domaine sur une pose à cet endroit. C'est la légende de
 l'image — le fantôme y est vert ou rouge, cette ligne dit pourquoi.
 
-Celle du harnais Run en imprime **deux**, et toutes deux disent ce qu'une image fixe ne peut
+Celle du harnais Run en imprime **trois**, et toutes trois disent ce qu'une image fixe ne peut
 pas dire. La première joue deux journées d'affilée et donne où le soleil s'arrête à chaque
 quart : deux séries identiques et non triviales disent que la course se **rejoue**, une
 seconde série figée serait le bug. La seconde échantillonne la course et donne le pire écart
@@ -129,6 +138,14 @@ angulaire de la lumière à côté du pas moyen : deux nombres du même ordre di
 régulière, un pire écart plusieurs fois le moyen serait l'à-coup. Les deux existent parce
 qu'un défaut d'animation est invisible sur une capture — la première a été écrite après avoir
 livré une course qui ne partait qu'au premier jour.
+
+La troisième vient de `N2` et donne les deux rectangles du HUD — le rapport à gauche, la
+colonne de panneaux à droite —, leur recouvrement en pixels, et lequel des deux sort de
+l'écran. Elle a payé son écriture le jour même : au **premier** tour, la dernière ligne des
+touches passait sous la fiche de bâtiment, qui la coupait net. Un texte tronqué se lit comme
+une phrase qui s'arrête, pas comme un défaut, et les captures du jalon étaient prises plus
+tard dans le run, où le rapport plus court ne touchait rien. Un recouvrement de HUD attend
+toujours la partie la plus chargée, donc justement pas l'image qu'on regarde en écrivant.
 
 **Les coordonnées de la sonde ne sont pas des pixels de l'image.** `project.godot` est
 en `stretch/mode="canvas_items"` : le viewport garde la résolution de base du projet
@@ -170,6 +187,16 @@ C'est le seul contrôle du projet qui joue la boucle complète sur la data réel
 parsing ni les tests n'enchaînent vingt tours. Il n'arbitre rien et le dit en toutes lettres :
 la politique qu'il joue est bête, donc ses chiffres sont un **plancher** et non une partie
 bien jouée.
+
+**Depuis `N2` il porte aussi le HUD du jeu**, dans une colonne à droite : la fiche du bâtiment
+qu'on s'apprête à poser, le village — bras au travail, bras libres, effectif sur places de
+logement — et la réserve. Les deux barres ont volontairement la **même** forme, parce que les
+deux plafonds qu'elles montrent sont bâtis sur le même modèle *(cf. `N1`)*.
+
+Ce qui reste en texte à gauche est ce qu'aucune de ces vues ne dessine : l'état du run, les
+chantiers ouverts, les bâtiments en sommeil, ce que le dernier tour a rendu, le survol, les
+touches. Les endormis, eux, se lisent d'abord **sur le plateau**, qui les éteint en couleur —
+un texte peut dire combien et de quel genre, il ne peut pas désigner une case.
 
 **Ce qui revient encore, et quand.** La génération mesurée sur deux cents seeds à `T4`, la
 Bataille à `V2`. Le harnais de l'Économie ne revient pas : ce qu'il montrait — le repas, la

@@ -407,6 +407,22 @@ Pas de `GridMap` : il ne gère pas la hauteur variable par cellule sans empiler 
 
 Les vues de `src/adapters/hud/` sont des `Control` bâtis dans un `static func create()`, sans `.tscn`, comme `HandView` depuis `D2`. Elles reçoivent un objet du domaine et dessinent ; elles ne jugent rien. « La réserve est-elle pleine ? » se demande au domaine, et la vue affiche la réponse — **un adapter qui appellerait `Ledger.set_capacity()` serait la faute d'architecture que ce fichier refuse en premier.**
 
+**« Combien manque-t-il ? » est une question du domaine, exactement comme « est-ce plein ? ».**
+*(Écrit à `N2`.)* La règle ci-dessus était appliquée aux questions en oui/non et pas encore
+aux écarts, si bien qu'une vue qui voulait dire « il te manque 5 bois » n'avait d'autre choix
+que de soustraire elle-même. Le domaine a donc gagné `Ledger.shortfall()` et
+`Staffing.hands_short()`, et leurs formes en oui/non — `can_afford()`, `has_the_hands()` —
+sont **écrites avec eux** plutôt qu'à côté : deux boucles qui comparent la même chose sont
+deux occasions de diverger, et celle qui décide n'est pas forcément celle qu'on lit.
+
+Le cas qui l'a rendu obligatoire vaut d'être retenu, parce qu'il n'a rien de théorique. La
+question des bras se pose à la **demande totale** de la ville et non aux bras que le plan
+laisse libres — c'est écrit dans `DESIGN.md` 3.2, « ce que le village peut posséder » —, si
+bien qu'une vue qui aurait comparé le coût à `available()`, le chiffre qu'elle a justement
+sous les yeux, aurait été **plus permissive que la règle**. Elle aurait invité à un geste que
+le domaine refuse. Un seuil recopié dans un adapter ne se contente pas de doubler : il se
+trompe dans le sens qui se voit le plus tard.
+
 **Placer une vue dans un coin se fait par un conteneur, jamais par des ancres calculées.** `E2` a essayé les ancres et a payé deux pièges de suite, tous deux invisibles au parsing comme aux tests :
 
 - `set_anchors_preset()` prend un **booléen** en second argument, là où `set_anchors_and_offsets_preset()` prend un `LayoutPresetMode`. Lui passer `PRESET_MODE_MINSIZE` revient à lui dire « garde tes décalages ». La vue reste à la taille qu'elle avait — zéro —, et **un `PanelContainer` de taille nulle ne dessine pas son fond** pendant que ses libellés débordent par-dessus la scène.
@@ -415,6 +431,22 @@ Les vues de `src/adapters/hud/` sont des `Control` bâtis dans un `static func c
 Un `MarginContainer` plein écran dont l'enfant porte `SIZE_SHRINK_BEGIN` ou `SIZE_SHRINK_END` ne se trompe sur aucun des deux, et ne se trompe pas davantage à la dixième mise à jour du contenu.
 
 **Une vue rafraîchie à chaque image met ses nœuds à jour sur place** plutôt que de les reconstruire. C'est ce qui permet de l'appeler depuis `_process` sans churn d'allocation, et surtout sans avoir à énumérer tous les gestes qui touchent son sujet — un oubli dans cette liste se lit comme un compteur qui ne bouge pas.
+
+**Recopiée deux fois c'est un doublon qu'on tolère ; trois fois, c'est un fichier qui
+manque.** *(Écrit à `N2`, et c'est la deuxième fois — `E2` avait tiré la même conclusion pour
+`CommodityPalette`.)* `ResourceBar` tenait seule un style de panneau, une fabrique de `Label`
+et sept teintes ; les deux vues du jalon en voulaient les mêmes. Trois copies de `FULL_COLOR`
+finissent par ne plus être la même couleur, et le jour où ça arrive personne ne sait laquelle
+est la bonne. D'où `HudStyle`, qui ne porte que de la **mise en forme** — et c'est pourquoi
+ses nombres ne sont pas dans `data/balance/`, réservé aux questions encore ouvertes de
+`DESIGN.md`.
+
+Le cas de `SegmentedGauge` est plus fort qu'un doublon, et il vaut d'être distingué : la
+barre de la réserve et celle du village sont le **même widget** parce que `Ledger` et
+`Population` sont deux plafonds bâtis sur le même modèle. Extraire la jauge est ce qui rend
+ce jumelage visible dans le code au lieu d'affirmé dans un docstring — et la seule règle
+qu'elle portait, « le reste de la division va à la place libre, jamais à une part », est
+justement celle que la seconde vue devait avoir aussi.
 
 **Deux vues qui grandissent l'une vers l'autre vivent dans le même conteneur.** `W2` a posé le panneau d'affectation en bas à droite et laissé le compte rendu de phase en haut à droite : les deux tiennent tant que le plateau est vide, et se **recouvrent** dès qu'il porte cinq actions. Ce n'est pas une marge à régler — c'est un chevauchement qui n'attend que la phase la plus chargée, donc qui se manifeste le plus tard possible. Empilées dans un `VBoxContainer`, elles se poussent au lieu de se croiser.
 
@@ -513,6 +545,28 @@ se dessinait ainsi à la verticale sur l'écran de fondation **depuis `I2`**, c'
 le seul texte de la seule image qu'un drapeau existe pour montrer. Un enroulement ne se
 justifie que là où la largeur est bornée par autre chose — une carte, un panneau à largeur
 minimale ; jamais pour une phrase posée seule.
+
+**Deux blocs de HUD se séparent par la largeur, jamais par la hauteur.** *(Écrit à `N2`.)*
+Le rapport texte est en haut à gauche, la colonne de panneaux en bas à droite, et ils ne se
+touchaient pas : trente-trois pixels d'écart vertical. Sauf au **premier** tour, où le
+rapport porte deux chantiers de plus et où la dernière ligne des touches passait sous la
+fiche, coupée net. Une phrase tronquée se lit comme une phrase qui s'arrête, pas comme un
+défaut — et les captures du jalon étaient prises plus tard dans le run, où le rapport plus
+court ne touchait rien.
+
+La règle générale : dans un HUD, **une dimension suit la partie et l'autre non**. La hauteur
+d'un rapport suit les chantiers ouverts, les lignes du tour, les endormis ; sa largeur ne
+dépend que de ce qu'on écrit dedans. Compter sur l'écart vertical revient à parier sur le
+village le plus chargé qu'on verra un jour, ce qui est le pari que `W2` et `P1b` ont tous
+deux perdu. On borne donc la largeur — trois colonnes de catalogue au lieu de quatre, quatre
+lignes de touches au lieu de deux —, et l'on **sonde** le recouvrement plutôt que de
+l'espérer.
+
+**Et un recouvrement se mesure en `Control`, pas en pixels d'image.** C'est `P1b` dit une
+troisième fois, et c'est cinq lignes dans le harnais : deux `Rect2` pris en
+`global_position`, leur `intersection()`, et un `Rect2.encloses()` contre le viewport. Le
+chiffre est alors dans le repère de la mise en page, il s'imprime sur **toutes** les captures
+suivantes, et il se lit sans ouvrir l'image.
 
 **Un texte qui nomme un geste se trompe dès qu'il y a deux situations.** *(Écrit à `P2a`.)*
 Le même libellé disait « Entrée termine la phase » sur l'écran de fondation, où Entrée pose

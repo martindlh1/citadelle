@@ -5,6 +5,7 @@
 [resource]
 script = ExtResource("1_building_data")
 id = &"warehouse"
+label = "Entrepôt"
 color = Color(0.62, 0.55, 0.4, 1)
 height = 0.8
 site_turns = 2

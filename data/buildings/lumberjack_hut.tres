@@ -12,6 +12,7 @@ yield_per_turn = Dictionary[StringName, int]({
 [resource]
 script = ExtResource("1_building_data")
 id = &"lumberjack_hut"
+label = "Camp de bûcheron"
 color = Color(0.55, 0.38, 0.24, 1)
 height = 0.6
 site_turns = 1

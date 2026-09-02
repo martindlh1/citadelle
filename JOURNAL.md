@@ -4,6 +4,213 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-09-01 — `N2` : la fiche avant le clic, et un recouvrement que seule une sonde voyait
+
+**État : terminé.** Branche `feat/n2-population-view`, tirée de `master` après la fusion de
+`I3`. Les quatre commandes passent — boot sans erreur ni warning, tout `src/domain/` parse,
+tout `src/adapters/` et `scenes/dev/` aussi, et **400 tests verts contre 390**. Six captures,
+et une sonde de plus.
+
+Le jalon est un jalon d'écran, donc son vrai livrable est ce qu'on regarde : quatre fichiers
+neufs dans `src/adapters/hud/`, deux fonctions de plus dans le domaine, un champ dans
+`data/`, et le harnais Run réorganisé autour d'une colonne de panneaux.
+
+### Ce que `DESIGN.md` demandait, et ce qui a suivi
+
+Le jalon tient en une phrase de 3.4 : « le coût en main-d'œuvre d'un bâtiment devient une
+ligne de sa fiche, **lisible avant de le poser**, exactement comme son coût en bois ». Ce
+n'est pas du confort — les travailleurs sont le **seul** régulateur du jeu depuis le rescope,
+et un régulateur qu'on ne découvre qu'au refus n'en est pas un.
+
+D'où la `BuildingCard` : elle décrit ce que le clic gauche poserait, avec ses trois coûts,
+ce qu'il rend, et ce qui manque pour l'ouvrir. Elle a poussé le reste devant elle — la
+`PopulationBar` pour que « il manque 2 bras » ait un compteur à côté de lui, et le catalogue
+texte hors du rapport, parce qu'une table de chiffres à côté d'une fiche de chiffres est un
+doublon qui ment la moitié du temps.
+
+### « Combien manque-t-il ? » est une question du domaine
+
+C'est la décision qui porte le jalon, et elle a élargi une règle du projet plutôt que de
+l'appliquer. `CLAUDE.md` disait déjà qu'« est-ce plein ? » se demande au domaine ; il ne
+disait rien des **écarts**, si bien qu'une vue qui voulait annoncer « il te manque 5 bois »
+n'avait d'autre choix que de soustraire elle-même.
+
+`Ledger.shortfall()` et `Staffing.hands_short()` entrent donc dans le domaine, et leurs
+formes en oui/non — `can_afford()`, `has_the_hands()` — sont **réécrites avec eux** : deux
+boucles qui comparent la même chose sont deux occasions de diverger, et celle qui décide
+n'est pas forcément celle qu'on lit. Un cas de test épingle l'égalité des deux réponses,
+précisément pour qu'on ne puisse pas réécrire l'une sans l'autre.
+
+**Le cas des bras rend la chose obligatoire plutôt que jolie.** La question se pose à la
+**demande totale** de la ville et non aux bras que le plan laisse libres — c'est
+`DESIGN.md` 3.2, « ce que le village peut posséder » —, et l'écart entre les deux n'est pas
+nul : une ville qui a déjà un endormi rend `available() == 1` alors qu'ouvrir un chantier
+d'un bras y creuserait le manque. Une fiche qui aurait comparé son coût à `available()`,
+c'est-à-dire au chiffre affiché juste en dessous d'elle, aurait donc été **plus permissive
+que la règle** et invité à un geste que `open_site()` refuse.
+
+C'est la leçon générale : un seuil recopié dans un adapter ne se contente pas de doubler, il
+se trompe dans le sens qui se voit le plus tard. La fonction était privée chez
+`RunOrchestrator` ; elle est publique chez `Staffing`, et l'orchestrateur l'appelle comme
+tout le monde.
+
+### Les deux barres ont la même forme, et c'est `N1` rendu visible
+
+`N1` avait écrit que `Population` est le jumeau de `Ledger` — une quantité, une capacité que
+des bâtiments relèvent, un écrêtage quand elle baisse. Tant que la population n'était qu'une
+ligne de texte, c'était une affirmation de docstring.
+
+Les deux vues partagent maintenant la même `SegmentedGauge`, extraite de `ResourceBar`, et
+la règle qu'elle portait seule depuis `E2` — **le reste de la division va à la place libre,
+jamais à une part** — est justement celle que la seconde devait avoir aussi. Un plafond
+atteint n'a donc jamais de place libre à l'écran, ni pour du bois ni pour des habitants.
+
+*Corrigé après une première version, sur retour de l'humain.* La `PopulationBar` portait en
+plus une pastille « Habitants » et la liste de ce qui dort ; les deux sont parties. La
+première était la **somme des deux autres**, que la jauge écrit déjà à droite — un troisième
+chiffre qui n'apprend rien et qui donne à cette vue une forme que sa jumelle n'a pas. La
+seconde n'est pas de la même nature que le reste du panneau : un compteur montre des
+nombres, une liste d'endormis **nomme des choses posées sur la carte**. Elle est allée dans
+le rapport texte, à côté des chantiers ouverts.
+
+### Ce qui dort se dit deux fois, et la bonne des deux est le plateau
+
+`DESIGN.md` 3.3 veut qu'un joueur puisse se dire « cette ferme dort, il me manque un toit ».
+Le mot qui compte est **cette** : il désigne une case, et aucune ligne de texte ne désigne
+une case. Une liste de coordonnées dans un HUD demande de chercher sur la carte ce que la
+carte peut montrer elle-même.
+
+`BuildingRenderer` éteint donc les endormis en couleur — une teinte **froide**, là où celle
+d'un chantier est chaude. Les deux états se ressemblent, ni l'un ni l'autre ne produit, et
+ils se distinguent quand même parce que ce qu'ils demandent au joueur n'est pas la même
+chose : un chantier veut qu'on attende, un endormi veut un toit. Le sommeil s'applique
+**après** le gris de chantier et non à sa place, sans quoi un chantier endormi — qui est les
+deux à la fois — n'en montrerait qu'un.
+
+Le renderer n'apprend rien de tout ça : on lui donne des ancres, il les éteint, exactement
+comme `hidden` depuis `F3a` ignore qu'une bataille existe.
+
+### Le défaut du jalon : un recouvrement qu'aucune capture ne montrait
+
+C'est le résultat le plus utile, et il a été trouvé par une sonde écrite le matin même.
+
+Le rapport texte est en haut à gauche, la colonne de panneaux en bas à droite. Les deux ne se
+touchaient pas — trente-trois pixels d'écart vertical — **sauf au premier tour**, où le
+rapport porte deux chantiers de plus : la dernière ligne des touches passait alors sous la
+fiche, qui la coupait net. Une phrase tronquée se lit comme une phrase qui s'arrête, pas
+comme un défaut, et les captures du jalon étaient prises plus tard dans le run, où le rapport
+plus court ne touchait rien.
+
+La règle qui en sort : **deux blocs de HUD se séparent par la largeur, jamais par la
+hauteur.** Dans un HUD, une dimension suit la partie et l'autre non — la hauteur d'un rapport
+suit les chantiers ouverts, les lignes du tour, les endormis, alors que sa largeur ne dépend
+que de ce qu'on écrit dedans. Compter sur l'écart vertical, c'est parier sur le village le
+plus chargé qu'on verra un jour, et c'est le pari que `W2` et `P1b` ont tous les deux perdu.
+Le catalogue est donc passé à trois colonnes et les touches à quatre lignes courtes, et la
+largeur du rapport ne bouge plus.
+
+Et la sonde est `P1b` dit une troisième fois : deux `Rect2` pris en `global_position`, leur
+`intersection()`, un `encloses()` contre le viewport. Cinq lignes, un chiffre dans le repère
+de la mise en page plutôt que dans les pixels de l'image, et il s'imprime désormais sur
+**toutes** les captures suivantes au lieu d'être redécouvert.
+
+### Deux états que rien ne pouvait photographier
+
+Corollaire de `P1a`, appliqué avant d'en avoir besoin cette fois : quand une vue se met à
+commuter sur un état, vérifier **d'abord** qu'un drapeau atteint chacune de ses valeurs.
+
+La fiche commute sur quatre états — coût couvert, réserve courte, bras courts, les deux. Or
+« réserve courte » ne s'obtient qu'en désignant un bâtiment qu'on ne peut pas payer, et rien
+ne permettait de choisir un bâtiment depuis la ligne de commande : d'où `--shot-select`. Et
+elle décrit le **Cœur** tant que le run n'est pas fondé, alors que toute capture fondait
+d'office pour ne pas photographier une carte nue : d'où `--shot-unfounded`. Les deux états
+existaient dès la première version ; aucun n'était joignable.
+
+Le second a d'ailleurs révélé un défaut de plus : le curseur de cellule cessait de piocher
+sous la souris à l'intérieur de `_place_at()`, donc uniquement sur le chemin qui fonde. Sans
+fondation, le survol retombait sur la position réelle de la souris — `(0, 0)`, hors carte —
+et la capture ne montrait aucun fantôme.
+
+### Le Cœur sort du catalogue numéroté
+
+`open_site()` le refuse par principe depuis `I3` : le Cœur se **fonde**, il ne se bâtit ni ne
+se démolit *(`DESIGN.md` 4.2)*. Il occupait pourtant une touche du catalogue, donc une touche
+qui ne pouvait mener qu'à un refus — la règle de `I2b` appliquée à une liste, une vue qui
+invite à un geste doit demander si le geste est possible. `I3` avait corrigé le domaine, qui
+acceptait d'en ouvrir un second ; ce jalon corrige l'écran, qui le proposait encore.
+
+Sa fiche reste atteignable, au seul moment où elle veut dire quelque chose : tant que le run
+attend son Cœur, c'est lui que le fantôme dessine et lui que la fiche décrit. Les deux
+passent d'ailleurs par le **même** appel, ce qui est ce qui les empêche de parler de deux
+choses différentes.
+
+### Un champ dans `data/`, et pourquoi il n'invente rien
+
+`BuildingData` gagne un `label`, réclamé comme celui d'une `CommodityData`. Sans lui la fiche
+s'intitulait `lumberjack_hut`, c'est-à-dire un identifiant interne montré à qui regarde le
+jeu.
+
+Il **ne nomme rien de neuf** : les neuf noms sont ceux que `DESIGN.md` 4.1 a fixés, recopiés
+dans la data au lieu de rester dans un tableau de document. C'est la seule fois du projet où
+le contenu d'une table de ce document est entré dans un `.tres`, et 4.1 le dit maintenant.
+Même partage qu'à `E2` pour les ressources : un identifiant sert le code, un libellé sert
+l'écran, et le second n'a aucune raison d'être le premier traduit à la volée par un adapter.
+
+### Recopié trois fois, c'est un fichier qui manque
+
+`ResourceBar` tenait seule un style de panneau, une fabrique de `Label` et sept teintes ; les
+deux vues du jalon en voulaient les mêmes. Trois copies de `FULL_COLOR` finissent par ne plus
+être la même couleur, et le jour où ça arrive personne ne sait laquelle est la bonne. D'où
+`HudStyle`, qui ne porte que de la **mise en forme** — et c'est pourquoi ses nombres ne sont
+pas dans `data/balance/`, réservé aux questions encore ouvertes de `DESIGN.md`.
+
+C'est la deuxième fois que ce raisonnement se tient : `E2` l'avait fait pour
+`CommodityPalette`, sur un `_bundle_text()` écrit deux fois qu'un troisième appelant allait
+tripler.
+
+### Ce que je n'ai pas fait
+
+**Aucun contrat n'entre dans `contracts/`**, et la table y reste à quatre lignes pour le
+troisième jalon d'affilée. Rien de ce jalon ne franchit une frontière entre deux systèmes du
+domaine : `shortfall()` et `hands_short()` rendent des types nus, et tout le reste est de
+l'adapter.
+
+**Aucun test d'adapter.** `CLAUDE.md` : `src/adapters/` n'est pas testé. Le contrôle du jalon
+est la capture, et la sonde de mise en page est là pour ce qu'une capture ne dit pas.
+
+**Aucun chiffre n'est équilibré.** La chronique rend exactement les mêmes vingt lignes
+qu'après `I3` — 265 points —, ce qui est le contrôle qu'aucune règle n'a bougé.
+
+**Pas de survol de fiche à la souris**, pas d'infobulle sur un refus, pas de repli de
+panneau. Ce sont des jalons de confort de la famille `P`, et il n'y en a pas au programme :
+`DESIGN.md` 8 enchaîne sur `T4`.
+
+### Prochain jalon
+
+**`T4`** — la génération garantie. `DESIGN.md` 8 la place avant `V1` et donne la raison : on
+ne teste pas un pathing sur des cartes qui n'ont pas de cols. Les six captures de ce jalon la
+redisent — le relief du seed 1234 est du bruit uniforme, sans plateau central ni goulot, et
+la politique de la chronique pose ses bâtiments dans un coin parce que rien sur cette carte
+ne suggère où les mettre.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien.** Aucune `.tscn` ni `project.godot` touché.
+
+- **`HARNESS` vaut toujours `&"run"`.**
+- **Deux drapeaux de capture neufs** : `--shot-select n` choisit un bâtiment comme au
+  clavier, `--shot-unfounded` saute la fondation pour photographier l'écran qui l'attend.
+- **Les neuf `.tres` de bâtiment gagnent un `label`**, celui de `DESIGN.md` 4.1.
+- **Le catalogue numéroté passe de neuf à huit entrées** — le Cœur en sort, donc les touches
+  `1` à `8` ne désignent plus les mêmes bâtiments qu'avant.
+- **Une passe `--headless --editor --quit` a été nécessaire** après la création des quatre
+  `class_name` de `src/adapters/hud/` : le cache de classes globales n'est écrit que par le
+  scan de l'éditeur, et la commande 4 échouait sur `HudStyle` avant elle. Le piège est déjà
+  dans `CLAUDE.md` ; il s'est simplement présenté.
+- **La branche n'est pas fusionnée** : `feat/n2-population-view`, six commits.
+
+---
+
 ## 2026-09-01 — `I3` : le tour, et deux fichiers qui ne compilaient plus depuis `R0`
 
 **État : terminé.** Branche `feat/i3-turn`, tirée de `master` après la fusion de `N1`. Les

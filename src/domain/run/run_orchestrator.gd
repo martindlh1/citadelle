@@ -99,7 +99,12 @@ static func open_site(state: RunState, id: StringName, cell: Vector2i,
 		turns)
 	if not placement.is_ok():
 		return PlayResult.refused(placement.reason())
-	if not _has_the_hands(state, data):
+	# La question est celle de Staffing et non la nôtre : « ce que le village peut posséder »
+	# se demande à la demande totale de la ville, jamais aux bras que le plan laisse libres.
+	# Elle a vécu ici en privé jusqu'à N2, où une fiche de bâtiment a eu besoin de la poser
+	# avant le clic — et deux copies d'un seuil sont deux occasions d'en avoir un faux.
+	if not Staffing.has_the_hands(state.city().to_snapshot(), state.people().headcount(),
+			data.workers):
 		return PlayResult.refused(PlayResult.REASON_NOT_ENOUGH_WORKERS)
 	if not state.ledger().can_afford(data.cost):
 		return PlayResult.refused(PlayResult.REASON_NOT_ENOUGH_RESOURCES)
@@ -213,18 +218,6 @@ static func end_turn(state: RunState) -> TurnReport:
 	if outcome == null:
 		state.advance_turn()
 	return report
-
-## Le village peut-il **posséder** un bâtiment de plus ?
-##
-## La question se pose à la demande totale de la ville et non aux bras que le plan laisse
-## libres, et l'écart entre les deux est un piège. Une ville de trois bâtiments à deux bras
-## pour cinq habitants a un endormi et rend `available() == 1` : ouvrir un chantier d'un bras
-## sur cette base **creuserait** le manque, et endormirait un bâtiment de plus au tour
-## suivant. Ce que DESIGN.md 3.2 fait dire aux travailleurs est « ce que le village peut
-## posséder », pas « ce qu'il lui reste sous la main cet instant ».
-static func _has_the_hands(state: RunState, data: BuildingData) -> bool:
-	var demand := Staffing.demand(state.city().to_snapshot())
-	return demand + maxi(0, data.workers) <= state.people().headcount()
 
 ## Réaccorde les deux plafonds sur la ville du moment.
 ##

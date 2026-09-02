@@ -5,6 +5,7 @@
 [resource]
 script = ExtResource("1_building_data")
 id = &"house"
+label = "Habitation"
 color = Color(0.78, 0.68, 0.52, 1)
 height = 0.75
 site_turns = 2

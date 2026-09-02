@@ -25,13 +25,9 @@ extends PanelContainer
 ## jeu de ressources ne change pas en cours de run — il vient du catalogue, pas de la
 ## partie.
 ##
-## Construite en code, sans `.tscn`, comme `HandView`. Elle déménagera sous `scenes/ui/`
-## le jour où `I2` fera un vrai écran, et elle déménagera avec sa mise en forme : elle
-## n'a pas de règles à emporter.
-##
-## Les chiffres sont des constantes nommées et non de l'équilibrage — une largeur de
-## jauge est de la mise en forme, et `data/balance/` est réservé aux questions ouvertes
-## de `DESIGN.md`.
+## Construite en code, sans `.tscn`. Elle déménagera sous `scenes/ui/` le jour où `M1` fera
+## un vrai écran, et elle déménagera avec sa mise en forme : elle n'a pas de règles à
+## emporter.
 ##
 ## ---
 ##
@@ -47,52 +43,11 @@ extends PanelContainer
 ## **une mesure qui emprunte un chemin plus court mesure le chemin plus court** —, et le cas
 ## était réel : une somme « entré moins mangé » ignore l'écrêtage d'un entrepôt démoli, donc
 ## affiche un delta qui ne recolle pas au chiffre juste à côté de lui.
-
-## Largeur de la jauge, en pixels. Le segment de chaque ressource s'y taille au prorata.
-const GAUGE_WIDTH := 260
-const GAUGE_HEIGHT := 12
-
-## Largeur minimale d'un segment non vide, en pixels.
 ##
-## Sans elle, une unité sur deux cents s'arrondit à zéro et la ressource disparaît de la
-## jauge alors qu'on en possède. Le prorata est faux d'un pixel ; l'absence était fausse
-## tout court.
-const MIN_SEGMENT := 2
-
-## Côté de la pastille de couleur d'une ressource.
-const SWATCH := 10
-
-## Écarts internes.
-const CHIP_GAP := 6
-const COLUMN_GAP := 18
-const ROW_GAP := 6
-
-const PANEL_COLOR := Color(0.10, 0.11, 0.14, 0.92)
-const PANEL_RADIUS := 5
-const PANEL_MARGIN := 10
-
-## Fond de la place libre dans la jauge.
-const FREE_COLOR := Color(0.22, 0.24, 0.28)
-
-## Texte d'un libellé, d'une quantité, et d'une ressource qu'on ne possède pas.
-const LABEL_COLOR := Color(0.68, 0.72, 0.78)
-const AMOUNT_COLOR := Color(0.94, 0.94, 0.92)
-const EMPTY_COLOR := Color(0.42, 0.45, 0.50)
-
-## Réserve pleine. La même teinte que ce que le panneau appelle une perte : c'est le
-## même événement vu d'un cran plus tôt.
-const FULL_COLOR := Color(0.95, 0.62, 0.35)
-
-## Un delta gagné, un delta perdu.
-const GAIN_COLOR := Color(0.55, 0.82, 0.50)
-const LOSS_COLOR := Color(0.90, 0.48, 0.45)
-
-## Opacité d'une pastille dont la ressource est à zéro.
-const EMPTY_SWATCH_ALPHA := 0.28
-
-const LABEL_FONT_SIZE := 12
-const AMOUNT_FONT_SIZE := 14
-const TOTAL_FONT_SIZE := 12
+## **`N2` lui retire sa jauge et ses teintes**, qui partent l'une dans `SegmentedGauge` et
+## les autres dans `HudStyle`. Ce fichier ne perd aucune règle au passage : la seule qu'il
+## tenait — le reste de la division va à la place libre — est justement celle que la
+## `PopulationBar` devait avoir aussi, et elle est désormais écrite une fois.
 
 var _palette: CommodityPalette
 
@@ -100,9 +55,7 @@ var _names: Dictionary[StringName, Label] = {}
 var _amounts: Dictionary[StringName, Label] = {}
 var _deltas: Dictionary[StringName, Label] = {}
 var _swatches: Dictionary[StringName, ColorRect] = {}
-var _segments: Dictionary[StringName, ColorRect] = {}
-var _free: ColorRect
-var _total: Label
+var _gauge: SegmentedGauge
 
 ## Barre prête à être ajoutée à l'arbre, une colonne par ressource du catalogue.
 static func create(palette: CommodityPalette) -> ResourceBar:
@@ -110,15 +63,15 @@ static func create(palette: CommodityPalette) -> ResourceBar:
 	var bar := ResourceBar.new()
 	bar.name = "ResourceBar"
 	bar._palette = palette
-	bar.add_theme_stylebox_override("panel", _make_panel_style())
+	bar.add_theme_stylebox_override("panel", HudStyle.panel())
+	bar.custom_minimum_size.x = HudStyle.PANEL_WIDTH
 	# Les clics traversent : le curseur de cellule pioche sous la souris à chaque image,
 	# et une barre qui les avalerait rendrait injouable la bande de carte qu'elle couvre.
 	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var column := VBoxContainer.new()
-	column.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	column.add_theme_constant_override("separation", ROW_GAP)
+	var column := HudStyle.column()
 	column.add_child(bar._make_chips())
-	column.add_child(bar._make_gauge())
+	bar._gauge = SegmentedGauge.create(bar._gauge_colors())
+	column.add_child(bar._gauge)
 	bar.add_child(column)
 	return bar
 
@@ -135,14 +88,15 @@ func show_ledger(ledger: Ledger, delta: Dictionary[StringName, int] = {}) -> voi
 		var held := ledger.amount(id)
 		_amounts[id].text = "%d" % held
 		_amounts[id].add_theme_color_override("font_color",
-			AMOUNT_COLOR if held > 0 else EMPTY_COLOR)
+			HudStyle.AMOUNT_COLOR if held > 0 else HudStyle.EMPTY_COLOR)
 		_names[id].add_theme_color_override("font_color",
-			LABEL_COLOR if held > 0 else EMPTY_COLOR)
+			HudStyle.LABEL_COLOR if held > 0 else HudStyle.EMPTY_COLOR)
 		var swatch := _palette.color_of(id)
-		swatch.a = 1.0 if held > 0 else EMPTY_SWATCH_ALPHA
+		swatch.a = 1.0 if held > 0 else HudStyle.EMPTY_SWATCH_ALPHA
 		_swatches[id].color = swatch
 		_show_delta(id, delta.get(id, 0))
-	_show_gauge(ledger)
+	_gauge.show_amounts(ledger.amounts(), ledger.total(), ledger.capacity(),
+		ledger.is_full())
 
 # --- La mise à jour ---------------------------------------------------------------------
 
@@ -153,102 +107,40 @@ func _show_delta(id: StringName, moved: int) -> void:
 		return
 	label.text = "%+d" % moved
 	label.add_theme_color_override("font_color",
-		GAIN_COLOR if moved > 0 else LOSS_COLOR)
-
-## Taille les segments au prorata, et écrit le total sur la capacité.
-##
-## Le reste de la division va à la place libre plutôt qu'à une ressource : lui donner un
-## pixel de plus ferait mentir la seule barre qui compte — celle qui dit s'il reste de la
-## place. Une réserve pleine n'a donc jamais de place libre à l'écran, même d'un pixel.
-func _show_gauge(ledger: Ledger) -> void:
-	var capacity := maxi(ledger.capacity(), 1)
-	var used := 0
-	for id in _palette.ordered():
-		var held := ledger.amount(id)
-		var width := 0
-		if held > 0:
-			width = maxi(held * GAUGE_WIDTH / capacity, MIN_SEGMENT)
-		_segments[id].custom_minimum_size = Vector2(width, GAUGE_HEIGHT)
-		_segments[id].color = _palette.color_of(id)
-		used += width
-	_free.custom_minimum_size = Vector2(maxi(GAUGE_WIDTH - used, 0), GAUGE_HEIGHT)
-	_total.text = "%d / %d" % [ledger.total(), ledger.capacity()]
-	_total.add_theme_color_override("font_color",
-		FULL_COLOR if ledger.is_full() else LABEL_COLOR)
+		HudStyle.GAIN_COLOR if moved > 0 else HudStyle.LOSS_COLOR)
 
 # --- La construction --------------------------------------------------------------------
 
+## Les parts de la jauge, dans l'ordre du HUD et à la couleur du catalogue.
+func _gauge_colors() -> Dictionary[StringName, Color]:
+	var colors: Dictionary[StringName, Color] = {}
+	for id in _palette.ordered():
+		colors[id] = _palette.color_of(id)
+	return colors
+
 func _make_chips() -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_theme_constant_override("separation", COLUMN_GAP)
+	var row := HudStyle.row(HudStyle.COLUMN_GAP)
 	for id in _palette.ordered():
 		row.add_child(_make_chip(id))
 	return row
 
 func _make_chip(id: StringName) -> HBoxContainer:
-	var chip := HBoxContainer.new()
-	chip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	chip.add_theme_constant_override("separation", CHIP_GAP)
+	var chip := HudStyle.row()
 
-	var swatch := ColorRect.new()
-	swatch.custom_minimum_size = Vector2(SWATCH, SWATCH)
-	swatch.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	swatch.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var swatch := HudStyle.swatch(_palette.color_of(id))
 	_swatches[id] = swatch
 	chip.add_child(swatch)
 
-	var name_label := _make_text(_palette.label_of(id), LABEL_FONT_SIZE, LABEL_COLOR)
+	var name_label := HudStyle.text(_palette.label_of(id), HudStyle.LABEL_FONT_SIZE,
+		HudStyle.LABEL_COLOR)
 	_names[id] = name_label
 	chip.add_child(name_label)
 
-	var amount := _make_text("0", AMOUNT_FONT_SIZE, AMOUNT_COLOR)
+	var amount := HudStyle.text("0", HudStyle.AMOUNT_FONT_SIZE, HudStyle.AMOUNT_COLOR)
 	_amounts[id] = amount
 	chip.add_child(amount)
 
-	var delta := _make_text("", LABEL_FONT_SIZE, GAIN_COLOR)
+	var delta := HudStyle.text("", HudStyle.LABEL_FONT_SIZE, HudStyle.GAIN_COLOR)
 	_deltas[id] = delta
 	chip.add_child(delta)
 	return chip
-
-func _make_gauge() -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_theme_constant_override("separation", CHIP_GAP)
-
-	var track := HBoxContainer.new()
-	track.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	track.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	track.add_theme_constant_override("separation", 0)
-	for id in _palette.ordered():
-		var segment := ColorRect.new()
-		segment.custom_minimum_size = Vector2(0, GAUGE_HEIGHT)
-		segment.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		_segments[id] = segment
-		track.add_child(segment)
-	_free = ColorRect.new()
-	_free.color = FREE_COLOR
-	_free.custom_minimum_size = Vector2(GAUGE_WIDTH, GAUGE_HEIGHT)
-	_free.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	track.add_child(_free)
-	row.add_child(track)
-
-	_total = _make_text("0 / 0", TOTAL_FONT_SIZE, LABEL_COLOR)
-	row.add_child(_total)
-	return row
-
-func _make_text(text: String, size: int, color: Color) -> Label:
-	var label := Label.new()
-	label.text = text
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size", size)
-	label.add_theme_color_override("font_color", color)
-	return label
-
-static func _make_panel_style() -> StyleBoxFlat:
-	var style := StyleBoxFlat.new()
-	style.bg_color = PANEL_COLOR
-	style.set_corner_radius_all(PANEL_RADIUS)
-	style.set_content_margin_all(PANEL_MARGIN)
-	return style

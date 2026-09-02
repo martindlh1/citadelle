@@ -150,6 +150,35 @@ func test_a_surplus_elsewhere_does_not_cover_a_shortfall() -> void:
 func test_an_empty_cost_is_always_affordable() -> void:
 	assert_bool(Ledger.create(10).can_afford(_bundle([]))).is_true()
 
+# --- ce qui manque, et pourquoi c'est le domaine qui le dit ------------------
+
+## Le manque est un écart et non le coût entier : une réserve qui a la moitié du bois n'en
+## réclame que l'autre moitié. C'est ce qu'une fiche affiche, donc l'erreur qui se lirait.
+func test_a_shortfall_names_only_what_is_missing_and_by_how_much() -> void:
+	var ledger := Ledger.from_stock(_bundle([WOOD, 4, STONE, 9]), 100)
+	assert_dict(ledger.shortfall(_bundle([WOOD, 10, STONE, 5]))) \
+		.is_equal(_bundle([WOOD, 6]))
+
+## Une ressource jamais possédée manque de son coût entier, et figure quand même : elle
+## est le cas le plus fréquent d'un refus au premier tour.
+func test_a_resource_never_held_is_missing_whole() -> void:
+	assert_dict(Ledger.create(100).shortfall(_bundle([FOOD, 3]))) \
+		.is_equal(_bundle([FOOD, 3]))
+
+func test_a_covered_cost_leaves_nothing_missing() -> void:
+	var ledger := Ledger.from_stock(_bundle([WOOD, 15]), 100)
+	assert_dict(ledger.shortfall(_bundle([WOOD, 15]))).is_empty()
+
+## Les deux questions sont la même, et ce cas est ce qui les empêche de diverger : le jour
+## où l'une des deux serait réécrite seule, il tombe. C'est la raison d'être de la forme
+## `can_afford() == shortfall().is_empty()` plutôt que de deux boucles jumelles.
+func test_affordability_is_exactly_an_empty_shortfall() -> void:
+	var ledger := Ledger.from_stock(_bundle([WOOD, 90, STONE, 2]), 100)
+	for cost in [_bundle([WOOD, 10, STONE, 5]), _bundle([WOOD, 10]), _bundle([])]:
+		assert_bool(ledger.can_afford(cost)) \
+			.override_failure_message("can_afford et shortfall ont divergé sur %s" % cost) \
+			.is_equal(ledger.shortfall(cost).is_empty())
+
 func test_spending_reduces_every_line_of_the_cost() -> void:
 	var ledger := Ledger.from_stock(_bundle([WOOD, 20, STONE, 20]), 100)
 	assert_bool(ledger.spend(_bundle([WOOD, 15, STONE, 5]))).is_true()

@@ -42,6 +42,19 @@ const QUARTER_TURNS := 4
 ## Par convention il reprend le nom du fichier .tres.
 @export var id: StringName
 
+## Nom affichable, celui de la colonne Bâtiment de DESIGN.md 4.1.
+##
+## Il entre à N2 avec la fiche qui le lit, et **il ne nomme rien de neuf** : les neuf noms
+## sont ceux que 4.1 a fixés, recopiés dans la data au lieu de rester dans un tableau de
+## document. Sans lui la fiche d'un bâtiment s'intitule `lumberjack_hut`, c'est-à-dire un
+## identifiant interne montré à qui regarde le jeu.
+##
+## Même partage que CommodityData, et pour la même raison qu'à E2 : un identifiant sert le
+## code, un libellé sert l'écran, et le second n'a aucune raison d'être le premier traduit à
+## la volée par un adapter. Il est **réclamé** comme là-bas — un libellé vide se lit comme
+## une case blanche, ce qui est détectable, et la doctrine du zéro s'applique.
+@export var label: String
+
 ## Cellules occupées, en décalages depuis l'ancre.
 ##
 ## Une empreinte n'est pas forcément un rectangle : [(0,0), (1,0), (0,1)] décrit un L,
@@ -260,6 +273,8 @@ func missing_fields() -> PackedStringArray:
 	var missing := PackedStringArray()
 	if id.is_empty():
 		missing.append("id")
+	if label.is_empty():
+		missing.append("label")
 	if color == UNSET_COLOR:
 		missing.append("color")
 	if height <= 0.0:

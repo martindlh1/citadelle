@@ -16,7 +16,15 @@ const BUILDING_ROOT := "res://data/buildings"
 
 func test_a_blank_building_reports_all_its_required_fields() -> void:
 	assert_array(BuildingData.new().missing_fields()) \
-		.contains(["id", "color", "height", "footprint"])
+		.contains(["id", "label", "color", "height", "footprint"])
+
+## Le libellé est réclamé comme celui d'une ressource, et pour la même raison : un
+## identifiant sert le code, un nom sert l'écran, et une fiche sans nom est une case
+## blanche. Entré à N2 avec la vue qui le lit.
+func test_a_building_without_a_label_is_reported() -> void:
+	var building := _building(_l_shape())
+	building.label = ""
+	assert_array(building.missing_fields()).contains(["label"])
 
 ## La sentinelle de couleur est recopiée de TerrainData, comme TerrainDecor la recopie
 ## déjà. Ce cas est ce qui empêche les copies de dériver les unes des autres.
@@ -363,6 +371,7 @@ func _l_shape() -> Array[Vector2i]:
 func _building(offsets: Array[Vector2i]) -> BuildingData:
 	var building := BuildingData.new()
 	building.id = &"test_hut"
+	building.label = "Cabane d'essai"
 	building.color = Color(0.5, 0.4, 0.3)
 	building.height = 0.6
 	building.hit_points = 4

@@ -1,5 +1,5 @@
 extends Node
-## Harnais de dev du Cycle de tour — jalon I3 : le jeu se relance.
+## Harnais de dev du Cycle de tour — jalon I3 : le jeu se relance. Jalon N2 : on le voit.
 ##
 ## C'est le harnais que `R0` avait supprimé, refait autour d'**un seul geste**. Celui d'avant
 ## faisait 2 178 lignes et pilotait une main de cartes, un roster, un plateau d'actions, une
@@ -11,12 +11,24 @@ extends Node
 ## réserve, sur les bras ou sur la file apparaissait dans ce fichier, ce serait un bug
 ## d'architecture. Le domaine répond `not_enough_workers`, l'écran l'affiche.
 ##
-## Clic gauche fonde puis bâtit, clic droit démolit, Entrée passe le tour, 1 à 9 choisissent
+## Clic gauche fonde puis bâtit, clic droit démolit, Entrée passe le tour, 1 à 8 choisissent
 ## le bâtiment, Tab pivote. La caméra garde Q et E, la molette, WASD et R.
 ##
 ## **Le rapport est imprimé sur la sortie standard autant que dessiné**, ce que le README
 ## demande à tous les harnais qui ne dessinent pas : un rapport qu'on ne voit qu'en lançant
 ## le jeu finit par ne plus être lu. `--chronicle` en fait un tableau.
+##
+## ---
+##
+## **`N2` sort trois choses du texte** et les met dans la colonne de droite : la fiche du
+## bâtiment qu'on s'apprête à poser, le village, et la réserve qui y était déjà. Ce qui reste
+## à gauche est ce qu'aucune vue ne dessine — l'état du run, les chantiers ouverts, ce que le
+## dernier tour a rendu, le verdict du survol, et les touches.
+##
+## Le partage n'est pas cosmétique : `DESIGN.md` 3.4 fait du coût en bras **un argument de
+## design**, « lisible avant de poser, exactement comme son coût en bois », et une table de
+## catalogue ne peut pas dire ce que la réserve ne couvre pas. La fiche le demande au domaine
+## et l'affiche ; le catalogue n'est plus qu'une liste de raccourcis.
 
 ## Seed du run. Fixe : deux lancements doivent se comparer.
 const SEED := 1234
@@ -39,8 +51,30 @@ const REPORT_OUTLINE_SIZE := 4
 ## non recopié dans trois boucles.
 const LISTED := 6
 
+## Colonnes de la table des raccourcis de bâtiment.
+##
+## Trois et non quatre, et c'est une contrainte de **largeur** plutôt qu'un goût : le rapport
+## et la colonne de droite ne doivent jamais se croiser, et la seule séparation qui tienne
+## quoi qu'il arrive est horizontale — la hauteur du rapport, elle, suit la partie. Une
+## quatrième colonne portait sa ligne la plus large à 98 caractères, soit au-delà du bord
+## gauche des panneaux.
+const CATALOGUE_COLUMNS := 3
+
+## Largeur d'une entrée de cette table, en caractères. Fixe, pour que les crochets de la
+## sélection ne décalent pas ses voisines à chaque touche.
+const CATALOGUE_WIDTH := 24
+
+## Écart entre les trois panneaux de la colonne de droite, en pixels.
+const PANEL_GAP := 8
+
 ## Rappel des touches, en pied du rapport.
-const CONTROLS := "Clic gauche : fonder puis bâtir.   Clic droit : démolir.   Entrée : passer le tour.   1-9 : bâtiment.   Tab : pivoter.\nQ/E : tourner la caméra.   Molette : zoom.   WASD ou clic milieu : déplacer.   R : recadrer."
+##
+## Quatre lignes courtes et non deux longues, pour la raison qui a ramené le catalogue à
+## trois colonnes : ce bloc est le **plus large** du rapport et il en est aussi le **plus
+## bas**, donc c'est lui qui allait chercher les panneaux de droite. `N2` l'a trouvé en
+## sondant la mise en page, pas en regardant l'image — la ligne y passait sous une fiche qui
+## la coupait, ce qui se lit comme une phrase qui s'arrête plutôt que comme un défaut.
+const CONTROLS := "Clic gauche : fonder puis bâtir.   Clic droit : démolir.\nEntrée : passer le tour.   1-8 : bâtiment.   Tab : pivoter.\nQ/E : tourner la caméra.   Molette : zoom.   R : recadrer.\nWASD ou clic milieu : déplacer."
 
 ## Ce que le harnais tente d'ouvrir à chaque tour en mode chronique, dans cet ordre.
 ##
@@ -68,6 +102,9 @@ var _grid: HeightGrid
 var _renderer: BuildingRenderer
 var _ghost: PlacementGhost
 var _label: Label
+var _column: VBoxContainer
+var _card: BuildingCard
+var _people: PopulationBar
 var _bar: ResourceBar
 var _palette: CommodityPalette
 var _catalogue: Array[BuildingData] = []
@@ -101,8 +138,7 @@ func _ready() -> void:
 	_palette = CommodityPalette.from_database()
 	_label = _make_label()
 	add_child(_corner(_label, Control.SIZE_SHRINK_BEGIN, Control.SIZE_SHRINK_BEGIN))
-	_bar = ResourceBar.create(_palette)
-	add_child(_corner(_bar, Control.SIZE_SHRINK_END, Control.SIZE_SHRINK_END))
+	add_child(_corner(_make_column(), Control.SIZE_SHRINK_END, Control.SIZE_SHRINK_END))
 	EventBus.turn_resolved.connect(_on_turn_resolved)
 	_world.settle_at(DevWorld.REST)
 	if DevShot.has_flag(DevShot.CHRONICLE_FLAG):
@@ -118,7 +154,14 @@ func _ready() -> void:
 func _process(_delta_seconds: float) -> void:
 	_refresh_preview()
 	_label.text = _report()
+	# Un seul relevé de la ville par image, partagé par les deux vues qui l'interrogent :
+	# le plan d'occupation et le manque de bras se posent à la même ville, et la projeter
+	# deux fois ouvrirait la porte à ce qu'ils répondent sur deux instants différents.
+	var city := _state().city().to_snapshot()
 	_bar.show_ledger(_state().ledger(), _delta)
+	_people.show_people(_state().people(),
+		Staffing.resolve(city, _state().people().headcount()))
+	_show_card(city)
 
 ## Aucun geste pendant qu'une transition joue.
 ##
@@ -188,7 +231,7 @@ func _place_here() -> void:
 	if data == null:
 		_last_action = "Aucun bâtiment sélectionné."
 		return
-	_report_gesture("Chantier %s" % data.id,
+	_report_gesture("Chantier %s" % data.label,
 		RunManager.build(data.id, hovered.cell(), _turns))
 
 func _demolish_here() -> void:
@@ -227,7 +270,7 @@ func _pass_turn() -> void:
 ## Et c'est ce qui garantit qu'une résolution scriptée redessine autant qu'un clic : le
 ## défaut que `P1a` a trouvé venait précisément d'un chemin qui court-circuitait ça.
 func _on_turn_resolved(_report: TurnReport) -> void:
-	_renderer.rebuild(_state().city())
+	_redraw_city()
 	if _state().is_over():
 		_world.fall_to_night()
 		return
@@ -238,7 +281,7 @@ func _report_gesture(what: String, result: PlayResult) -> void:
 	if not result.is_ok():
 		_last_action = "%s refusée : %s" % [what, result.reason()]
 		return
-	_renderer.rebuild(_state().city())
+	_redraw_city()
 	var extra := ""
 	if result.workers() > 0:
 		extra = ", %d bras" % result.workers()
@@ -277,13 +320,47 @@ func _ghost_building() -> BuildingData:
 		return _state().building(_state().balance().run.starting_building)
 	return _selected_building()
 
+# --- ce que la fiche montre --------------------------------------------------
+
+## Décrit ce que le clic gauche poserait, et ce que le village n'a pas pour le payer.
+##
+## **La fiche décrit le même bâtiment que le fantôme**, par le même appel : la carte colorée
+## et le panneau ne peuvent donc pas parler de deux choses différentes, ce qui serait le plus
+## silencieux des défauts d'écran.
+##
+## Les deux manques viennent du domaine et ne sont **pas** recalculés ici. Celui des bras
+## surtout : il se pose à la demande totale du village et non aux bras que le plan laisse
+## libres, si bien qu'une soustraction faite dans ce fichier serait plus permissive que la
+## règle, et inviterait à un geste que `open_site()` refuserait.
+##
+## Un run fini n'a pas de fiche : `RunOrchestrator` refuse tout dessus, et une vue qui invite
+## à un geste doit demander si le geste est possible.
+func _show_card(city: CitySnapshot) -> void:
+	if _state().is_over():
+		_card.show_nothing("Run terminé")
+		return
+	var data := _ghost_building()
+	if data == null:
+		_card.show_nothing("Aucun bâtiment choisi")
+		return
+	_card.show_building(data, _turns, _state().ledger().shortfall(data.cost),
+		Staffing.hands_short(city, _state().people().headcount(), data.workers))
+
+## Redessine le bâti, endormis compris.
+##
+## **Un seul chemin pour les trois gestes qui changent la ville**, et c'est ce qui garantit
+## que le sommeil se remontre : ouvrir un chantier peut endormir le bâtiment d'à côté aussi
+## sûrement qu'une famine, et trois appels séparés auraient été trois occasions d'oublier la
+## liste. Un oubli se lirait comme une couleur qui ne change pas, ce que rien ne signale.
+func _redraw_city() -> void:
+	_renderer.rebuild(_state().city(), [], _state().staffing().asleep())
+
 # --- le rapport --------------------------------------------------------------
 
 func _report() -> String:
 	var lines := PackedStringArray()
 	lines.append(_header_line())
 	lines.append("")
-	lines.append(_population_line())
 	lines.append(_sites_block())
 	lines.append("")
 	lines.append(_catalogue_block())
@@ -300,7 +377,10 @@ func _header_line() -> String:
 	var state := _state()
 	var size := _grid.size()
 	if state.is_over():
-		return "Run — seed %d, %d x %d   %s" % [SEED, size.x, size.y, _verdict_line()]
+		# Le verdict passe à la ligne : d'un seul tenant il porterait le rapport à cent
+		# vingt caractères, donc jusque sous les panneaux de droite.
+		return "Run — seed %d, %d x %d\n%s\n%s" % [SEED, size.x, size.y, _verdict_head(),
+			_verdict_terms()]
 	# Une vue qui invite à un geste doit demander si le geste est possible : pendant une
 	# transition il ne l'est pas, et l'écran doit le dire plutôt que d'avaler les clics en
 	# silence. C'est la règle que `I2b` a payée sur une main affichée à pleine encre dans
@@ -311,25 +391,26 @@ func _header_line() -> String:
 	return "Run — seed %d, %d x %d   tour %d/%d, %s" % [
 		SEED, size.x, size.y, state.turn(), state.balance().run.turns, stage]
 
-## Le verdict, ses quatre termes et leur somme.
-##
-## Les termes sont affichés à côté du total et non à sa place : un écran de fin qui
-## n'annoncerait qu'un nombre ne dirait pas ce qui l'a fait.
-func _verdict_line() -> String:
+## Le verdict et sa somme.
+func _verdict_head() -> String:
 	var outcome := _state().outcome()
 	var issue := "VICTOIRE" if outcome.is_victory() else "DÉFAITE (%s)" % outcome.cause()
-	return "%s au tour %d — %d points   [%d ressources, %d bâtiment(s), %d habitant(s), %d PV de Cœur]" % [
-		issue, outcome.turn(), outcome.score(), outcome.resources(), outcome.buildings(),
-		outcome.inhabitants(), outcome.heart_hit_points()]
+	return "%s au tour %d — %d points" % [issue, outcome.turn(), outcome.score()]
 
-func _population_line() -> String:
-	var people := _state().people()
-	var plan := _state().staffing()
-	var asleep := ""
-	if plan.has_sleepers():
-		asleep = "   endormis : %s" % _cells(plan.asleep())
-	return "Population %d/%d places   %d immobilisé(s), %d disponible(s)%s" % [
-		people.headcount(), people.places(), plan.committed(), plan.available(), asleep]
+## Les quatre termes du score.
+##
+## Ils sont affichés à côté du total et non à sa place : un écran de fin qui n'annoncerait
+## qu'un nombre ne dirait pas ce qui l'a fait.
+func _verdict_terms() -> String:
+	var outcome := _state().outcome()
+	return "  [%d ressources, %d bâtiment(s), %d habitant(s), %d PV de Cœur]" % [
+		outcome.resources(), outcome.buildings(), outcome.inhabitants(),
+		outcome.heart_hit_points()]
+
+## Le verdict entier sur une ligne, pour la chronique — qui écrit sur la sortie standard,
+## où aucune largeur ne contraint.
+func _verdict_line() -> String:
+	return "%s %s" % [_verdict_head(), _verdict_terms()]
 
 func _sites_block() -> String:
 	var state := _state()
@@ -344,28 +425,75 @@ func _sites_block() -> String:
 			hidden += 1
 			continue
 		listed += 1
-		lines.append("    %-16s %s   %d/%d tour(s)" % [building.data().id,
+		lines.append("    %-18s %s   %d/%d tour(s)" % [building.data().label,
 			building.anchor(), building.progress(), building.data().site_turns])
 	if hidden > 0:
 		lines.append("    … et %d autre(s)" % hidden)
+	lines.append(_sleep_line())
 	return "\n".join(lines)
 
-## Le coût d'un bâtiment **avant** qu'on le pose, bras compris.
+## Ce qui dort, par **nature** de bâtiment.
 ##
-## `DESIGN.md` 3.4 en fait un argument de design et non du confort : « le coût en
-## main-d'œuvre d'un bâtiment devient une ligne de sa fiche, lisible avant de le poser,
-## exactement comme son coût en bois ». La vraie fiche est `N2` ; cette table est ce qui la
-## remplace en attendant, et elle porte déjà les mêmes chiffres.
+## Il est ici et non dans `PopulationBar` parce que ce n'est pas de la même nature que ce
+## qu'elle montre : elle tient un compteur — tant de bras pris, tant de libres, tant de places
+## —, alors qu'une liste d'endormis nomme des choses posées sur la carte. C'est aussi
+## pourquoi le vrai « lesquels ? » est sur le plateau, qui les éteint en couleur : une ligne de
+## texte peut dire *combien* et *de quel genre*, elle ne peut pas désigner une case.
+##
+## Par nature et non par ancre, et c'est la règle que `I2` a laissée au projet : un joueur
+## corrige « cette ferme dort, il me manque un toit », pas « (17, 12) dort ». Les endormis
+## sont debout, donc les chercher dans la ville est sûr — l'inverse du piège de `I2`, qui
+## portait sur des morts qu'un rapport retire avant de le rendre.
+##
+## L'ordre est celui de pose, donc celui dans lequel le village s'est éteint : la première
+## nature nommée est la plus ancienne à avoir cédé, ce qui est l'information la plus lourde de
+## la ligne. Un tri alphabétique l'aurait perdue.
+func _sleep_line() -> String:
+	var asleep := _state().staffing().asleep()
+	if asleep.is_empty():
+		return "Aucun bâtiment en sommeil."
+	var counts: Dictionary[String, int] = {}
+	for anchor in asleep:
+		var building := _state().city().building_at(anchor)
+		# Une ancre que la ville ne porte plus : impossible sur un plan fraîchement résolu,
+		# et pas une raison de faire tomber un rapport si ça arrivait un jour.
+		var kind := "?" if building == null else building.data().label
+		counts[kind] = counts.get(kind, 0) + 1
+	var parts := PackedStringArray()
+	var hidden := 0
+	for kind in counts:
+		if parts.size() >= LISTED:
+			hidden += counts[kind]
+			continue
+		parts.append("%d %s" % [counts[kind], kind])
+	var text := "En sommeil : %s" % ", ".join(parts)
+	if hidden > 0:
+		text += " (+%d)" % hidden
+	return text
+
+## Le raccourci clavier de chaque bâtiment, et **rien d'autre**.
+##
+## `N2` lui retire ses trois colonnes de chiffres — coût, bras, chantier —, qui sont
+## désormais la fiche du bâtiment sélectionné. Les laisser ici en aurait fait un doublon, et
+## un doublon qui ment la moitié du temps : la fiche sait ce que la réserve ne couvre pas,
+## une table de catalogue ne le sait pas. `DESIGN.md` 3.4 demandait d'ailleurs une **fiche**,
+## et cette table était ce qui la remplaçait en attendant.
+##
+## Les entrées sont de largeur fixe : les crochets de la sélection ne doivent pas décaler
+## leurs voisines à chaque touche.
 func _catalogue_block() -> String:
 	var lines := PackedStringArray()
 	lines.append("Bâtiments")
+	var row := PackedStringArray()
 	for index in _catalogue.size():
-		var data := _catalogue[index]
-		var mark := ">" if index == _selected else " "
-		var turns := _orientation(_turns) if index == _selected else ""
-		lines.append("  %s %d  %-16s %-22s %d bras, %d tour(s) de chantier  %s" % [
-			mark, index + 1, data.id, _palette.bundle_text(data.cost), data.workers,
-			data.site_turns, turns])
+		var entry := "%d %s" % [index + 1, _catalogue[index].label]
+		var marked := "[%s]" % entry if index == _selected else " %s" % entry
+		row.append(marked.rpad(CATALOGUE_WIDTH))
+		if row.size() == CATALOGUE_COLUMNS:
+			lines.append("  %s" % "".join(row))
+			row = PackedStringArray()
+	if not row.is_empty():
+		lines.append("  %s" % "".join(row))
 	return "\n".join(lines)
 
 ## Ce que le dernier tour a fait. Six lignes au plus, et chacune est un **fait du tour** —
@@ -418,7 +546,7 @@ func _hovered_site() -> String:
 		return ""
 	var stage := "achevé" if building.is_complete() \
 		else "chantier %d/%d" % [building.progress(), building.data().site_turns]
-	return "   |   %s : %s" % [building.data().id, stage]
+	return "   |   %s : %s" % [building.data().label, stage]
 
 # --- la chronique ------------------------------------------------------------
 
@@ -488,9 +616,19 @@ func _place_first_accepted(id: StringName) -> bool:
 	for y in size.y:
 		for x in size.x:
 			if RunManager.build(id, Vector2i(x, y)).is_ok():
-				_renderer.rebuild(_state().city())
+				_redraw_city()
 				return true
 	return false
+
+## Choisit le n-ième bâtiment du catalogue, numéroté comme au clavier. 0 ne touche à rien.
+##
+## Un rang hors catalogue est ignoré plutôt que refusé : une capture doit montrer quelque
+## chose plutôt qu'échouer sur un chiffre, comme `--shot-hover` se replie sur le centre de la
+## carte devant une virgule mal placée.
+func _select(rank: int) -> void:
+	if rank <= 0 or rank > _catalogue.size():
+		return
+	_selected = rank - 1
 
 ## Fonde sur cette cellule, en passant par la porte que le clic emprunte.
 func _place_at(cell: Vector2i) -> void:
@@ -514,14 +652,21 @@ func _capture_if_asked() -> void:
 	# survol tomberait hors carte et la capture ne montrerait aucun fantôme.
 	# La fondation prend la case que le run propose lui-même : `--shot-hover` désigne la
 	# cellule que le CURSEUR montrera, et lui faire aussi choisir le Cœur donnerait deux
-	# sens au même drapeau.
-	_place_at(_state().suggested_heart_anchor())
+	# sens au même drapeau. `--shot-unfounded` la saute, ce qui est le seul moyen de
+	# photographier l'écran de fondation depuis que `N2` lui donne une fiche à lui.
+	if not DevShot.has_flag(DevShot.SHOT_UNFOUNDED_FLAG):
+		_place_at(_state().suggested_heart_anchor())
 	for _turn in DevShot.argument(DevShot.SHOT_PASSES_FLAG).to_int():
-		if _state().is_over():
+		if _state().is_over() or _state().awaits_its_heart():
 			break
 		_open_what_we_can()
 		_pass_turn()
+	# Le curseur cesse de piocher sous la souris **ici** et non dans `_place_at()` : celle-ci
+	# ne passe pas quand on capture l'écran de fondation, et le survol retombait alors sur la
+	# position réelle de la souris — (0, 0), donc hors carte, donc pas de fantôme du tout.
+	_world.cursor().input_enabled = false
 	_world.cursor().hover_cell(DevShot.hover_cell(_grid.size() / 2))
+	_select(DevShot.argument(DevShot.SHOT_SELECT_FLAG).to_int())
 	_turns = DevShot.argument(DevShot.SHOT_ROTATE_FLAG).to_int()
 	var turns := DevShot.argument(DevShot.SHOT_TURNS_FLAG).to_int()
 	if turns != 0:
@@ -542,12 +687,7 @@ func _capture_if_asked() -> void:
 		% [camera.size, get_viewport().get_visible_rect().size])
 	print("[run_harness] %s" % _probe_the_sun())
 	print("[run_harness] %s" % _probe_the_light())
-	# Les deux vues du HUD disent où elles sont, en coordonnées de mise en page et non en
-	# pixels d'image : `P1b` a payé une heure pour apprendre que sonder un PNG rend un
-	# nombre dans le mauvais repère, le viewport logique étant plus petit que la fenêtre.
-	print("[run_harness] rapport : haut %.0f, bas %.0f   barre : haut %.0f" % [
-		_label.global_position.y, _label.global_position.y + _label.size.y,
-		_bar.global_position.y])
+	print("[run_harness] %s" % _probe_the_layout())
 	print("[run_harness] %s" % _hover_line())
 	var error := get_viewport().get_texture().get_image().save_png(path)
 	print("[run_harness] capture vers %s : %s" % [path, error_string(error)])
@@ -558,10 +698,23 @@ func _capture_if_asked() -> void:
 func _state() -> RunState:
 	return RunManager.state()
 
-## Tous les bâtiments de data/, triés par identifiant.
+## Tous les bâtiments de data/, triés par identifiant, **moins le Cœur**.
+##
+## Il en sort à `N2`, et c'est la règle de `I2b` appliquée à une liste : une vue qui invite à
+## un geste doit demander si le geste est possible. `open_site()` refuse le bâtiment
+## d'ouverture par principe — le Cœur se **fonde**, il ne se bâtit ni ne se démolit *(cf.
+## `DESIGN.md` 4.2)* —, donc une touche numérotée pour lui ne pouvait mener qu'à un refus.
+## `I3` avait corrigé le domaine, qui acceptait d'en ouvrir un second ; ce jalon corrige
+## l'écran, qui le proposait encore.
+##
+## Sa fiche reste atteignable, et au seul moment où elle veut dire quelque chose : tant que
+## le run attend son Cœur, c'est lui que le fantôme dessine et lui que la fiche décrit.
 func _known_buildings() -> Array[BuildingData]:
+	var opener := _state().balance().run.starting_building
 	var buildings: Array[BuildingData] = []
 	for id in GameDatabase.list_building_ids():
+		if id == opener:
+			continue
 		buildings.append(GameDatabase.get_building(id))
 	return buildings
 
@@ -603,10 +756,11 @@ func _orientation(turns: int) -> String:
 ## valeur d'avant. Un `MarginContainer` plein écran dont l'enfant porte `SIZE_SHRINK_BEGIN`
 ## ou `SIZE_SHRINK_END` ne se trompe sur aucun des deux, ni à la dixième mise à jour.
 ##
-## Les deux vues sont dans des coins **opposés** et non empilées : `W2` demande que deux vues
-## qui grandissent l'une vers l'autre vivent dans le même conteneur, et c'est justement
-## pourquoi celles-ci n'y sont pas — le rapport grandit vers le bas depuis le haut-gauche, la
-## barre est de hauteur fixe en bas-droite, et rien ne les fait se rencontrer.
+## Le rapport et la colonne sont dans des coins **opposés** et non empilés : `W2` demande que
+## deux vues qui grandissent l'une vers l'autre vivent dans le même conteneur, et c'est
+## justement pourquoi celles-ci n'y sont pas — le rapport grandit vers le bas depuis le
+## haut-gauche, la colonne vers le haut depuis le bas-droite, et rien ne les fait se
+## rencontrer. La sonde de mise en page le vérifie en pixels plutôt qu'on ne l'espère.
 func _corner(view: Control, horizontal: Control.SizeFlags,
 		vertical: Control.SizeFlags) -> MarginContainer:
 	var slot := MarginContainer.new()
@@ -619,6 +773,28 @@ func _corner(view: Control, horizontal: Control.SizeFlags,
 	view.size_flags_vertical = vertical
 	slot.add_child(view)
 	return slot
+
+## Les trois panneaux de droite, empilés du plus variable au plus stable.
+##
+## **Ils sont dans le même conteneur**, ce que `W2` exige de deux vues qui grandissent l'une
+## vers l'autre : posées dans des coins voisins elles tiennent tant que rien n'est chargé, et
+## se recouvrent à la première partie qui l'est. Empilées, elles se poussent.
+##
+## **L'ordre et l'ancre vont ensemble**, et c'est la règle de `P1a` : dans une pile, l'ancre
+## se met du côté de la vue la plus stable, et le mouvement se paie par la plus variable. La
+## réserve est de hauteur fixe, donc elle est en bas et la colonne y est ancrée ; la fiche
+## change de taille avec le bâtiment choisi, donc elle est en haut et c'est elle qui bouge.
+## L'inverse aurait fait sauter la barre de réserve à chaque touche du clavier.
+func _make_column() -> VBoxContainer:
+	_column = HudStyle.column(PANEL_GAP)
+	_column.name = "RightColumn"
+	_card = BuildingCard.create(_palette)
+	_people = PopulationBar.create()
+	_bar = ResourceBar.create(_palette)
+	_column.add_child(_card)
+	_column.add_child(_people)
+	_column.add_child(_bar)
+	return _column
 
 ## Sonde du cycle solaire : le soleil repart-il **à chaque** tour ?
 ##
@@ -654,6 +830,45 @@ func _probe_the_sun() -> String:
 		quarters.append("verrou %s" % ("levé" if not _world.is_in_transition() else "COINCÉ"))
 		days.append("[%s]" % ", ".join(quarters))
 	return "soleil : deux journées jouées d'affilée, %s" % " puis ".join(days)
+
+## Sonde de mise en page : les deux blocs du HUD tiennent-ils sans se marcher dessus ?
+##
+## **Ce que cette ligne doit montrer**, et c'est ce qu'aucun coup d'œil sur une capture ne
+## tranche : que le rapport de gauche et la colonne de droite ne se recouvrent pas, et
+## qu'aucun des deux ne sort de l'écran. Les deux défauts se manifestent **le plus tard
+## possible** — au village le plus chargé, à la fiche la plus longue, au run le plus long —,
+## donc justement pas sur l'image qu'on regarde en écrivant le jalon.
+##
+## Elle a payé son écriture le jour même : au **premier** tour, la dernière ligne des touches
+## passait sous la fiche, qui la coupait net. Un texte tronqué se lit comme une phrase qui
+## s'arrête, pas comme un défaut, et les captures du jalon étaient prises plus tard dans le
+## run — où le rapport, plus court, ne touchait rien.
+##
+## La séparation qu'elle contrôle est **horizontale** et c'est délibéré : la hauteur du
+## rapport suit la partie, sa largeur non. Compter sur l'écart vertical revenait à parier que
+## le village ne porterait jamais six chantiers.
+##
+## Elle rend un chiffre là où `P1b` avait passé une heure à en chercher un dans un PNG :
+## `project.godot` est en `stretch/mode = "canvas_items"`, donc la mise en page raisonne dans
+## un viewport logique pendant que l'image sort à la taille de la fenêtre. Un recouvrement
+## sondé sur des pixels d'image est dans le mauvais repère ; demandé aux `Control`, il est
+## dans le bon.
+func _probe_the_layout() -> String:
+	var view := Rect2(Vector2.ZERO, get_viewport().get_visible_rect().size)
+	var report := Rect2(_label.global_position, _label.size)
+	var column := Rect2(_column.global_position, _column.size)
+	var overlap := report.intersection(column)
+	return "mise en page : viewport %.0fx%.0f, rapport %s%s, colonne %s%s, recouvrement %s" % [
+		view.size.x, view.size.y,
+		_box(report), "" if view.encloses(report) else " HORS ÉCRAN",
+		_box(column), "" if view.encloses(column) else " HORS ÉCRAN",
+		"%.0f x %.0f px" % [overlap.size.x, overlap.size.y] if overlap.has_area()
+			else "aucun"]
+
+## Un rectangle de mise en page, coin haut-gauche vers coin bas-droit.
+func _box(rect: Rect2) -> String:
+	return "(%.0f,%.0f)→(%.0f,%.0f)" % [rect.position.x, rect.position.y,
+		rect.end.x, rect.end.y]
 
 ## Pas d'échantillonnage de la course, pour la sonde de régularité.
 const LIGHT_SAMPLES := 72
