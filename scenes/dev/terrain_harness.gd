@@ -45,6 +45,7 @@ var _metrics: TerrainMetrics
 var _world: DevWorld
 var _label: Label
 var _grid: HeightGrid
+var _audit: MapReport
 var _report_body: String
 var _seed := FIRST_SEED
 
@@ -78,8 +79,17 @@ func _unhandled_input(event: InputEvent) -> void:
 ## Montre cette grille : le plateau la redessine, le harnais réécrit son rapport.
 func _show(grid: HeightGrid) -> void:
 	_grid = grid
+	_audit = _inspect(grid)
 	_world.show_grid(grid)
 	_publish(grid)
+
+## Ce que l'audit dit de cette carte. Gardé, parce que **deux lecteurs en ont besoin** : le
+## rapport l'imprime, et la capture y prend la case à désigner. Le rejouer pour la capture
+## aurait été une seconde mesure à tenir d'accord avec la première.
+func _inspect(grid: HeightGrid) -> MapReport:
+	var params := _params()
+	return MapAudit.inspect(grid.to_query(), TerrainGen.centre_of(grid.size()),
+		params.max_climb, params.min_plateau_cells)
 
 func _generate(new_seed: int) -> HeightGrid:
 	_seed = new_seed
@@ -92,7 +102,7 @@ func _generate(new_seed: int) -> HeightGrid:
 ## bruit, la colline, la clairière — et un enum exclusif les empêchait justement de se
 ## combiner. Ce que ce drapeau nomme est donc un **jeu de réglages**, écrit ici parce que
 ## c'est un outil d'exploration : le jour où l'on aura choisi, il ne restera qu'un `.tres`.
-const VARIANTS: Array[String] = ["raw", "dome", "hill", "clearing", "ridges", "crown"]
+const VARIANTS: Array[String] = ["raw", "dome", "ridges", "peak", "crest"]
 
 ## Les réglages de `data/balance/`, éventuellement forcés sur une autre technique.
 ##
@@ -111,31 +121,33 @@ func _params() -> TerrainGenBalance:
 	if asked.is_empty() or not VARIANTS.has(asked):
 		return params
 	var forced := params.duplicate() as TerrainGenBalance
-	# `raw` est le témoin : aucune règle du tout. Les autres allument un axe à la fois, puis
-	# les combinent — c'est `crown` qui porte la question du jour, des crêtes ET une colline.
+	# `raw` est le témoin : aucune règle du tout. `ridges` est ce que `data/` porte, gardé sous
+	# son nom parce que les captures se comparent par ce mot. Les deux derniers posent la même
+	# question sous deux formes — jusqu'où peut-on marquer la colline sans perdre autre chose.
 	match asked:
 		"raw":
 			forced.relief = TerrainGenBalance.Relief.FRACTAL
 			forced.dome_rise = 0.0
-			forced.clearing_flatten = 0.0
-			forced.clearing_calm = 1.0
 		"dome":
-			forced.relief = TerrainGenBalance.Relief.FRACTAL
-			forced.clearing_flatten = 0.0
-			forced.clearing_calm = 1.0
-		"hill":
-			forced.relief = TerrainGenBalance.Relief.FRACTAL
-			forced.dome_rise = params.dome_rise * 1.8
-			forced.clearing_flatten = 0.0
-			forced.clearing_calm = 1.0
-		"clearing":
 			forced.relief = TerrainGenBalance.Relief.FRACTAL
 		"ridges":
 			forced.relief = TerrainGenBalance.Relief.RIDGED
-			forced.clearing_flatten = 0.0
-			forced.clearing_calm = 1.0
-		"crown":
+		# Une colline forte **et large**. Forte et étroite noie la carte : la colline prend une
+		# part de l'amplitude, donc au-delà de sa portée il ne reste presque rien au bruit, et
+		# tout le pourtour passe sous la nappe. Trois enjambées différentes rendaient la même
+		# revue au chiffre près — c'est ce qui a désigné l'île plutôt que la marche.
+		"peak":
 			forced.relief = TerrainGenBalance.Relief.RIDGED
+			forced.dome_rise = params.dome_rise * 1.5
+			forced.dome_radius = 22
+		# La même, en donnant à la colline des crans **en plus** au lieu de les prendre au
+		# bruit. Le relief y gagne, les lacs y disparaissent : relever le toit relève tout.
+		"crest":
+			forced.relief = TerrainGenBalance.Relief.RIDGED
+			forced.max_height = 15
+			forced.dome_rise = 7.0
+			forced.dome_radius = 22
+			forced.forest_max_height = 12
 	return forced
 
 ## Le nom de la variante en cours, pour les rapports. Une carte qu'on regarde doit dire d'où
@@ -156,23 +168,29 @@ func _report(grid: HeightGrid) -> String:
 		_variant_name(), params.min_height, params.max_height, params.water_level,
 		params.max_climb, params.dome_rise, params.clearing_flatten])
 	lines.append("")
-	lines.append(_audit_block(grid, params))
+	lines.append(_audit_block(params))
 	lines.append("")
 	lines.append(_terrain_tally(grid))
 	lines.append("")
 	lines.append(_height_tally(grid))
 	return "\n".join(lines)
 
-## Ce que l'audit dit de cette carte, et les cols qu'il a trouvés.
+## Ce que l'audit dit de cette carte : où le village s'installe, et les cols qu'il a trouvés.
+##
+## **La première ligne est celle du jalon.** Le site est un résultat depuis qu'on a cessé de
+## fonder au centre, donc il se lit à côté du centre qu'il vise — deux cases côte à côte, et
+## l'écart entre elles est ce que `max_site_drift` borne. La capture pose le curseur dessus,
+## si bien que le chiffre et l'image désignent la même case.
 ##
 ## Les entrées sont nommées en clair : c'est la seule ligne de tout le projet qui désigne un
 ## **col**, et le mot n'a de sens qu'attaché à des cases. Une carte s'y relit — on va voir
 ## si ces cases-là sont bien les rampes qu'on voit à l'écran.
-func _audit_block(grid: HeightGrid, params: TerrainGenBalance) -> String:
-	var report := MapAudit.inspect(grid.to_query(),
-		TerrainGen.centre_of(grid.size()), params.max_climb)
+func _audit_block(params: TerrainGenBalance) -> String:
+	var report := _audit
 	var lines := PackedStringArray()
 	lines.append("Audit")
+	lines.append("  village  %s   à %d case(s) du centre %s"
+		% [report.site(), report.drift(), TerrainGen.centre_of(_grid.size())])
 	lines.append("  plateau  %4d cases dont %d bâtissables, %d gisement(s)"
 		% [report.shelf(), report.plateau(), report.deposits()])
 	lines.append("  accès    %4d   %s" % [report.accesses(), report.entries()])
@@ -268,6 +286,7 @@ func _write_survey() -> void:
 	print("  mesurée après rejet serait bonne par construction, donc sans intérêt.")
 
 	var accesses: Dictionary[int, int] = {}
+	var drifts: Array[int] = []
 	var plateaus: Array[int] = []
 	var pads: Array[int] = []
 	var deposits: Array[int] = []
@@ -277,8 +296,10 @@ func _write_survey() -> void:
 	for index in SURVEY_SEEDS:
 		var run_seed := FIRST_SEED + index
 		var grid := TerrainGen.draft(TerrainGen.seed_for(run_seed, 0), size, params)
-		var report := MapAudit.inspect(grid.to_query(), centre, params.max_climb)
+		var report := MapAudit.inspect(grid.to_query(), centre, params.max_climb,
+			params.min_plateau_cells)
 		accesses[report.accesses()] = accesses.get(report.accesses(), 0) + 1
+		drifts.append(report.drift())
 		plateaus.append(report.plateau())
 		pads.append(report.pads())
 		deposits.append(report.deposits())
@@ -291,6 +312,8 @@ func _write_survey() -> void:
 			refusals[reason] = refusals.get(reason, 0) + 1
 
 	print("  accès      %s" % _access_histogram(accesses))
+	print("  dérive     %s cases entre le centre et le village (borne %d)"
+		% [_spread(drifts), params.max_site_drift])
 	print("  plateau    %s cases bâtissables" % _spread(plateaus))
 	print("  assises    %s emplacements 2x2" % _spread(pads))
 	print("  gisements  %s sur le plateau" % _spread(deposits))
@@ -397,8 +420,12 @@ func _capture_if_asked() -> void:
 	# survol réel tomberait hors de la carte. On coupe l'input du curseur et on désigne
 	# une cellule à la main : sans ça, aucune capture ne montrerait la surbrillance, et
 	# c'est justement ce qu'on cherche à regarder.
+	#
+	# La case désignée par défaut est **le site que l'audit a trouvé**, et non plus le milieu
+	# de la carte. C'est la seule façon de vérifier en image ce que le jalon décide : le
+	# curseur doit tomber sur un replat crédible, pas au sommet d'un pic ni dans un lac.
 	_world.cursor().input_enabled = false
-	_world.cursor().hover_cell(DevShot.hover_cell(_grid.size() / 2))
+	_world.cursor().hover_cell(DevShot.hover_cell(_audit.site()))
 	var turns := DevShot.argument(DevShot.SHOT_TURNS_FLAG).to_int()
 	if turns != 0:
 		_world.rig().rotate_steps(turns)
