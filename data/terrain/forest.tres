@@ -1,13 +1,15 @@
-[gd_resource type="Resource" script_class="TerrainData" format=3]
+[gd_resource type="Resource" script_class="TerrainData" format=3 uid="uid://bo8m7oibbrf0x"]
 
-[ext_resource type="Script" path="res://src/schema/terrain_data.gd" id="1_terrain_data"]
-[ext_resource type="Script" path="res://src/schema/terrain_decor.gd" id="2_terrain_decor"]
+[ext_resource type="Script" uid="uid://dairjepglv8jv" path="res://src/schema/terrain_data.gd" id="1_terrain_data"]
+[ext_resource type="Script" uid="uid://bd46h0aeantmo" path="res://src/schema/terrain_decor.gd" id="2_terrain_decor"]
+[ext_resource type="ArrayMesh" uid="uid://dr37yu0udqhtg" path="res://assets/KayKit_Medieval_Hexagon_Pack_1.0_FREE/Assets/obj/decoration/nature/trees_A_medium.obj" id="9_model"]
 
 [sub_resource type="Resource" id="Resource_forest_decor"]
 script = ExtResource("2_terrain_decor")
 shape = 1
+model = ExtResource("9_model")
 color = Color(0.15, 0.33, 0.19, 1)
-width = 0.5
+width = 0.9
 height = 0.7
 variation = 0.3
 

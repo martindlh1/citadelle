@@ -44,17 +44,31 @@ enum Shape {
 ## tests/schema/ épingle l'égalité des deux, pour que la copie ne dérive pas.
 const UNSET_COLOR := Color(0.0, 0.0, 0.0, 1.0)
 
-## Primitive posée sur la cellule.
+## Primitive posée sur la cellule. Ignorée quand un modèle est là.
 @export var shape: Shape
+
+## Le modèle dessiné, ou **null** pour la primitive.
+##
+## Se choisit dans l'inspecteur, comme celui d'un bâtiment : n'importe quel `.obj` de `assets/`
+## s'importe en `Mesh`. Le docstring de ce fichier annonçait ce moment — « le jour où de vraies
+## meshes arrivent, c'est ce champ qui devient une référence de Mesh » —, à ceci près que le
+## vocabulaire de formes **ne disparaît pas** : il reste le repli d'un terrain décoré qui
+## n'aurait pas encore d'asset, et il ne coûte rien à garder.
+##
+## Quand il est là, `width` devient l'envergure du modèle en cases et `height` n'est plus lue :
+## un asset garde ses proportions, donc une seule dimension suffit à le poser. Voir `ModelFit`.
+@export var model: Mesh
 
 ## Couleur de la primitive. Elle vaut pour toute la passe : une décoration ne varie
 ## pas de teinte d'une cellule à l'autre.
 @export var color: Color
 
 ## Largeur au sol, en fractions de tuile. 1.0 remplit la cellule d'un bord à l'autre.
+## Sur un modèle, c'est son envergure : il est mis à l'échelle pour couvrir cette largeur.
 @export_range(0.0, 2.0, 0.05) var width: float
 
-## Élévation au-dessus de la face supérieure, en fractions de tuile.
+## Élévation au-dessus de la face supérieure, en fractions de tuile. **Ignorée sur un modèle**,
+## qui garde ses proportions et se pose par sa seule largeur.
 @export_range(0.0, 4.0, 0.05) var height: float
 
 ## Irrégularité de la dispersion, de 0 à 1 : dérive du centre de la cellule et
@@ -68,7 +82,9 @@ const UNSET_COLOR := Color(0.0, 0.0, 0.0, 1.0)
 ## Champs non renseignés. Vide = décoration exploitable.
 func missing_fields() -> PackedStringArray:
 	var missing := PackedStringArray()
-	if shape == Shape.UNSET:
+	# La forme n'est réclamée que faute de modèle : les deux se remplacent, et exiger les deux
+	# obligerait à écrire une primitive que personne ne dessinera jamais.
+	if model == null and shape == Shape.UNSET:
 		missing.append("shape")
 	if color == UNSET_COLOR:
 		missing.append("color")

@@ -195,6 +195,25 @@ func test_a_building_with_a_coherent_rule_reports_nothing() -> void:
 func test_a_building_without_a_rule_does_not_produce() -> void:
 	assert_bool(_building(_l_shape()).produces()).is_false()
 
+## Le centre d'une empreinte de deux par deux tombe **entre** quatre cases : c'est le point sur
+## lequel un modèle se pose, et il n'a aucune raison d'être un entier. Un calcul parti de
+## l'ancre au lieu de la moyenne le décalerait d'une demi-case sur tous les bâtiments larges.
+func test_the_centre_of_a_square_falls_between_its_cells() -> void:
+	var square: Array[Vector2i] = [Vector2i.ZERO, Vector2i(1, 0), Vector2i(0, 1),
+		Vector2i(1, 1)]
+	assert_vector(_building(square).centre_at(Vector2i(4, 4))).is_equal(Vector2(4.5, 4.5))
+
+## Sur une seule case, il tombe sur elle : le cas dégénéré ne demande aucune exception.
+func test_the_centre_of_one_cell_is_that_cell() -> void:
+	var single: Array[Vector2i] = [Vector2i.ZERO]
+	assert_vector(_building(single).centre_at(Vector2i(3, 7))).is_equal(Vector2(3, 7))
+
+## Il suit l'orientation, puisqu'il est calculé sur les cellules déjà pivotées : un modèle
+## posé dessus tourne avec son empreinte au lieu de glisser à côté.
+func test_the_centre_follows_the_rotation() -> void:
+	var ell := _building(_l_shape())
+	assert_vector(ell.centre_at(Vector2i(5, 5), 1)) 		.is_not_equal(ell.centre_at(Vector2i(5, 5)))
+
 ## Une règle d'adjacence creuse remonte sous **son rang** et non sous son tag, et le cas le
 ## montre en oubliant justement le tag : « adjacency[].tag » ne désignerait aucune ligne du
 ## .tres, là où un indice en désigne toujours une.

@@ -71,10 +71,25 @@ func base_y(lowest_height: int) -> float:
 
 ## Centre d'une cellule dans le plan XZ, à y = 0.
 func cell_center_xz(cell: Vector2i) -> Vector3:
+	return spot_xz(Vector2(cell))
+
+## Le même point pour une position **fractionnaire** en cellules.
+##
+## Une empreinte de deux par deux a son centre entre quatre cases, et une silhouette s'y pose :
+## la position n'a donc aucune raison de tomber sur un entier. La formule est celle du dessus,
+## écrite une fois — deux conversions cellule vers monde à tenir d'accord finiraient par
+## décaler les bâtiments d'une demi-case sans que rien ne le dise.
+func spot_xz(at: Vector2) -> Vector3:
 	return Vector3(
-		(cell.x + 0.5) * _tile_size,
+		(at.x + 0.5) * _tile_size,
 		0.0,
-		(cell.y + 0.5) * _tile_size)
+		(at.y + 0.5) * _tile_size)
+
+## Le point de surface d'une position fractionnaire, à cette hauteur.
+func spot_surface(at: Vector2, height: int) -> Vector3:
+	var spot := spot_xz(at)
+	spot.y = surface_y(height)
+	return spot
 
 ## Centre de la face supérieure d'une cellule à cette hauteur : le point sur lequel
 ## un bâtiment se pose.

@@ -80,6 +80,15 @@ static func create(terrain: TerrainData, metrics: TerrainMetrics) -> TerrainDeco
 	renderer.multimesh = _make_multimesh(terrain.decor)
 	return renderer
 
+## La passe dessine-t-elle un modèle importé plutôt qu'une primitive ?
+##
+## Les deux se posent différemment — une primitive est centrée sur son origine, un asset est
+## debout dessus — et se mettent à l'échelle différemment : une primitive prend sa largeur et sa
+## hauteur, un modèle garde ses proportions. Un booléen lu une fois vaut mieux qu'un `if` répété
+## dans la boucle des mille cellules.
+func _draws_a_model() -> bool:
+	return _decor.model != null
+
 ## Repose les décorations de cette grille. Seules les cellules de CE terrain comptent ;
 ## les autres passes s'occupent des leurs.
 func rebuild(grid: HeightGrid) -> void:
@@ -88,6 +97,10 @@ func rebuild(grid: HeightGrid) -> void:
 	var cells := _cells_of_this_terrain(grid)
 	multimesh.instance_count = cells.size()
 	var tile := _metrics.tile_size()
+	var modelled := _draws_a_model()
+	# Un modèle se met à l'échelle par sa boîte englobante et garde ses proportions ; une
+	# primitive prend la largeur et la hauteur que la data lui donne. Voir ModelFit.
+	var uniform := ModelFit.span_scale(_decor.model, _decor.width, tile) if modelled else 0.0
 	var footprint := _decor.width * tile
 	var rise := _decor.height * tile
 	for index in cells.size():
@@ -97,12 +110,19 @@ func rebuild(grid: HeightGrid) -> void:
 		anchor.x += (_cell_noise(cell, GRAIN_DRIFT_X) - 0.5) * 2.0 * drift
 		anchor.z += (_cell_noise(cell, GRAIN_DRIFT_Z) - 0.5) * 2.0 * drift
 		var spread := 1.0 + (_cell_noise(cell, GRAIN_SIZE) - 0.5) * _decor.variation * MAX_SIZE_SPREAD
-		# Les trois primitives sont centrées sur leur origine : monter d'une
-		# demi-élévation pose leur BASE sur la face supérieure de la colonne, ce qui
-		# est l'invariant de TerrainMetrics vu depuis le dessus.
-		anchor.y += rise * spread * 0.5
 		var spin := Basis.from_euler(Vector3(0.0, _cell_noise(cell, GRAIN_SPIN) * TAU, 0.0))
 		var scaled := spin.scaled(Vector3(footprint, rise, footprint) * spread)
+		if modelled:
+			scaled = spin.scaled(Vector3.ONE * uniform * spread)
+			# Un asset est modélisé debout sur son origine : on remonte du bas de sa boîte
+			# plutôt que d'une demi-hauteur, et « tout près de zéro » n'est pas zéro — un
+			# modèle enfoncé d'un centimètre se lit comme un défaut de terrain.
+			anchor.y += ModelFit.ground_lift(_decor.model, uniform * spread)
+		else:
+			# Les primitives sont centrées sur leur origine : monter d'une demi-élévation
+			# pose leur BASE sur la face supérieure de la colonne, ce qui est l'invariant de
+			# TerrainMetrics vu depuis le dessus.
+			anchor.y += rise * spread * 0.5
 		multimesh.set_instance_transform(index, Transform3D(scaled, anchor))
 
 ## Cellules de la grille qui portent ce terrain, balayées en x puis en y. L'ordre est
@@ -136,7 +156,9 @@ static func _make_multimesh(decor: TerrainDecor) -> MultiMesh:
 	# Même ordre qu'à TerrainRenderer : le format du tampon se fige au premier
 	# instance_count non nul. Pas de use_colors ici — une passe est d'une seule teinte.
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
-	multimesh.mesh = _make_mesh(decor.shape)
+	# Le modèle tel quel quand il y en a un : c'est tout ce qui distingue une passe d'asset
+	# d'une passe de primitive, le reste de ce fichier ne fait pas la différence.
+	multimesh.mesh = decor.model if decor.model != null else _make_mesh(decor.shape)
 	return multimesh
 
 ## Primitive unitaire de cette forme, centrée sur son origine et tenant dans le cube
@@ -164,6 +186,11 @@ static func _make_mesh(shape: TerrainDecor.Shape) -> Mesh:
 	return null
 
 static func _make_material(decor: TerrainDecor) -> StandardMaterial3D:
+	# Un modèle garde **son** matériau : c'est l'atlas du pack qui lui donne ses couleurs, et
+	# le remplacer par une teinte plate reviendrait à repeindre l'asset en une seule couleur.
+	# `null` laisse le MultiMesh prendre celui de la mesh.
+	if decor.model != null:
+		return null
 	var material := StandardMaterial3D.new()
 	# Contrairement aux couleurs par instance de TerrainRenderer, albedo_color est
 	# déjà lu comme du sRGB par le moteur : rien à convertir à la main ici.

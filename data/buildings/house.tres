@@ -1,6 +1,7 @@
 [gd_resource type="Resource" script_class="BuildingData" format=3]
 
 [ext_resource type="Script" path="res://src/schema/building_data.gd" id="1_building_data"]
+[ext_resource type="Mesh" uid="uid://b6g7gqjxk6lyo" path="res://assets/KayKit_Medieval_Hexagon_Pack_1.0_FREE/Assets/obj/buildings/blue/building_home_A_blue.obj" id="9_model"]
 
 [resource]
 script = ExtResource("1_building_data")
@@ -16,3 +17,5 @@ cost = Dictionary[StringName, int]({
 housing = 4
 hit_points = 6
 reach = 4
+model = ExtResource("9_model")
+model_span = 0.9

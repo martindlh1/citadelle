@@ -83,6 +83,44 @@ const QUARTER_TURNS := 4
 ## commuterait sur un identifiant obligerait à toucher au GDScript à chaque ajout.
 @export var color: Color
 
+## Le modèle dessiné, ou **null** pour la boîte colorée d'avant.
+##
+## Se choisit dans l'inspecteur : n'importe quel `.obj` de `assets/` s'importe en `Mesh` et
+## apparaît dans le sélecteur. Changer l'allure d'un bâtiment est donc une édition de data, au
+## même titre que sa couleur — le renderer, lui, ne connaît toujours aucun bâtiment par son nom.
+##
+## **Nullable, et le repli n'est pas honteux.** Un bâtiment sans modèle retrouve la boîte par
+## cellule de `C1`, qui reste le seul rendu honnête d'une empreinte en L : un volume unique
+## couvrirait le trou de l'enveloppe et mentirait sur la forme. C'est aussi ce qui permet
+## d'ajouter un bâtiment et de le voir avant de lui avoir trouvé un asset.
+@export var model: Mesh
+
+## Combien de cases le modèle couvre en largeur.
+##
+## **Une envergure en cases et non un facteur d'échelle**, pour la raison exposée dans
+## `ModelFit` : les assets d'un pack arrivent à la taille de leur monde, pas de la nôtre, et un
+## facteur serait à retrouver asset par asset. Ce chiffre-ci parle du jeu — « la ferme couvre
+## deux cases de large » — et survit à un changement de pack.
+##
+## Rien ne l'oblige à valoir l'empreinte : un toit peut avancer sur la rue, et une cabane peut
+## se tenir au milieu de sa case sans la remplir. L'empreinte reste la seule vérité sur ce qu'un
+## bâtiment **occupe** ; ceci ne dit que ce qu'il **montre**.
+##
+## Réclamé quand un modèle est là, ignoré sinon : à zéro, l'asset serait invisible et l'on
+## chercherait longtemps pourquoi.
+@export_range(0.0, 8.0, 0.05) var model_span: float
+
+## Quarts de tour à appliquer au modèle **en plus** de l'orientation du bâtiment.
+##
+## Les assets d'un pack ne regardent pas tous dans la même direction, et rien n'oblige celle du
+## pack à être la nôtre. Ce champ recale un modèle une fois pour toutes, dans sa data, plutôt
+## que de faire tourner l'empreinte pour l'apparence — ce qui déplacerait ce que le bâtiment
+## occupe pour corriger ce qu'il montre.
+##
+## 0 est la valeur la plus fréquente et parfaitement légitime : la doctrine du zéro ne s'y
+## applique pas.
+@export_range(0, 3, 1) var model_turns: int
+
 ## Hauteur de la boîte, en **fractions de tuile** et non en unités de monde.
 ##
 ## C'est la leçon des décorations à T3 : régler tile_size doit redimensionner la carte
@@ -227,6 +265,22 @@ static func rotate_offset(offset: Vector2i, turns: int) -> Vector2i:
 		rotated = Vector2i(-rotated.y, rotated.x)
 	return rotated
 
+## Le centre de l'empreinte posée sur cette ancre, en cellules, décimales comprises.
+##
+## Une empreinte de deux par deux a son centre **entre** quatre cases : c'est le point sur
+## lequel un modèle se pose, et il n'a aucune raison de tomber sur une case. Sur une forme en L
+## il penche du côté du plein, ce qui est ce qu'on veut — un bâtiment se dessine autour de sa
+## masse, pas autour du coin de son enveloppe.
+##
+## Il est calculé sur les cellules **déjà pivotées**, donc il suit l'orientation sans qu'aucun
+## appelant ait à s'en occuper. Précondition : empreinte non vide.
+func centre_at(anchor: Vector2i, turns: int = 0) -> Vector2:
+	assert(not footprint.is_empty(), "empreinte vide sur %s" % id)
+	var sum := Vector2.ZERO
+	for cell in cells_at(anchor, turns):
+		sum += Vector2(cell)
+	return sum / float(footprint.size())
+
 ## Cellules absolues qu'une pose sur cette ancre couvrirait, dans cette orientation.
 ##
 ## L'ordre est celui de l'empreinte, donc identique d'un appel et d'un run à l'autre.
@@ -316,6 +370,11 @@ func missing_fields() -> PackedStringArray:
 		missing.append("reach")
 	missing.append_array(_economy_fields())
 	missing.append_array(_adjacency_fields())
+	# Réclamé seulement quand un modèle est là : c'est la même cohérence structurelle que le
+	# bloc de production nullable d'`E1b`, et elle vaut ici pour une raison très concrète —
+	# une envergure nulle rend l'asset invisible, ce qui ne ressemble à rien de nommable.
+	if model != null and model_span <= 0.0:
+		missing.append("model_span")
 	if footprint.is_empty():
 		missing.append("footprint")
 		return missing

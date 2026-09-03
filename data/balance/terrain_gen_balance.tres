@@ -1,17 +1,16 @@
-[gd_resource type="Resource" script_class="TerrainGenBalance" format=3]
+[gd_resource type="Resource" script_class="TerrainGenBalance" format=3 uid="uid://brsct3o7ysghg"]
 
-[ext_resource type="Script" path="res://src/schema/terrain_gen_balance.gd" id="1_terrain_gen_balance"]
+[ext_resource type="Script" uid="uid://disuqt3dyag1w" path="res://src/schema/terrain_gen_balance.gd" id="1_terrain_gen_balance"]
 [ext_resource type="Resource" path="res://data/terrain/plain.tres" id="2_plain"]
-[ext_resource type="Resource" path="res://data/terrain/forest.tres" id="3_forest"]
-[ext_resource type="Resource" path="res://data/terrain/stone.tres" id="4_stone"]
+[ext_resource type="Resource" uid="uid://bo8m7oibbrf0x" path="res://data/terrain/forest.tres" id="3_forest"]
+[ext_resource type="Resource" uid="uid://fdn4mkwjbxuq" path="res://data/terrain/stone.tres" id="4_stone"]
 [ext_resource type="Resource" path="res://data/terrain/water.tres" id="5_water"]
-[ext_resource type="Resource" path="res://data/terrain/rock.tres" id="6_rock"]
+[ext_resource type="Resource" uid="uid://c07rj1o7e106" path="res://data/terrain/rock.tres" id="6_rock"]
 
 [resource]
 script = ExtResource("1_terrain_gen_balance")
 map_size = Vector2i(32, 32)
 relief = 2
-min_height = 0
 max_height = 10
 water_level = 1
 max_climb = 2
@@ -22,7 +21,6 @@ detail_scale = 3.0
 dome_rise = 4.5
 dome_radius = 14
 clearing_radius = 6
-clearing_flatten = 0.0
 clearing_calm = 1.0
 min_lake_cells = 8
 decor_scale = 2.5

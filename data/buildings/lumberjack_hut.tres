@@ -2,13 +2,14 @@
 
 [ext_resource type="Script" uid="uid://dysje8h5rmo0g" path="res://src/schema/building_data.gd" id="1_building_data"]
 [ext_resource type="Script" uid="uid://yoavf4hf7jnu" path="res://src/schema/adjacency_rule.gd" id="3_adjacency_rule"]
+[ext_resource type="ArrayMesh" uid="uid://detqydvdwllwk" path="res://assets/KayKit_Medieval_Hexagon_Pack_1.0_FREE/Assets/obj/buildings/blue/building_lumbermill_blue.obj" id="9_model"]
 
 [sub_resource type="Resource" id="Resource_lumberjack_hut_adjacency_0"]
 script = ExtResource("3_adjacency_rule")
 tag = &"forest"
+mode = 1
 radius = 1
 resource = &"wood"
-mode = 1
 amount = 1
 
 [resource]
@@ -17,9 +18,11 @@ id = &"lumberjack_hut"
 label = "Camp de bûcheron"
 footprint = Array[Vector2i]([Vector2i(0, 0)])
 color = Color(0.55, 0.38, 0.24, 1)
+model = ExtResource("9_model")
+model_span = 1.0
 height = 0.6
 site_turns = 1
+reach = 2
 adjacency = Array[ExtResource("3_adjacency_rule")]([SubResource("Resource_lumberjack_hut_adjacency_0")])
 workers = 2
 hit_points = 6
-reach = 2

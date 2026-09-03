@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://src/schema/building_data.gd" id="1_building_data"]
 [ext_resource type="Script" path="res://src/schema/adjacency_rule.gd" id="3_adjacency_rule"]
+[ext_resource type="Mesh" uid="uid://bymnocn57oek3" path="res://assets/KayKit_Medieval_Hexagon_Pack_1.0_FREE/Assets/obj/buildings/blue/building_blacksmith_blue.obj" id="9_model"]
 
 [sub_resource type="Resource" id="Resource_quarry_adjacency_0"]
 script = ExtResource("3_adjacency_rule")
@@ -26,3 +27,5 @@ workers = 3
 hit_points = 8
 adjacency = Array[AdjacencyRule]([SubResource("Resource_quarry_adjacency_0")])
 reach = 2
+model = ExtResource("9_model")
+model_span = 1.0
