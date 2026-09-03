@@ -4,6 +4,113 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-09-03 — `V2` : la bataille en ticks, et une table qui dénonce son pilote
+
+**État : terminé.** Branche `feat/v2-battle`, tirée de `feat/v1-wave-path` — `V1` n'est pas
+fusionnée, et une bataille a besoin de son chemin. Les quatre commandes passent et **541 tests
+sont verts**, contre 516 à `V1`. Un harnais neuf, `--harness battle`, résout une bataille sans
+écran et imprime trois tables.
+
+### Le tick, et ce que l'ordre décide
+
+Quatre temps, ceux que `DESIGN.md` 3.5 énumère : les corps avancent, les défenses tirent, les
+traits volent, ce qui tombe à zéro meurt. L'ordre n'est pas indifférent et vaut d'être écrit :
+**bouger avant de viser** fait qu'une tour tire sur la case où le corps *est* et non sur celle
+qu'il vient de quitter ; **résoudre les traits après les tirs** donne à chacun au moins un tick
+de vol, donc une cadence qui se ressent au lieu d'un dégât instantané.
+
+Tout est en entiers. Un corps est *sur la case X avec un compteur vers la suivante*, jamais à une
+position fractionnaire — c'est la règle de 3.5, et c'est elle qui donne gratuitement la pause, la
+vitesse doublée, le saut de bataille et la chronique sans écran.
+
+### Deux corrections d'architecture
+
+**La patience a changé de propriétaire.** `V1` l'avait mise dans `WaveBalance` avec les prix du
+pas et de la montée, ce qui marchait tant qu'il n'existait qu'une sorte d'assaillant. 3.5 en fait
+pourtant un chiffre de la **créature**, et la différence porte : un bélier traverse un mur là où
+une meute le contourne, et c'est cette asymétrie qui donne un sens à une palissade contre l'un
+et pas contre l'autre. Le chemin reçoit donc deux sources de chiffres — l'échelle d'un côté, la
+créature de l'autre —, chacune ce qu'elle possède.
+
+*Le corriger à `V2` a coûté une signature et seize cas de test à relire. Le laisser aurait coûté
+la même chose plus tard, sur un fichier de plus.*
+
+**Et `BattleReport` n'est pas entré dans `contracts/`**, que `CLAUDE.md` lui annonçait
+nommément. Le critère n'est pas rempli : il va des Vagues à `domain/run/`, et `domain/run/` a le
+droit de tout lire — ce n'est pas un second système. C'est le **troisième** DTO prédit puis
+refusé par sa propre règle, après `ProductionReport` à `N1` et à `I3`, et la table de contrats
+est toujours à quatre lignes.
+
+La leçon est montée dans `CLAUDE.md` : **une prédiction n'est pas un critère.** Trois fois de
+suite, la bonne réponse a été d'attendre.
+
+### La table a dénoncé son pilote, deux fois
+
+C'est la doctrine de `F1` qui s'applique, et elle a payé deux fois dans la même heure.
+
+**Le comparatif de défense rendait trois colonnes identiques.** Sans défense, avec une tour,
+avec deux : les mêmes chiffres. La cause n'était ni dans le plateau ni dans le ciblage —
+`CityState.place()` ouvre un **chantier**, et la tour de guet dure trois tours. Elle arrivait
+sur le plateau inachevée, donc muette, par la même règle qui l'empêche de produire et d'étendre
+l'emprise. Le défaut n'était visible nulle part ailleurs : les cas de test posent des tours à
+`site_turns = 0`, et le domaine répondait correctement.
+
+**Puis la colonne restait plate pour une autre raison**, et c'est celle qui a fait entrer un
+chiffre dans le rapport. Une tour posée sur le chemin ne tuait toujours personne, et « zéro
+mort » se lit comme « la défense ne marche pas ». Elle avait tiré **trois fois**. Le rapport
+porte donc désormais les **tirs lâchés** : une table qui dit ce qu'on a *tenté* à côté de ce
+qu'on a *obtenu* distingue « la mécanique ne répond pas » de « les chiffres sont mauvais », et
+les deux ne se corrigent pas au même endroit.
+
+Et le chiffre a immédiatement servi : le comparatif d'emplacement rend 3 tirs au contact du
+chemin, 2 à portée, 0 hors de portée. C'est l'arbitrage central de 3.5 — *sur le chemin ou à
+côté* — devenu une colonne.
+
+### Deux cas de test qui ne prouvaient pas ce qu'ils annonçaient
+
+Même famille que ceux de `V1`, et il faut croire que c'est la famille de ce système.
+
+**La portée en Manhattan ne pouvait pas se montrer sur une bataille.** Le cas posait une tour à
+côté d'un chemin en ligne droite ; or à distance égale d'une **rangée**, Manhattan et les anneaux
+rendent le même chiffre, puisque la case la plus proche est toujours celle d'en face. Il fallait
+une géométrie nue pour séparer les deux métriques : le cas est parti dans un test de schéma, sur
+`DefenceBlock.covers()`, où un losange et un carré se distinguent en une ligne.
+
+**Et le surkill se produisait pour la mauvaise raison.** Deux tours à portée 4 tiraient bien
+ensemble, mais leurs traits mettaient huit ticks à arriver et le corps avait atteint le Cœur
+entre-temps : le tir était perdu, sans que rien de la règle voulue soit en cause. Rapprocher les
+tours au contact du chemin a rendu le cas honnête — un cas qui montre le surkill doit d'abord
+garantir que les deux traits **touchent**.
+
+### Ce que le jalon laisse ouvert
+
+**Les chiffres.** Contre six pillards, une tour de guet tire trois fois et ne tue personne :
+sa cadence de vingt ticks est plus longue que la fenêtre pendant laquelle un corps reste à sa
+portée. La mécanique répond, l'équilibrage non — et c'est `B1`, comme 3.5 le dit de tous ces
+nombres.
+
+*Un seul chiffre a été touché, et il vaut d'être dit : le pillard est passé de douze points de
+vie à six. Il avait été inventé sans référence, alors que la tour tient les siens de la table de
+4.1 — recaler l'assaillant sur la défense est la seule direction honnête. Régler la tour pour
+faire verdir ma table aurait été jouer pour la table.*
+
+### Prochain jalon
+
+**`V3`** — la bataille à l'écran. Elle interpolera entre deux états de ce même plateau :
+`Combatant.progress()` existe déjà pour ça et ne sert à rien d'autre. Et elle prendra le verrou
+d'animation de `I3b` — le seul, celui que `DevWorld` porte — parce qu'un clic pendant une
+bataille pose un bâtiment sur une ville que le joueur n'a pas encore vue.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien.** Aucune `.tscn` ni `project.godot` touché.
+
+- **Un harnais neuf** : `--harness battle`. `HARNESS` vaut toujours `&"run"`.
+- **Deux catégories de data neuves**, `data/enemies/` et `data/waves/`, que `GameDatabase`
+  indexe et **valide** au boot comme les quatre autres.
+
+---
+
 ## 2026-09-03 — `C3`, `C7`, les assets, `V1` : quatre jalons et une dette de journal
 
 **État : `C3` et `C7` terminés, les assets posés, `V1` terminé.** Branche `master`. Les quatre

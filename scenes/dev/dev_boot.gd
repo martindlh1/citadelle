@@ -38,6 +38,7 @@ const HARNESS_SCRIPTS: Dictionary[StringName, String] = {
 	&"terrain": "res://scenes/dev/terrain_harness.gd",
 	&"city": "res://scenes/dev/city_harness.gd",
 	&"run": "res://scenes/dev/run_harness.gd",
+	&"battle": "res://scenes/dev/battle_harness.gd",
 }
 
 ## Bascule plein écran / fenêtré, pour **tous** les harnais à la fois.

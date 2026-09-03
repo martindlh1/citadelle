@@ -1,7 +1,14 @@
 [gd_resource type="Resource" script_class="BuildingData" format=3]
 
 [ext_resource type="Script" path="res://src/schema/building_data.gd" id="1_building_data"]
+[ext_resource type="Script" path="res://src/schema/defence_block.gd" id="8_defence"]
 [ext_resource type="Mesh" uid="uid://c86jjdu4c1wju" path="res://assets/KayKit_Medieval_Hexagon_Pack_1.0_FREE/Assets/obj/buildings/blue/building_tower_A_blue.obj" id="9_model"]
+
+[sub_resource type="Resource" id="Resource_watchtower_defence"]
+script = ExtResource("8_defence")
+reach = 4
+damage = 3
+cadence = 20
 
 [resource]
 script = ExtResource("1_building_data")
@@ -21,3 +28,4 @@ hit_points = 12
 reach = 4
 model = ExtResource("9_model")
 model_span = 1.0
+defence = SubResource("Resource_watchtower_defence")

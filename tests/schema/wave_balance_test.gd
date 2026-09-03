@@ -1,18 +1,22 @@
 class_name WaveBalanceTest
 extends GdUnitTestSuite
-## Les coûts d'une vague : le filet qui attrape un `.tres` mal rempli, et la lecture qui traduit
-## la patience en cases.
+## L'échelle d'une marche : le filet qui attrape un `.tres` mal rempli, et la lecture qui traduit
+## la patience d'un assaillant en cases de détour.
 ##
-## Le filet est **complet** ici : zéro est invalide pour les quatre champs, donc aucun oubli ne
-## passe. C'est rare dans `src/schema/`, et ça tient à ce que les quatre sont des prix — un prix
-## nul n'est jamais un choix de contenu, c'est un champ qu'on a oublié.
+## **Deux champs et non quatre depuis `V2`.** La patience et l'enjambée sont parties chez
+## `EnemyDef`, parce que `DESIGN.md` 3.5 en fait des chiffres de la créature — un bélier traverse
+## un mur là où une meute le contourne. Ce qui reste est ce qui n'a pas de propriétaire : le prix
+## d'un pas, celui d'un cran, c'est-à-dire l'unité dans laquelle les trois se comparent.
+##
+## Le filet est **complet** : zéro est invalide pour les deux, et ça tient à ce que les deux sont
+## des prix — un prix nul n'est jamais un choix de contenu, c'est un champ qu'on a oublié.
 
 func test_a_filled_block_lacks_nothing() -> void:
 	assert_array(_balance().missing_fields()).is_empty()
 
-func test_a_block_straight_out_of_new_names_all_four_fields() -> void:
+func test_a_block_straight_out_of_new_names_both_fields() -> void:
 	assert_array(WaveBalance.new().missing_fields()) \
-		.contains(["step_cost", "climb_cost", "breach_cost", "max_climb"])
+		.contains(["step_cost", "climb_cost"])
 
 ## **Un pas gratuit est refusé**, et pas seulement pour éviter une division : à zéro, tous les
 ## chemins qui ne montent ni ne cassent auraient le même prix, et la vague prendrait le premier
@@ -30,30 +34,31 @@ func test_a_free_climb_is_reported() -> void:
 	balance.climb_cost = 0
 	assert_array(balance.missing_fields()).is_equal(["climb_cost"])
 
-## Un mur gratuit ferait de tout bâtiment un passage, donc de la palissade une décoration.
-func test_a_free_breach_is_reported() -> void:
-	var balance := _balance()
-	balance.breach_cost = 0
-	assert_array(balance.missing_fields()).is_equal(["breach_cost"])
-
 # --- la patience, en cases ---------------------------------------------------
 
 ## La patience se lit en cases de détour, parce que c'est l'unité dans laquelle on la ressent.
-## Elle ne se règle nulle part : elle se déduit des deux prix, et c'est ce qui garantit qu'elle
-## ne peut pas mentir sur ce que le chemin fait vraiment.
+## Elle ne se règle nulle part : elle se déduit du prix d'un pas et de la patience de
+## l'assaillant, et c'est ce qui garantit qu'elle ne peut pas mentir sur ce que le chemin fait.
 func test_the_patience_reads_as_a_detour_in_steps() -> void:
 	var balance := _balance()
 	balance.step_cost = 10
-	balance.breach_cost = 120
-	assert_int(balance.patience_in_steps()).is_equal(12)
+	assert_int(balance.patience_in_steps(_enemy(120))).is_equal(12)
 
-## Un mur moins cher qu'un pas donne zéro : la vague ne détourne jamais pour lui. Le cas est là
-## pour que ce réglage extrême rende un chiffre plutôt qu'une surprise.
+## **Deux assaillants sur la même échelle n'ont pas la même patience**, et c'est tout l'intérêt
+## d'avoir déplacé le champ : le chiffre lu dépend de la créature, pas du réglage global.
+func test_two_enemies_on_the_same_scale_read_differently() -> void:
+	var balance := _balance()
+	balance.step_cost = 10
+	assert_int(balance.patience_in_steps(_enemy(120))) \
+		.override_failure_message("le bélier doit être plus impatient que la meute") \
+		.is_greater(balance.patience_in_steps(_enemy(20)))
+
+## Un mur moins cher qu'un pas donne zéro : l'assaillant ne détourne jamais pour lui. Le cas est
+## là pour que ce réglage extrême rende un chiffre plutôt qu'une surprise.
 func test_a_wall_cheaper_than_a_step_is_never_worth_a_detour() -> void:
 	var balance := _balance()
 	balance.step_cost = 10
-	balance.breach_cost = 4
-	assert_int(balance.patience_in_steps()).is_equal(0)
+	assert_int(balance.patience_in_steps(_enemy(4))).is_equal(0)
 
 # --- le montage --------------------------------------------------------------
 
@@ -61,6 +66,16 @@ func _balance() -> WaveBalance:
 	var balance := WaveBalance.new()
 	balance.step_cost = 10
 	balance.climb_cost = 6
-	balance.breach_cost = 120
-	balance.max_climb = 2
 	return balance
+
+## Un assaillant dont seule la patience compte pour ces cas-là.
+func _enemy(patience: int) -> EnemyDef:
+	var enemy := EnemyDef.new()
+	enemy.id = &"raider"
+	enemy.label = "Pillard"
+	enemy.hit_points = 6
+	enemy.ticks_per_cell = 4
+	enemy.damage = 4
+	enemy.patience = patience
+	enemy.climb = 2
+	return enemy

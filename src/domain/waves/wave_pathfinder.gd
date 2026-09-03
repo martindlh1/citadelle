@@ -9,7 +9,8 @@ extends RefCounted
 ## ---
 ##
 ## **Casser ou contourner n'est pas une règle, c'est le résultat d'une comparaison.** Une case
-## de bâtiment n'est pas un mur : c'est un passage **cher**, à `breach_cost`. La recherche
+## de bâtiment n'est pas un mur : c'est un passage **cher**, au prix de la patience de celui
+## qui le franchit. La recherche
 ## compare donc « dix cases de détour » à « une case de mur » dans la même unité, et casse
 ## quand le mur revient moins cher. C'est le troc que `DESIGN.md` 3.5 demande — *je te barre, tu
 ## me manges le mur* — et il n'existe nulle part sous forme de seuil : le seuil **est** le prix.
@@ -48,18 +49,27 @@ const NEIGHBOURS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(
 ## Le chemin le moins coûteux de l'une de ces entrées jusqu'au Cœur.
 ##
 ## `sources` est la lisière par laquelle la vague entre — `DESIGN.md` 3.5 veut une direction
-## annoncée, et c'est `V4` qui la choisira ; ici on reçoit les cases et on trouve la meilleure.
+## annoncée, et `WaveDef.entry_cells()` la traduit en cases ; ici on les reçoit et on trouve la
+## meilleure.
+##
+## **Deux sources de chiffres, chacune ce qu'elle possède** : `balance` donne l'échelle — ce que
+## vaut un pas, ce que vaut un cran —, `enemy` ce qui lui est propre — sa patience et son
+## enjambée. Un chemin est donc celui de **cette créature-là** sur cette carte, et deux sortes
+## d'assaillants n'empruntent pas forcément le même.
 ##
 ## Le Cœur est désigné par **une** de ses cases, et le chemin s'arrête à la première qu'il
 ## atteint : une empreinte de deux par deux n'a pas de « bonne » case d'arrivée, et exiger
 ## l'ancre ferait faire le tour du bâtiment à une vague qui l'a déjà touché.
 static func find(terrain: TerrainQuery, city: CitySnapshot, heart: Vector2i,
-		sources: Array[Vector2i], balance: WaveBalance) -> WavePath:
+		sources: Array[Vector2i], balance: WaveBalance, enemy: EnemyDef) -> WavePath:
 	assert(terrain != null, "chemin sans terrain")
 	assert(city != null, "chemin sans ville")
 	assert(balance != null, "chemin sans équilibrage")
+	assert(enemy != null, "chemin sans assaillant")
 	assert(balance.missing_fields().is_empty(),
 		"équilibrage de vague inexploitable : %s" % ", ".join(balance.missing_fields()))
+	assert(enemy.missing_fields().is_empty(),
+		"assaillant inexploitable : %s" % ", ".join(enemy.missing_fields()))
 
 	var goal := city.at_cell(heart)
 	# Les cases du Cœur et non la seule qu'on nous a donnée : la vague est arrivée dès qu'elle
@@ -72,7 +82,7 @@ static func find(terrain: TerrainQuery, city: CitySnapshot, heart: Vector2i,
 		for cell in goal.cells():
 			arrival[cell] = true
 
-	var occupied := _occupied_by(city, arrival, balance.breach_cost)
+	var occupied := _occupied_by(city, arrival, enemy.patience)
 	var best: Dictionary[Vector2i, int] = {}
 	var came_from: Dictionary[Vector2i, Vector2i] = {}
 	var queue: Array[Vector2i] = []
@@ -90,7 +100,7 @@ static func find(terrain: TerrainQuery, city: CitySnapshot, heart: Vector2i,
 		queue.erase(cell)
 		for step in NEIGHBOURS:
 			var side: Vector2i = cell + step
-			if not _can_walk(terrain, cell, side, balance.max_climb):
+			if not _can_walk(terrain, cell, side, enemy.climb):
 				continue
 			var price: int = best[cell] + _price_of(terrain, cell, side, occupied, balance)
 			if best.has(side) and best[side] <= price:

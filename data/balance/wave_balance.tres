@@ -6,5 +6,3 @@
 script = ExtResource("1_wave_balance")
 step_cost = 10
 climb_cost = 6
-breach_cost = 120
-max_climb = 2

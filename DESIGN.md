@@ -813,8 +813,18 @@ où.
 *Soit une vingtaine de nombres au total, contre les quatre-vingts d'un tower-defense
 complet. C'est la seule raison pour laquelle ce format est retenu plutôt qu'un autre.*
 
+*Le seuil de patience est un chiffre de l'assaillant et non de l'équilibrage*, et `V2` l'a
+déplacé après que `V1` l'avait mis au mauvais endroit. La différence porte : un bélier traverse
+un mur là où une meute le contourne, et c'est cette asymétrie qui donne un sens à une palissade
+contre l'un et pas contre l'autre. Ce qui reste global est l'**échelle** — ce que vaut un pas,
+ce que vaut un cran gravi —, c'est-à-dire l'unité dans laquelle les trois se comparent.
+
 **`OUVERT`** — tous les chiffres ci-dessus, et la composition des vagues. Ils se règlent
-devant une partie, pas dans ce document.
+devant une partie, pas dans ce document. *Le harnais de `V2` en donne déjà une lecture : contre
+six pillards, une tour de guet tire trois fois et ne tue personne, parce que sa cadence de vingt
+ticks est plus longue que la fenêtre pendant laquelle un corps reste à sa portée. La mécanique
+répond, l'équilibrage non — et c'est exactement la sorte de chose que ce document renvoie à
+`B1`.*
 
 ### 3.6 Événements — `HORS MVP`
 
@@ -1062,6 +1072,12 @@ survit, ce qui garde le journal lisible ; `R` et `N` sont neuves.
 - **V2** — **La bataille en ticks.** Corps, défenses, cadence, projectiles, dégâts, morts.
   `tick()`, `finished()`, `run_to_end()`, `BattleReport`. Domaine et tests. Un harnais qui
   résout une bataille sans écran et imprime ce qui s'est passé.
+
+  *Le rapport porte un cinquième chiffre que ce document n'avait pas prévu : les **tirs
+  lâchés**. Sans lui, une tour qui ne tue personne se lit comme une tour qui ne marche pas —
+  alors qu'elle a tiré une fois, et que c'est la cadence qu'il faut régler. Un rapport qui dit
+  ce qu'on a tenté à côté de ce qu'on a obtenu distingue « la mécanique ne répond pas » de « les
+  chiffres sont mauvais », et les deux ne se corrigent pas au même endroit.*
 - **V3** — **La bataille à l'écran.** Interpolation entre deux ticks, projectiles dessinés,
   pause, vitesse, passer. C'est un jalon d'adapter, et le premier du projet où le *game feel*
   est le livrable.

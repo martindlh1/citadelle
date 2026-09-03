@@ -8,9 +8,11 @@ extends Resource
 ## C1 n'y mettait que ce que le placement consomme ; E1 y ajoute l'économie — coût,
 ## réserve, et la production à plat —, E1b sort cette dernière dans un bloc nullable, C4 le
 ## coût de chantier, F1 les PV, et N1 le coût en travailleurs et le plafond de logement.
-## Seuls les quatre chiffres de défense de V2 restent dehors, de la même façon que BalanceData
-## gagne un bloc quand un système atterrit. Un champ ajouté plus tard oblige à rouvrir les
-## .tres ; un champ ajouté d'avance oblige à deviner sa forme, ce qui coûte plus cher.
+## **V2 y met enfin la défense**, annoncée depuis C1 : ce fichier disait « seuls les quatre
+## chiffres de défense restent dehors », et ils entrent avec le système qui les lit. Un champ
+## ajouté plus tard oblige à rouvrir les .tres ; un champ ajouté d'avance oblige à deviner sa
+## forme, ce qui coûte plus cher — et la forme a effectivement changé depuis C1 : trois chiffres
+## dans un bloc nullable, les points de vie restant à plat parce que tout en a.
 ##
 ## **C3 a fait le chemin inverse et retiré `production`.** Le bloc nullable d'E1b décrivait un
 ## rendement dû au seul fait d'exister ; il n'y en a plus, et ce qu'un bâtiment rend se lit
@@ -196,6 +198,16 @@ const QUARTER_TURNS := 4
 ## bâtiment dont aucune règle ne trouve de case. Voir DESIGN.md 3.2.
 @export var adjacency: Array[AdjacencyRule]
 
+## Ce qu'il tire, ou **null** s'il ne tire pas.
+##
+## Nullable, comme le bloc de production l'était : sept bâtiments sur neuf ne tirent pas, et ils
+## n'ont pas « zéro portée » — ils n'ont pas de bloc. Ce que ça achète est la doctrine du zéro,
+## qui redevient applicable aux trois chiffres du bloc. Voir `DefenceBlock`.
+##
+## Les points de vie ne sont **pas** dedans, et c'est le seul des quatre chiffres de
+## `DESIGN.md` 4.1 à rester dehors : tout ce qui tient debout en a, y compris le Cœur.
+@export var defence: DefenceBlock
+
 ## Ce qu'il ajoute à la réserve commune. 0 pour tout ce qui n'est pas un entrepôt.
 ##
 ## En réserve commune, ce chiffre ne relève pas trois compteurs indépendants mais la
@@ -370,6 +382,11 @@ func missing_fields() -> PackedStringArray:
 		missing.append("reach")
 	missing.append_array(_economy_fields())
 	missing.append_array(_adjacency_fields())
+	# Préfixé comme le bloc de production l'était, et pour la même raison : sans le préfixe, un
+	# « cadence » nu dans le rapport de boot ne dirait pas d'où il vient.
+	if defence != null:
+		for field in defence.missing_fields():
+			missing.append("defence.%s" % field)
 	# Réclamé seulement quand un modèle est là : c'est la même cohérence structurelle que le
 	# bloc de production nullable d'`E1b`, et elle vaut ici pour une raison très concrète —
 	# une envergure nulle rend l'asset invisible, ce qui ne ressemble à rien de nommable.

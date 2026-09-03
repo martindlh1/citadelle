@@ -13,6 +13,8 @@ const CATEGORY_BALANCE := &"balance"
 const CATEGORY_TERRAIN := &"terrain"
 const CATEGORY_BUILDINGS := &"buildings"
 const CATEGORY_COMMODITIES := &"commodities"
+const CATEGORY_ENEMIES := &"enemies"
+const CATEGORY_WAVES := &"waves"
 const ID_BALANCE := &"balance"
 
 ## Catégorie -> (identifiant -> Resource).
@@ -25,6 +27,8 @@ func _ready() -> void:
 	_assert_terrain_is_complete()
 	_assert_buildings_are_complete()
 	_assert_commodities_are_complete()
+	_assert_enemies_are_complete()
+	_assert_waves_are_complete()
 	_assert_resources_are_known()
 	_assert_adjacency_tags_are_known()
 	_assert_a_shelter_is_free()
@@ -49,6 +53,22 @@ func get_building(id: StringName) -> BuildingData:
 ## Identifiants de bâtiment connus, triés.
 func list_building_ids() -> Array[StringName]:
 	return list_ids(CATEGORY_BUILDINGS)
+
+## Assaillant indexé, ou null si l'identifiant est inconnu.
+func get_enemy(id: StringName) -> EnemyDef:
+	return get_resource(CATEGORY_ENEMIES, id) as EnemyDef
+
+## Identifiants d'assaillant connus, triés.
+func list_enemy_ids() -> Array[StringName]:
+	return list_ids(CATEGORY_ENEMIES)
+
+## Vague indexée, ou null si l'identifiant est inconnu.
+func get_wave(id: StringName) -> WaveDef:
+	return get_resource(CATEGORY_WAVES, id) as WaveDef
+
+## Identifiants de vague connus, triés.
+func list_wave_ids() -> Array[StringName]:
+	return list_ids(CATEGORY_WAVES)
 
 ## Ressource indexée, ou null si l'identifiant est inconnu.
 func get_commodity(id: StringName) -> CommodityData:
@@ -134,6 +154,38 @@ func _assert_commodities_are_complete() -> void:
 		assert(missing.is_empty(),
 			"champs non renseignés dans data/commodities/%s.tres : %s"
 				% [id, ", ".join(missing)])
+## Et sur les assaillants : quatre chiffres, dont aucun n'a de zéro légitime — un corps sans
+## points de vie tombe avant d'entrer, un corps sans lenteur avance d'une case par tick.
+##
+## Sixième copie de la même boucle. Le seuil que `C1` s'était donné — « le jour où il y aura six
+## catégories, une base commune vaudra le coup » — est atteint ici comme il l'a été chez
+## `BalanceData`, et l'arbitrage n'a pas changé : factoriser demanderait de passer par une
+## `Resource` nue pour appeler `missing_fields()`, donc de perdre le typage sur les six.
+func _assert_enemies_are_complete() -> void:
+	for id in list_enemy_ids():
+		var enemy := get_enemy(id)
+		assert(enemy != null, "data/enemies/%s.tres n'est pas un EnemyDef" % id)
+		if enemy == null:
+			continue
+		var missing := enemy.missing_fields()
+		assert(missing.is_empty(),
+			"champs non renseignés dans data/enemies/%s.tres : %s" % [id, ", ".join(missing)])
+
+## Et sur les vagues, dont le filet descend jusqu'à l'assaillant qu'elles nomment.
+##
+## Une vague dont l'assaillant manque est le cas qui compte : elle se charge sans erreur, et ne
+## casse qu'au moment où quelqu'un veut la jouer — c'est-à-dire à la première bataille d'un run,
+## bien loin du `.tres` fautif.
+func _assert_waves_are_complete() -> void:
+	for id in list_wave_ids():
+		var wave := get_wave(id)
+		assert(wave != null, "data/waves/%s.tres n'est pas une WaveDef" % id)
+		if wave == null:
+			continue
+		var missing := wave.missing_fields()
+		assert(missing.is_empty(),
+			"champs non renseignés dans data/waves/%s.tres : %s" % [id, ", ".join(missing)])
+
 ## Les identifiants de ressource nommés ailleurs existent-ils dans le catalogue ?
 ##
 ## C'est le seul contrôle que les Resource de src/schema/ ne peuvent pas faire

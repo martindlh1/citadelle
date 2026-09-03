@@ -105,6 +105,16 @@ les adapters lisent le domaine, c'est leur métier. Le coût d'une promotion ult
 déplacement de fichier ; le coût d'une frontière inventée trop tôt est une forme figée avant
 qu'on la connaisse.
 
+**Un rapport de bataille était annoncé pour `contracts/` à `V2` ; il n'y est pas entré.** Le
+critère n'est pas rempli : `BattleReport` va des Vagues à `domain/run/`, et `domain/run/` a le
+droit de tout lire — ce n'est pas un second système. C'est le troisième DTO prédit puis refusé
+par sa propre règle, après `ProductionReport` à `N1` et à `I3`, et la table est **toujours à
+quatre lignes**.
+
+La leçon vaut d'être retenue une fois pour toutes : **une prédiction n'est pas un critère.**
+Trois fois de suite, la bonne réponse a été de laisser le DTO chez son système et d'attendre.
+Le coût d'une promotion le jour où elle se justifie est un déplacement de fichier.
+
 **`domain/run/` est le seul dossier autorisé à connaître les autres**, et c'est
 `DESIGN.md` 3.7 qui l'autorise nommément. Il tient les états internes de tous les
 systèmes ; aucun ne le connaît en retour. *(Vide depuis `R0` — `I3` le réécrit.)*
@@ -127,9 +137,9 @@ res://
 │   │   ├── terrain/            # HeightGrid, TerrainGen, CellPicker
 │   │   ├── city/               # CityState, PlacementValidator
 │   │   ├── economy/            # Ledger, Population, Staffing, Upkeep, Production, Adjacency
-│   │   ├── waves/              # WavePathfinder, WavePath
+│   │   ├── waves/              # WavePathfinder, WavePath, CombatBoard, BattleReport
 │   │   └── run/                # RunState, RunOrchestrator, TurnReport, RunOutcome
-│   ├── schema/                 # définitions des Resource (BuildingData…)
+│   ├── schema/                 # définitions des Resource (BuildingData, EnemyDef, WaveDef…)
 │   ├── adapters/
 │   │   ├── terrain/  city/  hud/
 │   └── autoload/               # EventBus, GameDatabase, RunManager

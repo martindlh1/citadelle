@@ -1,18 +1,23 @@
 class_name WaveBalance
 extends Resource
-## Ce qu'une vague paie pour avancer : marcher, monter, et casser.
+## L'échelle dans laquelle une marche se paie : le prix d'un pas, et celui d'un cran gravi.
 ##
-## Trois coûts et une hauteur d'enjambée, et c'est tout ce dont le chemin de `V1` a besoin. Ce
-## que la vague *est* — combien elle a de corps, ce qu'elle encaisse, ce qu'elle frappe —
-## appartient à `V2`, et n'entrera ici qu'avec le système qui le lit.
+## **Deux chiffres, et ils n'appartiennent à personne.** Ce que coûte de percer un mur et ce
+## qu'on enjambe sont des traits de l'**assaillant** — `EnemyDef` les porte —, mais il faut bien
+## une unité commune dans laquelle les comparer, et c'est celle-ci.
+##
+## *`V1` avait mis les quatre ici*, ce qui marchait tant qu'il n'existait qu'une sorte
+## d'assaillant. `DESIGN.md` 3.5 en fait pourtant deux chiffres de la créature, et la différence
+## porte : un bélier traverse un mur là où une meute le contourne, et c'est cette asymétrie qui
+## fait qu'une palissade a un sens contre l'un et pas contre l'autre. Deux champs sont donc
+## partis chez `EnemyDef` à `V2`, et ce qui reste est exactement ce qui n'a pas de propriétaire.
 ##
 ## ---
 ##
-## **Les trois coûts sont dans la même unité, et c'est ce qui les rend comparables.** Un pas
-## vaut `step_cost`, un cran de montée vaut `climb_cost`, traverser un bâtiment vaut
-## `breach_cost` — donc « casser plutôt que contourner » n'est pas une règle écrite quelque
-## part, c'est **le résultat de la comparaison**. Une vague casse un mur quand le détour lui
-## coûterait plus cher que le mur, et pas avant.
+## **Tout est dans la même unité, et c'est ce qui rend le troc du mur possible.** Un pas vaut
+## `step_cost`, un cran de montée vaut `climb_cost`, percer une case vaut la patience de celui
+## qui perce — donc « casser plutôt que contourner » n'est pas une règle écrite quelque part,
+## c'est **le résultat de la comparaison**.
 ##
 ## C'est la forme que `DESIGN.md` 3.5 réclame en toutes lettres : « boucher cesse d'être une
 ## astuce pour devenir un troc ». Un seuil écrit à part — « casse si le détour dépasse N » —
@@ -41,28 +46,6 @@ extends Resource
 ## rares champs où la doctrine du zéro sert un argument de design plutôt qu'un oubli.
 @export_range(1, 100, 1) var climb_cost: int
 
-## Ce que coûte de traverser **une case** de bâtiment.
-##
-## C'est la « patience » de `DESIGN.md` 3.5, exprimée dans la seule unité qui permette de la
-## comparer à un détour. À `breach_cost = 10 × step_cost`, une vague accepte dix cases de
-## détour plutôt que de casser, et casse au onzième.
-##
-## **Par case et non par bâtiment**, ce qui fait qu'un mur épais coûte plus cher à percer qu'un
-## mur mince. C'est la lecture qu'on veut d'une palissade, et c'est aussi la seule qui garde la
-## recherche de chemin en une simple pondération : compter par bâtiment demanderait de savoir,
-## au milieu du parcours, si l'on a déjà payé celui-ci — donc un état par chemin, donc plus un
-## Dijkstra.
-@export_range(1, 1000, 1) var breach_cost: int
-
-## Crans qu'un corps enjambe d'un pas. Au-delà, la marche barre.
-##
-## **La vague a la sienne, distincte de celle de la génération.** `TerrainGenBalance.max_climb`
-## annonçait ce partage depuis `T4` : la génération compte ses accès avec sa propre enjambée, et
-## le jour où les deux devraient être le même chiffre, l'un des deux champs déménage. Ce jour
-## n'est pas venu — une carte peut vouloir des cols plus larges que ce qu'une vague franchit,
-## et c'est même un levier d'équilibrage.
-@export_range(1, 32, 1) var max_climb: int
-
 ## Champs non renseignés. Vide = bloc exploitable.
 func missing_fields() -> PackedStringArray:
 	var missing := PackedStringArray()
@@ -70,17 +53,14 @@ func missing_fields() -> PackedStringArray:
 		missing.append("step_cost")
 	if climb_cost < 1:
 		missing.append("climb_cost")
-	if breach_cost < 1:
-		missing.append("breach_cost")
-	if max_climb < 1:
-		missing.append("max_climb")
 	return missing
 
-## Combien de cases de détour une vague accepte plutôt que de percer une case de bâtiment.
+## Combien de cases de détour cet assaillant accepte plutôt que de percer une case de bâtiment.
 ##
-## Une lecture et non un réglage : le chiffre ne vit nulle part, il se déduit des deux coûts.
-## Elle existe pour que le harnais et le journal puissent dire la patience en cases — l'unité
-## dans laquelle on la ressent — sans que personne ne recopie la division.
-func patience_in_steps() -> int:
+## Une lecture et non un réglage : le chiffre ne vit nulle part, il se déduit de la patience et
+## du prix d'un pas. Elle existe pour que le harnais et le journal puissent dire la patience en
+## cases — l'unité dans laquelle on la ressent — sans que personne ne recopie la division.
+func patience_in_steps(enemy: EnemyDef) -> int:
 	assert(step_cost > 0, "pas gratuit : la patience n'a pas de sens")
-	return breach_cost / step_cost
+	assert(enemy != null, "patience sans assaillant")
+	return enemy.patience / step_cost

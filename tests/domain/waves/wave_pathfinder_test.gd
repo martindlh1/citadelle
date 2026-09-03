@@ -88,7 +88,7 @@ func test_water_and_rock_are_walked_around() -> void:
 ## promis des cols qu'aucune vague n'emprunte.
 func test_a_step_too_high_blocks() -> void:
 	for y in SIZE.y:
-		_grid.set_height(Vector2i(4, y), _balance().max_climb + 1)
+		_grid.set_height(Vector2i(4, y), _enemy().climb + 1)
 	assert_bool(_find().reaches()) \
 		.override_failure_message("une falaise d'un cran de trop devait tout barrer") \
 		.is_false()
@@ -121,8 +121,8 @@ func test_climbing_costs_and_descending_does_not() -> void:
 ## cas au-dessus mesure celle qui barre, celui-ci celle qui coûte —, et il fallait les séparer
 ## pour que chacune montre ce qu'elle annonce.
 func test_a_hill_is_walked_around_when_the_detour_is_cheaper() -> void:
-	var nimble := _balance()
-	nimble.max_climb = 4
+	var nimble := _enemy()
+	nimble.climb = 4
 	# Une bosse sur la seule case (4, 4) : la gravir coûte autant de fois CLIMB qu'elle a de
 	# crans, la contourner coûte deux pas de plus, soit 20.
 	_grid.set_height(Vector2i(4, 4), 3)
@@ -157,7 +157,7 @@ func test_a_wall_that_closes_everything_is_breached() -> void:
 	assert_int(path.cost()).is_equal(8 * STEP + BREACH)
 
 ## **Le seuil n'existe nulle part : il est le prix.** Même carte, même détour, deux valeurs de
-## `breach_cost` de part et d'autre — et la vague bascule sans qu'aucune règle ne le dise.
+## patience de part et d'autre — et la vague bascule sans qu'aucune règle ne le dise.
 ##
 ## C'est le **prix** qu'on fait varier et non la géométrie, parce que c'est lui le sujet : un
 ## seuil écrit à côté du chemin aurait rendu ce cas vert en étant faux là où deux détours se
@@ -244,15 +244,27 @@ func _find(heart := HEART) -> WavePath:
 	for y in SIZE.y:
 		sources.append(Vector2i(0, y))
 	return WavePathfinder.find(_grid.to_query(), _city.to_snapshot(), heart, sources,
-		_balance())
+		_balance(), _enemy())
 
 func _balance() -> WaveBalance:
 	var balance := WaveBalance.new()
 	balance.step_cost = STEP
 	balance.climb_cost = CLIMB
-	balance.breach_cost = BREACH
-	balance.max_climb = 2
 	return balance
+
+## L'assaillant du montage : sa patience et son enjambée sont à lui, l'échelle est à
+## l'équilibrage. C'est le partage que `V2` a corrigé — un bélier traverse un mur là où une
+## meute le contourne.
+func _enemy() -> EnemyDef:
+	var enemy := EnemyDef.new()
+	enemy.id = &"raider"
+	enemy.label = "Pillard"
+	enemy.hit_points = 10
+	enemy.ticks_per_cell = 1
+	enemy.damage = 1
+	enemy.patience = BREACH
+	enemy.climb = 2
+	return enemy
 
 ## Une palissade d'une case par ligne de `rows`, sur la colonne `column`.
 func _wall_across(rows, column := 4) -> void:
@@ -269,17 +281,25 @@ func _corridor_with_gate_at(gate: int) -> void:
 			_grid.set_cell(Vector2i(2, y), 0, _rock)
 	_place(_building(&"wall", [Vector2i.ZERO] as Array[Vector2i]), Vector2i(2, 4))
 
-## Les coûts du montage, avec un autre prix de brèche.
-func _priced(breach: int) -> WaveBalance:
-	var balance := _balance()
-	balance.breach_cost = breach
-	return balance
+## Le même assaillant, avec une autre patience.
+##
+## C'est **la créature** qu'on fait varier et non l'échelle, depuis que `V2` a rendu la patience
+## à son propriétaire — et c'est plus juste : deux sortes d'assaillants devant le même mur ne
+## prennent pas la même décision.
+func _priced(patience: int) -> EnemyDef:
+	var enemy := _enemy()
+	enemy.patience = patience
+	return enemy
 
-## Le chemin sous ces coûts-là, en entrant par la seule case de la ligne du Cœur.
-func _find_with(balance: WaveBalance) -> WavePath:
+## Le chemin de cet assaillant-là, en entrant par la seule case de la ligne du Cœur.
+##
+## Une seule entrée, à l'inverse de `_find()` : les cas qui mesurent un arbitrage de prix veulent
+## que le détour coûte ce qu'ils croient, et une lisière ouverte offre toujours une porte de
+## plus.
+func _find_with(enemy: EnemyDef) -> WavePath:
 	var sources: Array[Vector2i] = [Vector2i(0, 4)]
 	return WavePathfinder.find(_grid.to_query(), _city.to_snapshot(), HEART, sources,
-		balance)
+		_balance(), enemy)
 
 ## Pose ce bâtiment, en passant par la porte que la ville offre à tout le monde.
 ##

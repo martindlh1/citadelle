@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="EnemyDef" format=3]
+
+[ext_resource type="Script" path="res://src/schema/enemy_def.gd" id="1_enemy_def"]
+
+[resource]
+script = ExtResource("1_enemy_def")
+id = &"ram"
+label = "Bélier"
+hit_points = 40
+ticks_per_cell = 8
+damage = 10
+patience = 20
+climb = 1
