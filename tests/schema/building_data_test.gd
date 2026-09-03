@@ -355,7 +355,8 @@ func _producer() -> BuildingData:
 	rule.tag = &"forest"
 	rule.radius = 1
 	rule.resource = &"wood"
-	rule.per_cell = 2
+	rule.mode = AdjacencyRule.Mode.PER_CELL
+	rule.amount = 2
 	building.adjacency = [rule] as Array[AdjacencyRule]
 	return building
 

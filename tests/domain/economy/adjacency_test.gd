@@ -130,6 +130,78 @@ func test_two_rules_on_one_resource_add_up() -> void:
 	assert_int(report.award(1)).is_equal(3)
 	assert_dict(report.total()).is_equal({&"wood": 11} as Dictionary[StringName, int])
 
+# --- à la présence ----------------------------------------------------------
+
+## **Une case ou dix paient pareil.** C'est la ferme : irriguer est une affaire d'accès, pas de
+## quantité, et un bonus par case aurait primé le fait de border un lac sur trois côtés.
+func test_a_flat_rule_pays_the_same_for_one_cell_and_for_nine() -> void:
+	_grid.set_terrain(ANCHOR, _water)
+	var lone := _inspect(_riverside())
+	for y in range(ANCHOR.y - 1, ANCHOR.y + 2):
+		for x in range(ANCHOR.x - 1, ANCHOR.x + 2):
+			_grid.set_terrain(Vector2i(x, y), _water)
+	var flooded := _inspect(_riverside())
+	assert_int(flooded.count(0)) \
+		.override_failure_message("le second montage devait trouver plus de cases") \
+		.is_greater(lone.count(0))
+	assert_int(flooded.award(0)).is_equal(lone.award(0))
+	assert_int(flooded.award(0)).is_equal(6)
+
+## Le mode change le barème, jamais l'exigence : sans eau, la ferme ne rend rien — et le
+## placement la refusera pour la même raison.
+func test_a_flat_rule_still_needs_its_cell() -> void:
+	var report := _inspect(_riverside())
+	assert_int(report.award(0)).is_equal(0)
+	assert_bool(report.is_satisfied()).is_false()
+
+# --- au filon ---------------------------------------------------------------
+
+## **Le filon paie au-delà du rayon, et c'est tout son intérêt.** Une veine de cinq cases dont
+## une seule est à portée en paie cinq : ce qui compte n'est pas ce qu'on voit autour de soi,
+## c'est ce à quoi l'on est relié.
+func test_a_vein_pays_its_whole_length() -> void:
+	for step in 5:
+		_grid.set_terrain(ANCHOR + Vector2i(1 + step, 0), _forest)
+	var report := _inspect(_pit())
+	assert_int(report.count(0)) \
+		.override_failure_message("la veine entière devait compter, rayon compris ou non") \
+		.is_equal(5)
+	assert_int(report.award(0)).is_equal(5)
+
+## Le pendant, sans quoi le cas ci-dessus passerait sur un mode qui compterait la carte
+## entière : une case taggée hors du filon touché ne compte pas.
+func test_a_vein_ignores_a_separate_deposit() -> void:
+	_grid.set_terrain(ANCHOR + Vector2i(1, 0), _forest)
+	_grid.set_terrain(ANCHOR + Vector2i(5, 5), _forest)
+	assert_int(_inspect(_pit()).count(0)).is_equal(1)
+
+## Un filon se suit **par ses côtés et non par ses coins**, comme un lac de `T4` : deux veines
+## qui se frôlent en diagonale restent deux veines. En huit voisins ce cas rendrait trois.
+func test_a_vein_does_not_jump_a_diagonal() -> void:
+	_grid.set_terrain(ANCHOR + Vector2i(1, 0), _forest)
+	_grid.set_terrain(ANCHOR + Vector2i(2, 1), _forest)
+	_grid.set_terrain(ANCHOR + Vector2i(3, 1), _forest)
+	assert_int(_inspect(_pit()).count(0)) \
+		.override_failure_message("la diagonale a fait passer le parcours à l'autre veine") \
+		.is_equal(1)
+
+## Un bâtiment qui touche deux filons distincts les additionne, et ne compte aucun deux fois.
+func test_two_veins_touched_at_once_add_up() -> void:
+	for step in 2:
+		_grid.set_terrain(ANCHOR + Vector2i(-1, step), _forest)
+	for step in 3:
+		_grid.set_terrain(ANCHOR + Vector2i(1, step), _forest)
+	assert_int(_inspect(_pit()).count(0)).is_equal(5)
+
+## Et les cases rendues sont **celles du filon**, pas celles du rayon : c'est ce que le fantôme
+## colore, donc la veine entière s'allume sous le curseur au lieu de sa seule extrémité.
+func test_the_highlighted_cells_are_the_whole_vein() -> void:
+	for step in 4:
+		_grid.set_terrain(ANCHOR + Vector2i(1 + step, 0), _forest)
+	var report := _inspect(_pit())
+	assert_array(report.highlights()).contains([ANCHOR + Vector2i(4, 0)])
+	assert_int(report.highlights().size()).is_equal(4)
+
 # --- le bâtiment sans règle -------------------------------------------------
 
 func test_a_building_without_rules_reports_nothing_at_all() -> void:
@@ -177,14 +249,33 @@ func _bare() -> BuildingData:
 	data.hit_points = 1
 	return data
 
-func _rule(tag: StringName, radius: int, resource: StringName,
-		per_cell: int) -> AdjacencyRule:
+func _rule(tag: StringName, radius: int, resource: StringName, amount: int,
+		mode := AdjacencyRule.Mode.PER_CELL) -> AdjacencyRule:
 	var rule := AdjacencyRule.new()
 	rule.tag = tag
 	rule.radius = radius
 	rule.resource = resource
-	rule.per_cell = per_cell
+	rule.mode = mode
+	rule.amount = amount
 	return rule
+
+## Une ferme d'une case : 6 nourriture **à la présence** d'eau à un anneau.
+func _riverside() -> BuildingData:
+	var data := _bare()
+	data.adjacency = [_rule(&"water", 1, &"food", 6, AdjacencyRule.Mode.FLAT)] \
+		as Array[AdjacencyRule]
+	return data
+
+## Une mine d'une case : 1 minerai par case **du filon** de forêt touché à un anneau.
+##
+## Le tag est celui de la forêt et non d'un gisement, parce que ce fichier n'a que deux
+## terrains taggés et que le mode ne regarde pas ce que le tag **signifie**. Nommer un
+## troisième terrain pour le décor du cas aurait allongé le montage sans rien prouver de plus.
+func _pit() -> BuildingData:
+	var data := _bare()
+	data.adjacency = [_rule(&"forest", 1, &"ore", 1, AdjacencyRule.Mode.VEIN)] \
+		as Array[AdjacencyRule]
+	return data
 
 func _terrain(id: StringName, tag: StringName = &"") -> TerrainData:
 	var data := TerrainData.new()

@@ -88,7 +88,9 @@ static func validate(city: CityState, terrain: TerrainQuery,
 ## « Au moins une » et non « toutes » : un bâtiment à deux règles a deux façons de mériter sa
 ## place, et en exiger deux ferait d'une carte généreuse la seule carte jouable. C'est aussi
 ## exactement la condition qui garantit que tout bâtiment posable **rend quelque chose**,
-## puisqu'une règle qui trouve une case verse au moins son `per_cell`, lequel vaut au minimum 1.
+## puisqu'une règle qui trouve une case verse au moins son `amount`, lequel vaut au minimum 1
+## — et ce, dans les trois modes de `C7` : ils diffèrent par le barème, jamais par la question
+## posée au terrain.
 static func _has_a_neighbour(terrain: TerrainQuery, data: BuildingData,
 		cells: Array[Vector2i]) -> bool:
 	if data.adjacency.is_empty():

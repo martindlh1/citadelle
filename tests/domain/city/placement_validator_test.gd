@@ -1,6 +1,6 @@
 class_name PlacementValidatorTest
 extends GdUnitTestSuite
-## Les cinq règles de placement, et l'ordre dans lequel elles se prononcent.
+## Les six règles de placement, et l'ordre dans lequel elles se prononcent.
 ##
 ## Grille de travail, 6 x 6. Plaine à hauteur 0 partout, sauf :
 ##   - (4, 0) eau, (5, 1) rocher — les deux terrains sur lesquels on ne bâtit pas ;
@@ -265,7 +265,8 @@ func _thirsty() -> BuildingData:
 	rule.tag = &"water"
 	rule.radius = 1
 	rule.resource = &"food"
-	rule.per_cell = 1
+	rule.mode = AdjacencyRule.Mode.PER_CELL
+	rule.amount = 1
 	building.adjacency = [rule] as Array[AdjacencyRule]
 	return building
 

@@ -25,7 +25,7 @@ func _balance() -> EconomyBalance:
 ## Bâtiment qui rend ce lot chaque tour, ou rien du tout si le lot est vide — auquel cas il
 ## n'a **aucune règle**, ce qui est la façon dont C3 représente « ne produit pas ».
 ##
-## Le lot devient une règle de voisinage par ressource, à `per_cell` égal au rendement voulu :
+## Le lot devient une règle de voisinage par ressource, à `amount` égal au rendement voulu :
 ## le sol de `_ground()` pose exactement une case taggée dans la zone de chaque bâtiment, donc
 ## « +3 nourriture » reste « +3 nourriture ».
 func _building(id: StringName, workers: int, yields: Dictionary[StringName, int],
@@ -44,13 +44,14 @@ func _building(id: StringName, workers: int, yields: Dictionary[StringName, int]
 		data.adjacency.append(_rule(resource, yields[resource]))
 	return data
 
-## +`per_cell` de cette ressource par case de sol à un anneau.
-func _rule(resource: StringName, per_cell: int) -> AdjacencyRule:
+## +`amount` de cette ressource par case de sol à un anneau.
+func _rule(resource: StringName, amount: int) -> AdjacencyRule:
 	var rule := AdjacencyRule.new()
 	rule.tag = SOIL_TAG
 	rule.radius = 1
 	rule.resource = resource
-	rule.per_cell = per_cell
+	rule.mode = AdjacencyRule.Mode.PER_CELL
+	rule.amount = amount
 	return rule
 
 func _farm(id: StringName, workers := 2, site_turns := 0) -> BuildingData:
