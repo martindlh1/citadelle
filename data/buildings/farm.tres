@@ -1,31 +1,31 @@
 [gd_resource type="Resource" script_class="BuildingData" format=3 uid="uid://c7xibrh6bh4m6"]
 
 [ext_resource type="Script" uid="uid://dysje8h5rmo0g" path="res://src/schema/building_data.gd" id="1_building_data"]
-[ext_resource type="Script" path="res://src/schema/adjacency_rule.gd" id="3_adjacency_rule"]
-[ext_resource type="Mesh" uid="uid://b6deed7kskoj3" path="res://assets/KayKit_Medieval_Hexagon_Pack_1.0_FREE/Assets/obj/buildings/blue/building_watermill_blue.obj" id="9_model"]
+[ext_resource type="Script" uid="uid://yoavf4hf7jnu" path="res://src/schema/adjacency_rule.gd" id="3_adjacency_rule"]
+[ext_resource type="ArrayMesh" uid="uid://b6deed7kskoj3" path="res://assets/KayKit_Medieval_Hexagon_Pack_1.0_FREE/Assets/obj/buildings/blue/building_watermill_blue.obj" id="9_model"]
 
 [sub_resource type="Resource" id="Resource_farm_adjacency_0"]
 script = ExtResource("3_adjacency_rule")
 tag = &"water"
-radius = 1
-resource = &"food"
 mode = 2
+radius = 2
+resource = &"food"
 amount = 6
 
 [resource]
 script = ExtResource("1_building_data")
 id = &"farm"
 label = "Ferme"
-footprint = Array[Vector2i]([Vector2i(0, 0), Vector2i(1, 0), Vector2i(0, 1), Vector2i(1, 1)])
+footprint = Array[Vector2i]([Vector2i(0, 0), Vector2i(1, 0)])
 color = Color(0.5, 0.6, 0.32, 1)
+model = ExtResource("9_model")
+model_span = 1.9
 height = 0.5
 site_turns = 2
+reach = 3
 cost = Dictionary[StringName, int]({
 &"wood": 10
 })
+adjacency = Array[ExtResource("3_adjacency_rule")]([SubResource("Resource_farm_adjacency_0")])
 workers = 4
 hit_points = 6
-adjacency = Array[AdjacencyRule]([SubResource("Resource_farm_adjacency_0")])
-reach = 3
-model = ExtResource("9_model")
-model_span = 1.9

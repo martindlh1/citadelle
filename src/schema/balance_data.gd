@@ -23,6 +23,9 @@ extends Resource
 ## Run : durée, bâtiment d'ouverture, file de chantiers, barème du score.
 @export var run: RunBalance
 
+## Vagues : ce qu'un chemin coûte à marcher, à monter et à percer.
+@export var waves: WaveBalance
+
 ## Champs non renseignés de tous les blocs, préfixés du nom de leur bloc.
 ## Vide = équilibrage exploitable. Vérifié au boot par GameDatabase.
 ##
@@ -31,8 +34,12 @@ extends Resource
 ## appeler missing_fields() rendrait l'appel non typé. La répétition est le prix du
 ## typage strict ; le jour où il y aura six blocs, une base commune vaudra le coup.
 ##
-## Le cinquième est entré à I3 et le seuil se rapproche — mais il ne s'est pas rapproché
-## depuis R0, qui en a retiré cinq d'un coup. Attendre est ici gratuit.
+## **Le sixième est entré à `V1`, donc le seuil annoncé est atteint** — et l'on ne factorise
+## toujours pas. La raison n'a pas bougé d'un mot : il faudrait passer par une `Resource` nue
+## pour appeler `missing_fields()`, donc perdre le typage sur les six pour économiser une
+## trentaine de lignes qu'aucun de nous ne relit jamais. Un seuil qu'on avait fixé de bonne foi
+## et qui, une fois atteint, ne change rien à l'arbitrage : il valait mieux le noter que le
+## suivre.
 func missing_fields() -> PackedStringArray:
 	var missing := PackedStringArray()
 	if terrain == null:
@@ -60,4 +67,9 @@ func missing_fields() -> PackedStringArray:
 	else:
 		for field in run.missing_fields():
 			missing.append("run.%s" % field)
+	if waves == null:
+		missing.append("waves")
+	else:
+		for field in waves.missing_fields():
+			missing.append("waves.%s" % field)
 	return missing

@@ -126,7 +126,8 @@ res://
 │   │   ├── contracts/          # DTO inter-systèmes
 │   │   ├── terrain/            # HeightGrid, TerrainGen, CellPicker
 │   │   ├── city/               # CityState, PlacementValidator
-│   │   ├── economy/            # Ledger, Population, Staffing, Upkeep, Production, CityLimits
+│   │   ├── economy/            # Ledger, Population, Staffing, Upkeep, Production, Adjacency
+│   │   ├── waves/              # WavePathfinder, WavePath
 │   │   └── run/                # RunState, RunOrchestrator, TurnReport, RunOutcome
 │   ├── schema/                 # définitions des Resource (BuildingData…)
 │   ├── adapters/

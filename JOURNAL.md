@@ -4,6 +4,162 @@ Décisions prises en cours de route, la plus récente en haut.
 
 ---
 
+## 2026-09-03 — `C3`, `C7`, les assets, `V1` : quatre jalons et une dette de journal
+
+**État : `C3` et `C7` terminés, les assets posés, `V1` terminé.** Branche `master`. Les quatre
+commandes passent et **516 tests sont verts**, contre 433 au dernier point.
+
+*Cette entrée en vaut quatre, et c'est une dette assumée : trois jalons se sont enchaînés sans
+que le journal suive, chacun parce que le suivant était demandé dans la foulée. Le prix est
+qu'on relit d'un bloc ce qu'on aurait dû relire au fil de l'eau — les leçons y sont, la
+chronologie moins.*
+
+### `C3` — l'adjacence, en trois modes
+
+L'adjacence est passée de « couche d'optimisation » à **seule source de production du jeu**. Un
+camp de bûcheron ne rend plus du bois parce qu'il est un camp de bûcheron : il en rend parce
+qu'il y a des arbres autour de lui, et deux fois plus s'il y en a deux fois plus.
+`ProductionBlock` a disparu avec ce renversement.
+
+**Le plafond a vécu une demi-journée.** Écrit d'abord — un bosquet plein aurait quintuplé une
+cabane —, retiré le jour même : il se défendait tant que l'adjacence était un supplément posé
+sur un rendement de base, il fait exactement l'inverse comme source unique. Au plafond, une case
+à deux arbres et une case à dix rendent la même chose, donc **le choix de la case cesse de
+compter** — dans un jeu dont le placement est l'essence. C'est le genre de réglage qui semble
+prudent et qui supprime le sujet.
+
+**Trois modes, parce que « +X par voisin » ne dit pas tout.** Toutes les règles sont des
+exigences ; ce qui les sépare est ce qu'elles **paient**. Par case pour le bûcheron ; à la
+présence pour la ferme, qui doit être au bord de l'eau sans qu'une seconde case y ajoute quoi
+que ce soit — irriguer est une affaire d'accès, pas de quantité ; **au filon** pour la mine,
+dont le rendement est la taille du gisement entier, au-delà du rayon.
+
+Le troisième est celui qui change le plus le jeu : il fait du choix d'une case une question de
+**prospection**. Deux emplacements à un caillou près ne valent pas la même chose quand l'un
+touche une veine de deux cases et l'autre de onze. Il n'était jouable que parce que `T4` sème la
+pierre en veines plutôt qu'au hasard — un jalon qui rend un autre possible sans l'avoir prévu.
+
+**Et un bâtiment sans voisin ne se pose plus.** Prérequis dur, ce qui revient sur une décision
+de `C1` : elle était juste tant que rendement et placement étaient deux couches, ils n'en font
+plus qu'une. Un rendement nul aurait été un piège qu'on ne repère qu'après avoir payé.
+
+*La carrière et la mine partagent désormais le tag et diffèrent par le mode.* C'est un meilleur
+argument pour les distinguer qu'un second tag inventé pour ça : la carrière prend ce qu'elle a
+sous la main, la mine suit la veine.
+
+### `C7` — l'emprise
+
+On bâtit dans le territoire du village, qui est la **réunion** des disques que ses bâtiments
+achevés projettent. Le contour cesse d'être un cercle dès le deuxième bâtiment : il pousse des
+lobes vers ce que le village est allé chercher. Un rayon central qui grandirait se serait étendu
+dans **toutes** les directions à la fois — c'est toute la différence entre une règle qui
+récompense l'investissement et une qui passe le temps.
+
+**Seuls les bâtiments achevés comptent**, ce qui fait que s'étendre coûte des **tours** et pas
+seulement des ressources, et empêche de traverser la carte en chaînant des chantiers qu'on
+n'achève jamais.
+
+Deux trouvailles, et la seconde est un cadeau :
+
+- **Un `reach` non renseigné vaut zéro**, ce qui n'ouvre même pas la case voisine. Six fixtures
+  de test se sont mises à mesurer l'emprise au lieu de leur sujet. Le champ est donc réclamé
+  avec un minimum de 1 : tout ce qui tient debout revendique au moins la terre qu'il touche.
+- **Deux disques disjoints sont inconstructibles.** Toute pose doit être dans l'emprise, donc
+  tout disque neuf en recouvre un ancien : le territoire est d'un seul tenant **sans que rien ne
+  l'impose**. Une propriété émergente, avec un cas de test dessus pour qu'on s'en aperçoive le
+  jour où une règle future voudrait le contraire.
+
+### Un angle mort de la commande 4, de la taille d'une signature
+
+`city_harness.gd` ne compilait plus **depuis `C3`**, et rien ne le disait. Il appelait
+`show_at()` avec cinq arguments sur sept ; le boot ne charge que le harnais actif, et le `grep`
+de la quatrième commande ne cherchait que des *identifiants introuvables*. Un appel devenu trop
+**court** passait au travers.
+
+La règle qui en sort vaut au-delà de ce `grep` : **un filtre qui énumère les pannes connues ne
+voit que celles-là.** Élargir une signature partagée est précisément le geste qui en fabrique de
+nouvelles, donc c'est le moment où ce contrôle doit être le plus large. Le motif inclut
+désormais `Parse Error`, et l'exclusion des autoloads a été resserrée sur la ligne exacte qu'ils
+produisent — large, elle avalait aussi les vraies erreurs des fichiers qui les mentionnent.
+
+### Les assets, et ce qu'ils ont demandé au code
+
+Un pack médiéval est entré dans `assets/`. Ce qui a été écrit n'est pas une correspondance mais
+**la tuyauterie** : `BuildingData` et `TerrainDecor` portent chacun un champ `model` qu'un
+sélecteur de l'inspecteur remplit, donc changer d'asset — ou de couleur d'équipe — est un champ
+par `.tres`.
+
+**Un modèle se met à l'échelle par sa boîte englobante, jamais par un facteur écrit à la main.**
+Les assets d'un pack arrivent à la taille de *leur* monde ; un facteur serait à retrouver asset
+par asset, puis à refaire au prochain pack. Ce que la data déclare est une **envergure en
+cases** : un chiffre qui parle du jeu et non du fichier.
+
+Deux conséquences qu'il a fallu accepter :
+
+- **`BuildingRenderer` a cessé d'être un `MultiMesh` unique.** Un `MultiMesh` porte une mesh, et
+  chaque type de bâtiment a désormais la sienne : une passe par modèle, ce qui est le partage
+  que la décoration du terrain a depuis `T3`.
+- **Chaque passe reçoit une copie *teintable* du matériau du pack.** Sans elle, le gris d'un
+  chantier et le froid d'un endormi seraient sans effet sur un asset texturé — les deux signaux
+  de `C4` et `N2` auraient disparu en silence, ce qui est la pire façon de perdre une
+  information.
+
+Le fantôme de survol porte le modèle lui aussi, et sa transformée est **la même fonction** que
+celle du renderer. C'était la condition : deux calculs auraient dérivé, et sur une vue de
+placement ce désaccord ne se voit qu'après le clic. L'empreinte y redevient une marque au sol
+quand il y a un modèle, sans quoi une caisse verte cacherait exactement ce qu'on s'apprête à
+poser.
+
+*Les deux replis restent.* Un bâtiment sans modèle garde la boîte par cellule — qui est encore
+le seul rendu honnête d'une empreinte en L —, et la palissade y reste : un mur veut un asset
+répété **par cellule**, ce que le chemin actuel ne fait pas.
+
+### `V1` — le chemin
+
+Domaine pur et tests, comme `DESIGN.md` le demande : aucune vue, aucun tick.
+
+**Le troc du mur n'est pas une règle, c'est le résultat d'une comparaison.** Une case de
+bâtiment n'est pas un obstacle mais un passage **cher** ; la recherche compare « dix cases de
+détour » à « une case de mur » dans la même unité, et casse quand le mur revient moins cher. Le
+seuil que 3.5 réclame n'existe donc nulle part : **le seuil est le prix**. Un « si le détour
+dépasse N, casser » écrit à côté aurait été un second mécanisme à tenir d'accord avec le chemin,
+et il se serait trompé exactement là où deux détours se valent.
+
+Ce qui barre pour de bon — l'eau, le rocher, une marche trop haute — n'a pas de prix. `DESIGN.md`
+les met dans la même phrase que les bâtiments, mais ils n'y jouent pas le même rôle : on ne
+creuse pas une falaise, alors qu'un mur est fait pour être troqué. Le relief est ce que le joueur
+**reçoit**, le bâti ce qu'il **pose** ; seul le second se paie.
+
+**Un cas de test a menti deux fois avant de dire quelque chose**, et les deux méritent d'être
+notés parce qu'ils sont de la même famille — un montage trop permissif ne mesure pas ce qu'il
+annonce :
+
+- Avec toute la lisière ouverte, la vague ne contournait pas la bosse : elle **entrait une ligne
+  plus haut** et ne la rencontrait jamais. Le cas mesurait le choix de l'entrée au lieu du prix
+  de la montée. Une grille fabriquée à la main ne suffit pas si l'on y laisse une porte de trop.
+- Puis la bosse de trois crans s'est révélée **infranchissable** et non chère, l'enjambée valant
+  deux. « Ça barre » et « ça coûte » sont deux règles différentes, et un seul cas ne peut pas
+  montrer les deux — il fallait les séparer pour que chacune montre ce qu'elle annonce.
+
+*Et le sixième bloc d'équilibrage est entré, donc le seuil que `C1` s'était fixé pour factoriser
+`BalanceData` est atteint.* On ne factorise toujours pas, et la raison n'a pas bougé d'un mot :
+il faudrait passer par une `Resource` nue pour appeler `missing_fields()`, donc perdre le typage
+sur les six pour économiser trente lignes que personne ne relit. Un seuil fixé de bonne foi qui,
+une fois atteint, ne change rien à l'arbitrage — il valait mieux le noter que le suivre.
+
+### Prochain jalon
+
+**`V2`** — la bataille en ticks. Elle héritera de `WavePath` tel quel : les cases dans l'ordre
+de la marche, ce qu'elles coûtent, et les ancres à manger. Et elle apportera le harnais que `V1`
+n'a pas — `DESIGN.md` sépare les deux parce qu'un chemin se vérifie sur une grille fabriquée à
+la main, alors qu'une bataille demande le chemin.
+
+### À faire dans l'éditeur avant la prochaine session
+
+**Rien.** Aucune `.tscn` ni `project.godot` touché.
+
+---
+
 ## 2026-09-02 — `T4` (suite) : la mesa jetée, et un village qui descend du centre
 
 **État : terminé.** Branche `feat/t4-terrain-gen`, tirée de `feat/n2-population-view` — `N2`
