@@ -313,8 +313,33 @@ où l'on choisit une case : on regarde la carte. Une information de placement ra
 oblige à faire l'aller-retour, ce qui revient à ne pas l'avoir.
 
 *La forme est tranchée à `C3`, et elle l'a été devant une carte générée comme ce paragraphe
-l'exigeait.* Une règle porte **quatre** choses : un tag de terrain, un rayon, une ressource, et
-ce que chaque case rapporte.
+l'exigeait.* Une règle porte **cinq** choses : un tag de terrain, un rayon, une ressource, un
+**mode de paiement**, et ce qu'une unité rapporte.
+
+**Trois modes, parce que « + X par voisin » ne décrit pas tout ce qu'on veut dire.** Toutes
+les règles sont des **exigences** — un bâtiment qui n'en satisfait aucune ne se pose pas —, et
+ce qui les sépare est ce qu'elles **paient** :
+
+- **Par case.** Le rendement suit le nombre de cases trouvées. C'est le camp de bûcheron :
+  deux fois plus d'arbres, deux fois plus de bois.
+- **À la présence.** Il faut la case, mais elle ne paie qu'une fois. C'est la ferme : elle
+  **doit** être au bord de l'eau, et une seconde case d'eau n'y ajoute rien — irriguer un
+  champ n'est pas une affaire de quantité, c'est une affaire d'accès. Sans ce mode, la seule
+  façon d'exprimer « il faut de l'eau » aurait été un bonus par case, donc une prime absurde
+  à border un lac sur trois côtés.
+- **Au filon.** Il faut toucher le gisement, et le rendement est la **taille du gisement
+  entier** — au-delà du rayon, jusqu'où le filon s'étend. C'est la mine : ce qui compte n'est
+  pas ce qu'on voit autour de soi, c'est ce qu'il y a à extraire dessous.
+
+Le troisième est celui qui change le plus le jeu : il fait d'un choix de case une question de
+**prospection**. Deux emplacements qui se ressemblent — un caillou à portée chacun — ne valent
+pas la même chose quand l'un touche une veine de deux cases et l'autre une veine de onze. La
+lecture n'est plus « qu'est-ce qui m'entoure » mais « à quoi suis-je relié », et c'est ce que
+`T4` a rendu possible en semant la pierre **en veines** plutôt qu'au hasard.
+
+*Un filon est un ensemble de cases taggées d'un seul tenant, comptées en quatre voisins* — la
+même métrique qu'un lac de `T4`, et pour la même raison : un corps géologique se suit par ses
+côtés, pas par ses coins. Un bâtiment qui touche deux filons distincts les additionne.
 
 **Le voisinage est la seule source de production.** C'est le renversement du jalon, et il
 change la nature de la couche : l'adjacence n'est plus un bonus posé sur un rendement de base,
@@ -350,17 +375,24 @@ bâtiment n'a pas de tags aujourd'hui, et lui en donner sans qu'aucune règle le
 champ ajouté d'avance que ce projet refuse depuis `E1b`. C'est un mot de plus dans le schéma le
 jour où une règle le veut.
 
-| Bâtiment | Règle | Un bon emplacement |
-|---|---|---|
-| Camp de bûcheron | +1 bois par case `forest` à 1 | 4 à 6 bois |
-| Carrière | +1 pierre par case `stone` à 1 | 2 à 4 pierre |
-| Mine | +1 minerai par case `stone` à 1 | 2 à 4 minerai |
-| Ferme | +2 nourriture par case `water` à 1 | 4 à 8 nourriture |
+| Bâtiment | Règle | Mode | Un bon emplacement |
+|---|---|---|---|
+| Camp de bûcheron | `forest` à 1, +1 bois | par case | 4 à 6 bois |
+| Carrière | `stone` à 1, +1 pierre | par case | 2 à 4 pierre |
+| Mine | `stone` à 1, +1 minerai | au filon | 4 à 11 minerai |
+| Ferme | `water` à 1, +6 nourriture | à la présence | 6 nourriture, toujours |
 
-La troisième colonne n'est pas un réglage : c'est ce qu'une carte de `T4` **offre** en pratique,
+**La carrière et la mine partagent le tag et diffèrent par le mode**, et c'est le meilleur
+argument qu'on ait trouvé pour les distinguer : la carrière prend ce qu'elle a sous la main,
+la mine suit la veine. Deux bâtiments sur le même terrain qui posent deux questions
+différentes valent mieux que deux tags inventés pour les séparer.
+
+La dernière colonne n'est pas un réglage : c'est ce qu'une carte de `T4` **offre** en pratique,
 et c'est la seule façon honnête de chiffrer une règle dont le rendement n'existe qu'en fonction
-du sol. Les extrêmes vont de 1 — le minimum, sans quoi on ne pose pas — à 9 sur une case au
-cœur d'un bosquet, ou 16 pour une ferme de deux par deux cernée d'eau, ce qui n'arrive pas.
+du sol. Pour le mode par case, les extrêmes vont de 1 — le minimum, sans quoi on ne pose pas —
+à 9 au cœur d'un bosquet. Pour le mode au filon, ils suivent la taille des veines que la
+génération sème, ce qui est un chiffre qu'aucune table ne peut fixer d'avance : c'est
+`--survey` qui le dira le jour où l'on voudra le régler.
 
 *La colonne **Production** de la table de 4.1 devient donc caduque pour ces quatre lignes*, et
 elle est corrigée là-bas plutôt que doublée ici.

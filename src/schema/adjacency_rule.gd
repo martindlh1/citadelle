@@ -1,6 +1,7 @@
 class_name AdjacencyRule
 extends Resource
-## Une règle d'adjacence : « +X de telle ressource par case taggée Y à moins de Z anneaux ».
+## Une règle d'adjacence : « il faut du Y à moins de Z anneaux, et ça paie tant, de telle
+## façon ».
 ##
 ## Les règles vivent sur `BuildingData.adjacency`, une par ligne de la table de
 ## `DESIGN.md` 3.2. **Elles sont la seule source de production du jeu** : un camp de bûcheron ne
@@ -10,6 +11,11 @@ extends Resource
 ## Un bâtiment qui porte des règles et n'en satisfait aucune **ne se pose pas** — c'est un
 ## prérequis dur du placement, et non un rendement nul, parce qu'un bâtiment qui coûte des bras
 ## et ne rend rien est un piège qu'on ne repère qu'après avoir payé.
+##
+## **Toutes les règles sont donc des exigences ; ce qui les sépare est ce qu'elles paient.**
+## C'est le sens de `mode`, entré à `C7` : « +1 par arbre » ne savait pas dire « il faut de
+## l'eau, et une seconde case d'eau n'y ajoute rien », ni « il faut toucher la veine, et c'est
+## la veine entière qui paie ».
 ##
 ## Elle ne résout rien : une `Resource` qui porterait une méthode de décision serait du domaine
 ## déguisé ; `award()` est une multiplication, pas une décision. C'est `Adjacency`, dans
@@ -26,8 +32,31 @@ extends Resource
 ##
 ## Aucun @export ne porte de défaut, pour la raison exposée dans terrain_balance.gd. Le filet
 ## de `missing_fields()` est ici **complet**, ce qui est rare : zéro est invalide pour les
-## quatre champs, donc aucun oubli ne passe. Une règle mal remplie ne casse jamais au
+## cinq champs, donc aucun oubli ne passe. Une règle mal remplie ne casse jamais au
 ## chargement — elle rend zéro, tous les tours, sur un bâtiment qui semble bien posé.
+
+## Comment une règle paie ce qu'elle a trouvé. UNSET vaut 0 pour rester détectable.
+##
+## Les trois disent une chose différente sur le **rapport entre la quantité de terrain et le
+## rendement**, et c'est le seul axe sur lequel ils diffèrent : dans les trois cas il faut
+## trouver au moins une case, sans quoi le bâtiment ne se pose pas.
+##
+## - `PER_CELL` — le rendement suit le nombre de cases à portée. Deux fois plus d'arbres, deux
+##   fois plus de bois.
+## - `FLAT` — il faut la case, elle ne paie qu'une fois. « La ferme doit être au bord de
+##   l'eau » : irriguer est une affaire d'accès, pas de quantité, et un bonus par case aurait
+##   primé absurdement le fait de border un lac sur trois côtés.
+## - `VEIN` — il faut toucher le gisement, et c'est **le gisement entier** qui paie, au-delà du
+##   rayon. La mine ne vit pas de ce qu'elle voit autour d'elle mais de ce qu'il y a à extraire
+##   dessous, et ce mode fait du choix d'une case une question de prospection : deux
+##   emplacements à un caillou près ne valent pas la même chose quand l'un touche une veine de
+##   deux cases et l'autre une veine de onze.
+enum Mode {
+	UNSET = 0,
+	PER_CELL = 1,
+	FLAT = 2,
+	VEIN = 3,
+}
 
 ## Le tag de terrain que la règle cherche, tel que `data/terrain/` le pose.
 ##
@@ -35,6 +64,9 @@ extends Resource
 ## l'index —, c'est `GameDatabase` qui le fait au démarrage, contre les tags que
 ## `data/terrain/` pose réellement.
 @export var tag: StringName
+
+## Comment cette règle paie ce qu'elle a trouvé. Voir Mode.
+@export var mode: Mode
 
 ## Rayon de recherche en anneaux, depuis la case la plus proche de l'empreinte.
 ##
@@ -54,19 +86,32 @@ extends Resource
 ## verser la même chose, et un champ nommé se lit dans le `.tres` sans aller voir ailleurs.
 @export var resource: StringName
 
-## Ce que chaque case taggée rapporte.
-@export_range(1, 20, 1) var per_cell: int
-
-## Ce que cette règle rapporte pour ce nombre de cases trouvées.
+## Ce qu'une **unité** rapporte, l'unité dépendant du mode.
 ##
-## Une multiplication, et rien d'autre. **Une première version bornait ce produit**, et le
-## plafond a été retiré le jour même : il se défendait tant que l'adjacence était un supplément
-## posé sur un rendement de base, il fait l'inverse de ce qu'on veut comme source unique. Au
-## plafond, une case à deux arbres et une case à dix rendent la même chose, donc le choix de la
-## case cesse de compter — dans un jeu dont le placement est l'essence.
-func award(cells: int) -> int:
-	assert(cells >= 0, "compte de cases négatif : %d" % cells)
-	return cells * per_cell
+## Une case trouvée pour `PER_CELL`, une case de filon pour `VEIN`, et le versement entier pour
+## `FLAT` — qui n'en compte aucune. Le champ s'appelait `per_cell` jusqu'à `C7` et le renommage
+## n'est pas cosmétique : sur une règle à la présence, « par case » désignait une quantité que
+## la règle ignore précisément.
+@export_range(1, 40, 1) var amount: int
+
+## Ce que cette règle rapporte pour ce nombre d'unités trouvées.
+##
+## **Elle ne sait pas ce qu'est une unité, et c'est le partage.** Compter est l'affaire
+## d'`Adjacency`, qui voit le terrain : des cases à portée pour `PER_CELL`, les cases du filon
+## entier pour `VEIN`. Ce fichier ne décide que du **barème**, et un seul mode l'infléchit —
+## `FLAT` paie une fois ou pas du tout, quoi qu'on lui présente.
+##
+## Rien ne borne le produit. **Une première version le plafonnait**, et le plafond a été retiré
+## le jour même : il se défendait tant que l'adjacence était un supplément posé sur un rendement
+## de base, il fait l'inverse de ce qu'on veut comme source unique. Au plafond, une case à deux
+## arbres et une case à dix rendent la même chose, donc le choix de la case cesse de compter —
+## dans un jeu dont le placement est l'essence. `FLAT` n'est pas ce plafond revenu : il ne
+## borne pas un barème, il en exprime un autre, sur une règle qui **ne veut pas** compter.
+func award(units: int) -> int:
+	assert(units >= 0, "compte d'unités négatif : %d" % units)
+	if mode == Mode.FLAT:
+		return amount if units > 0 else 0
+	return units * amount
 
 ## Champs non renseignés. Vide = règle exploitable.
 ## Agrégée par BuildingData.missing_fields(), qui les préfixe « adjacency[i]. ».
@@ -78,6 +123,8 @@ func missing_fields() -> PackedStringArray:
 		missing.append("radius")
 	if resource.is_empty():
 		missing.append("resource")
-	if per_cell < 1:
-		missing.append("per_cell")
+	if mode == Mode.UNSET:
+		missing.append("mode")
+	if amount < 1:
+		missing.append("amount")
 	return missing

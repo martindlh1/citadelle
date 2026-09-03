@@ -119,6 +119,47 @@ func tagged_within(cells: Array[Vector2i], tag: StringName,
 				found.append(cell)
 	return found
 
+## Le ou les filons d'un seul tenant qui portent ces cases, tag compris, sans doublon.
+##
+## Un **filon** est un ensemble de cases taggées reliées de proche en proche. Il n'est pas
+## borné par un rayon : c'est tout son intérêt, et c'est ce qui distingue « ce qu'il y a autour
+## de moi » de « ce à quoi je suis relié ». Une mine posée au bord d'une veine de onze cases
+## vit sur onze cases, même si elle n'en voit que deux.
+##
+## **En quatre voisins**, comme un lac de `T4` et pour la même raison : un corps géologique se
+## suit par ses côtés et non par ses coins. C'est aussi ce qui empêche deux veines qui se
+## frôlent en diagonale de n'en faire qu'une, ce qui rendrait la prospection illisible.
+##
+## Les graines qui ne portent pas le tag sont ignorées plutôt que refusées : l'appelant lui
+## passe ce que `tagged_within()` a trouvé, et un ensemble vide rend un ensemble vide.
+##
+## Un parcours **multi-graines** : deux cases du même filon ne le comptent pas deux fois, et
+## deux filons distincts s'additionnent sans que l'appelant ait à les distinguer.
+func vein_from(seeds: Array[Vector2i], tag: StringName) -> Array[Vector2i]:
+	var found: Array[Vector2i] = []
+	var seen: Dictionary[Vector2i, bool] = {}
+	for seed in seeds:
+		if seen.has(seed) or not has_tag(seed, tag):
+			continue
+		seen[seed] = true
+		found.append(seed)
+	var head := 0
+	while head < found.size():
+		var cell := found[head]
+		head += 1
+		for step in _SIDES:
+			var side := cell + step
+			if seen.has(side) or not has_tag(side, tag):
+				continue
+			seen[side] = true
+			found.append(side)
+	return found
+
+## Les quatre voisins d'une cellule, dans un ordre fixe : ce qui parcourt la grille doit rendre
+## le même résultat d'un lancement à l'autre.
+const _SIDES: Array[Vector2i] = [Vector2i(0, -1), Vector2i(-1, 0), Vector2i(1, 0),
+	Vector2i(0, 1)]
+
 ## Rectangle englobant de ces cellules. Précondition : non vide.
 ##
 ## Il ne sert qu'à **borner le balayage** : sur une empreinte en L il couvre des cases que le

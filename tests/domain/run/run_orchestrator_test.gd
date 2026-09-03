@@ -125,7 +125,8 @@ func _building(id: StringName, footprint: Array[Vector2i], site_turns: int, work
 		rule.tag = SOIL_TAG
 		rule.radius = 1
 		rule.resource = resource
-		rule.per_cell = yields[resource]
+		rule.mode = AdjacencyRule.Mode.PER_CELL
+		rule.amount = yields[resource]
 		data.adjacency.append(rule)
 	return data
 

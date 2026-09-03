@@ -8,7 +8,8 @@ script = ExtResource("3_adjacency_rule")
 tag = &"stone"
 radius = 1
 resource = &"ore"
-per_cell = 1
+mode = 3
+amount = 1
 
 [resource]
 script = ExtResource("1_building_data")
