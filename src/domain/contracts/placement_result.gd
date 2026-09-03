@@ -31,6 +31,14 @@ const REASON_OCCUPIED := &"occupied"
 ## Les cellules de l'empreinte ne sont pas toutes à la même hauteur.
 const REASON_UNEVEN_GROUND := &"uneven_ground"
 
+## La case est **hors de l'emprise du village**.
+##
+## L'emprise est la réunion des disques que les bâtiments achevés projettent autour d'eux
+## *(DESIGN.md 3.2)*. Elle se dit **avant** le voisinage et après le terrain, et l'ordre porte
+## un sens : « il n'y a pas d'arbre ici » n'intéresse personne sur une case où l'on n'a de toute
+## façon pas le droit de bâtir.
+const REASON_OUT_OF_REACH := &"out_of_reach"
+
 ## Le bâtiment porte des règles de voisinage et **aucune ne trouve de case**.
 ##
 ## C'est le seul refus qui ne parle ni de la carte ni de ce qui est bâti, mais de ce que le

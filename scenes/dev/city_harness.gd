@@ -207,9 +207,12 @@ func _refresh_preview() -> void:
 		_ghost.clear()
 		return
 	_preview = PlacementValidator.validate(_city, _terrain, data, hovered.cell(), _turns)
+	# Le relevé de voisinage vient du même appel que celui du résolveur de production : le
+	# fantôme ne peut donc pas promettre autre chose que ce qu'un tour verserait.
+	var bonus := Adjacency.inspect(data, hovered.cell(), _turns, _terrain)
 	# La hauteur vient du survol et non du résultat : un refus n'en a pas, et c'est
 	# justement sur un refus qu'il faut voir le fantôme.
-	_ghost.show_at(data, hovered.cell(), _turns, hovered.height(), _preview)
+	_ghost.show_at(data, hovered.cell(), _turns, hovered.height(), _preview, bonus, _terrain)
 
 ## Pose chaque bâtiment connu sur la première ancre qui l'accepte, balayée en x puis en
 ## y — le même ordre que TerrainQuery emploie sur une zone.

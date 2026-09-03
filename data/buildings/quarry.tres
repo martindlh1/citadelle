@@ -24,3 +24,4 @@ cost = Dictionary[StringName, int]({
 workers = 3
 hit_points = 8
 adjacency = Array[AdjacencyRule]([SubResource("Resource_quarry_adjacency_0")])
+reach = 2

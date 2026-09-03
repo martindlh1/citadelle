@@ -165,7 +165,47 @@ func _ell() -> BuildingData:
 	var offsets: Array[Vector2i] = [Vector2i.ZERO, Vector2i(1, 0), Vector2i(0, 1)]
 	return _building(&"ell", offsets)
 
-# --- la cinquième règle : trouver un voisin ---------------------------------
+# --- la cinquième règle : rester dans l'emprise -----------------------------
+
+## **Une ville vide n'oppose aucune frontière.** C'est la fondation, et c'est ce qui permet à
+## `RunOrchestrator.found()` de passer par le validateur comme tout le reste plutôt que par un
+## chemin de pose que rien ne vérifie.
+func test_an_empty_city_places_anywhere() -> void:
+	assert_bool(_validate(_hut(), Vector2i(5, 5)).is_ok()).is_true()
+
+## Dès qu'un bâtiment existe, on bâtit dans son disque et pas ailleurs. C'est le prérequis de
+## C7 : le village pousse par où il a bâti.
+func test_a_cell_outside_the_territory_is_refused() -> void:
+	_city.place(_terrain, _hut(), Vector2i(0, 0))
+	assert_str(_validate(_hut(), Vector2i(5, 5)).reason()) \
+		.is_equal(PlacementResult.REASON_OUT_OF_REACH)
+
+## Le pendant, sans quoi le cas ci-dessus passerait aussi bien sur un validateur qui refuse
+## tout dès qu'une ville n'est plus vide.
+func test_a_cell_inside_the_territory_is_accepted() -> void:
+	_city.place(_terrain, _hut(), Vector2i(0, 0))
+	assert_bool(_validate(_hut(), Vector2i(0, 1)).is_ok()) \
+		.override_failure_message("la case voisine est dans le disque d'un rayon 1") \
+		.is_true()
+
+## **Toute l'empreinte doit être dedans, pas seulement l'ancre.** Une ferme à cheval sur la
+## frontière serait un bâtiment à moitié hors du village, et « chaque cellule répond » est déjà
+## la forme des quatre premières règles.
+func test_a_footprint_half_outside_the_territory_is_refused() -> void:
+	_city.place(_terrain, _hut(), Vector2i(0, 0))
+	# L'ancre est dans le disque, la seconde case n'y est pas.
+	assert_str(_validate(_wide(), Vector2i(3, 3)).reason()) \
+		.is_equal(PlacementResult.REASON_OUT_OF_REACH)
+
+## L'ordre : « c'est trop loin » n'intéresse personne sur une case sous l'eau. Les quatre
+## règles de terrain se prononcent d'abord.
+func test_an_unbuildable_cell_is_named_before_the_distance() -> void:
+	_city.place(_terrain, _hut(), Vector2i(0, 0))
+	assert_str(_validate(_hut(), WATER_CELL).reason()) \
+		.override_failure_message("l'eau doit se dire avant l'emprise") \
+		.is_equal(PlacementResult.REASON_NOT_BUILDABLE)
+
+# --- la sixième règle : trouver un voisin ----------------------------------
 
 ## **Le prérequis dur de C3**, et il revient sur une décision de C1. Un bâtiment qui ne trouve
 ## aucune case pour ses règles ne rend rien du tout, puisque le voisinage est la seule source de
@@ -189,7 +229,7 @@ func test_a_building_without_rules_is_never_refused_for_that() -> void:
 	assert_bool(_validate(_hut(), Vector2i(0, 3)).is_ok()).is_true()
 
 ## L'ordre compte : « il n'y a pas d'eau » rendu sur une case sous l'eau serait exact et hors
-## sujet. Les quatre règles de terrain se prononcent d'abord.
+## sujet. Les règles de terrain se prononcent d'abord.
 func test_an_unbuildable_cell_is_named_before_the_missing_neighbour() -> void:
 	assert_str(_validate(_thirsty(), ROCK_CELL).reason()) \
 		.override_failure_message("le rocher doit se dire avant le voisinage") \
@@ -209,6 +249,12 @@ func _building(id: StringName, offsets: Array[Vector2i]) -> BuildingData:
 	var building := BuildingData.new()
 	building.id = id
 	building.footprint = offsets
+	# Une emprise large, pour que la règle de C7 ne se mette pas en travers des cas qui
+	# parlent d'autre chose. Trois et non un : à un anneau, un bâtiment de deux par deux posé
+	# contre son voisin avait déjà un coin dehors, et trois cas de ce fichier se sont mis à
+	# mesurer l'emprise au lieu de leur sujet. Un `reach` laissé à zéro, lui, n'ouvrirait même
+	# pas la case voisine — c'est ce que ces deux fichiers ont trouvé le jour du jalon.
+	building.reach = 3
 	return building
 
 ## Une cabane qui exige un voisin d'eau à un anneau. `WATER_CELL` est la seule case qui la

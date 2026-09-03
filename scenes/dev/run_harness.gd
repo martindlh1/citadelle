@@ -101,6 +101,8 @@ var _world: DevWorld
 var _grid: HeightGrid
 var _renderer: BuildingRenderer
 var _ghost: PlacementGhost
+var _outline: TerritoryOutline
+var _promised: TerritoryOutline
 var _label: Label
 var _column: VBoxContainer
 var _card: BuildingCard
@@ -135,11 +137,19 @@ func _ready() -> void:
 	add_child(_renderer)
 	_ghost = PlacementGhost.create(_metrics)
 	add_child(_ghost)
+	_outline = TerritoryOutline.create(_metrics)
+	add_child(_outline)
+	_promised = TerritoryOutline.create(_metrics, TerritoryOutline.PROMISED_COLOR)
+	add_child(_promised)
 	_palette = CommodityPalette.from_database()
 	_label = _make_label()
 	add_child(_corner(_label, Control.SIZE_SHRINK_BEGIN, Control.SIZE_SHRINK_BEGIN))
 	add_child(_corner(_make_column(), Control.SIZE_SHRINK_END, Control.SIZE_SHRINK_END))
 	EventBus.turn_resolved.connect(_on_turn_resolved)
+	# Une fois avant tout geste : une ville vide n'a pas d'emprise, donc le contour se cache —
+	# et il se cache **par le même chemin** que celui qui le dessinera. Le monter dans un état
+	# et le rafraîchir dans un autre est la façon la plus sûre d'en oublier un.
+	_redraw_city()
 	_world.settle_at(DevWorld.REST)
 	if DevShot.has_flag(DevShot.CHRONICLE_FLAG):
 		_write_chronicle()
@@ -306,6 +316,7 @@ func _refresh_preview() -> void:
 	if not hovered.is_hit() or data == null:
 		_preview = null
 		_ghost.clear()
+		_promised.clear()
 		return
 	_preview = PlacementValidator.validate(_state().city(), _state().terrain(), data,
 		hovered.cell(), _turns)
@@ -318,6 +329,11 @@ func _refresh_preview() -> void:
 	# La hauteur vient du survol et non du résultat : un refus n'en a pas, et c'est
 	# justement sur un refus qu'il faut voir le fantôme.
 	_ghost.show_at(data, hovered.cell(), _turns, hovered.height(), _preview, bonus,
+		_state().terrain())
+	# L'emprise que ce bâtiment ouvrirait, dans l'autre teinte. Elle se montre **même quand
+	# la pose est refusée** : sur un refus pour distance, c'est précisément ce contour-là qui
+	# explique de combien on est trop loin.
+	_promised.show_cells(Territory.would_cover(data, hovered.cell(), _turns, _grid.size()),
 		_state().terrain())
 
 ## Le bâtiment que le fantôme dessine : le Cœur tant qu'il n'est pas posé, la sélection
@@ -361,6 +377,11 @@ func _show_card(city: CitySnapshot) -> void:
 ## liste. Un oubli se lirait comme une couleur qui ne change pas, ce que rien ne signale.
 func _redraw_city() -> void:
 	_renderer.rebuild(_state().city(), [], _state().staffing().asleep())
+	# L'emprise se redessine ici et pas dans `_process` : elle ne bouge qu'à la pose, à la
+	# démolition et au cran qui achève un chantier — c'est-à-dire exactement les gestes qui
+	# passent par cette fonction. La recalculer à chaque image aurait balayé mille cellules
+	# soixante fois par seconde pour un contour identique.
+	_outline.show_cells(Territory.cells(_state().city(), _grid.size()), _state().terrain())
 
 # --- le rapport --------------------------------------------------------------
 

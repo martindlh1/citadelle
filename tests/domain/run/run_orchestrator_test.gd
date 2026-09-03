@@ -104,6 +104,10 @@ func _building(id: StringName, footprint: Array[Vector2i], site_turns: int, work
 		cost: Dictionary[StringName, int], yields: Dictionary[StringName, int],
 		housing := 0, storage := 0, hit_points := 6) -> BuildingData:
 	var data := BuildingData.new()
+	# Une emprise large, pour que la règle d'emprise de `C7` ne se mette pas en travers des
+	# cas qui parlent d'autre chose : un `reach` laissé à zéro n'ouvrirait même pas la case
+	# voisine, et toute ville de plus d'un bâtiment serait refusée.
+	data.reach = 12
 	data.id = id
 	data.footprint = footprint
 	data.site_turns = site_turns

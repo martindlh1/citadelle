@@ -121,6 +121,20 @@ const QUARTER_TURNS := 4
 ## ce qu'un cas de test de N1 a payé pour de vrai.
 @export_range(0, 10, 1) var site_turns: int
 
+## Anneaux dont il étend le territoire constructible du village, une fois **achevé**.
+##
+## Colonne **Emprise** de DESIGN.md 4.1, et à ne pas confondre avec la portée d'un tir que V2
+## écrira. C'est ce qui fait qu'on bâtit près de chez soi puis un peu plus loin : le Cœur ouvre
+## le premier disque, chaque bâtiment fini ajoute le sien, et ce qu'on peut poser est la
+## **réunion** de tous. Le contour cesse d'être un cercle dès le deuxième — il pousse vers ce
+## que le village est allé chercher.
+##
+## **Réclamé, et un minimum de 1.** Zéro serait une valeur défendable — « ce bâtiment n'étend
+## rien au-delà de lui-même » — et c'est justement pour ça qu'il est refusé : indiscernable
+## d'un champ oublié, il ferait d'un `.tres` incomplet un bâtiment qui rétrécit le jeu en
+## silence. Tout ce qui tient debout revendique au moins la terre qu'il touche.
+@export_range(1, 32, 1) var reach: int
+
 ## Ce qu'il coûte à poser, par ressource.
 ##
 ## Le coût ne participe **pas** à la validation du placement : « ai-je les 15 bois ? »
@@ -298,6 +312,8 @@ func missing_fields() -> PackedStringArray:
 	# Réclamé, contrairement aux champs plats ci-dessus : voir son docstring.
 	if hit_points <= 0:
 		missing.append("hit_points")
+	if reach < 1:
+		missing.append("reach")
 	missing.append_array(_economy_fields())
 	missing.append_array(_adjacency_fields())
 	if footprint.is_empty():

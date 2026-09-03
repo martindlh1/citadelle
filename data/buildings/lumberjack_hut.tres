@@ -1,7 +1,7 @@
-[gd_resource type="Resource" script_class="BuildingData" format=3]
+[gd_resource type="Resource" script_class="BuildingData" format=3 uid="uid://wwsg2u5hsldg"]
 
-[ext_resource type="Script" path="res://src/schema/building_data.gd" id="1_building_data"]
-[ext_resource type="Script" path="res://src/schema/adjacency_rule.gd" id="3_adjacency_rule"]
+[ext_resource type="Script" uid="uid://dysje8h5rmo0g" path="res://src/schema/building_data.gd" id="1_building_data"]
+[ext_resource type="Script" uid="uid://yoavf4hf7jnu" path="res://src/schema/adjacency_rule.gd" id="3_adjacency_rule"]
 
 [sub_resource type="Resource" id="Resource_lumberjack_hut_adjacency_0"]
 script = ExtResource("3_adjacency_rule")
@@ -14,10 +14,11 @@ per_cell = 1
 script = ExtResource("1_building_data")
 id = &"lumberjack_hut"
 label = "Camp de bûcheron"
+footprint = Array[Vector2i]([Vector2i(0, 0)])
 color = Color(0.55, 0.38, 0.24, 1)
 height = 0.6
 site_turns = 1
-footprint = Array[Vector2i]([Vector2i(0, 0)])
+adjacency = Array[ExtResource("3_adjacency_rule")]([SubResource("Resource_lumberjack_hut_adjacency_0")])
 workers = 2
 hit_points = 6
-adjacency = Array[AdjacencyRule]([SubResource("Resource_lumberjack_hut_adjacency_0")])
+reach = 2

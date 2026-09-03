@@ -327,8 +327,8 @@ addons/gdUnit4/runtest.sh -a tests --headless --ignoreHeadlessMode
 #    tout le reste doit sortir propre.
 for f in $(find src/adapters src/schema scenes/dev -name '*.gd'); do
   godot --headless --path . --check-only -s "res://$f" 2>&1 \
-    | grep -E 'Could not find type|not declared in the current scope' \
-    | grep -vE '"(GameDatabase|EventBus|RunManager)"'
+    | grep -E 'Parse Error|Could not find type|not declared in the current scope' \
+    | grep -vE 'Identifier not found: "?(GameDatabase|EventBus|RunManager)"?'
 done
 ```
 
@@ -342,6 +342,18 @@ la commande 2 ne balaie que `src/domain/`. Il restait donc un angle mort de la t
 La leçon générale vaut au-delà de ces deux fichiers : **un contrôle de parsing qui ne balaie
 qu'un dossier laisse un angle mort de la taille des autres.** `R0` avait pourtant raison de
 dire que GDScript dénonce toute référence pendante — encore faut-il qu'on lui demande.
+
+**Et son filtre en laissait un second, de la taille d'une signature.** *(Trouvé à `C7`.)* Le
+`grep` ne cherchait que des identifiants introuvables, si bien qu'un appel devenu **trop
+court** passait au travers : `city_harness.gd` a appelé `show_at()` avec cinq arguments sur
+sept pendant tout un jalon, sans que le boot le dise — il ne charge que le harnais actif — ni
+que la commande 4 le voie. Le motif inclut donc `Parse Error`, et l'exclusion des autoloads a
+été resserrée sur la ligne exacte qu'ils produisent : large, elle avalait aussi les vraies
+erreurs des fichiers qui les mentionnent.
+
+La règle sous-jacente vaut au-delà de ce `grep` : **un filtre qui énumère les pannes connues
+ne voit que celles-là.** Élargir une signature partagée est précisément le geste qui en
+fabrique de nouvelles, et c'est donc le moment où ce contrôle doit être le plus large.
 
 Huit pièges constatés en 4.7.2, à ne pas réapprendre :
 

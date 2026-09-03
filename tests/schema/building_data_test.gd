@@ -372,6 +372,10 @@ func _l_shape() -> Array[Vector2i]:
 ## rien de ce que missing_fields() exige vraiment.
 func _building(offsets: Array[Vector2i]) -> BuildingData:
 	var building := BuildingData.new()
+	# Une emprise large, pour que la règle d'emprise de `C7` ne se mette pas en travers des
+	# cas qui parlent d'autre chose : un `reach` laissé à zéro n'ouvrirait même pas la case
+	# voisine, et toute ville de plus d'un bâtiment serait refusée.
+	building.reach = 3
 	building.id = &"test_hut"
 	building.label = "Cabane d'essai"
 	building.color = Color(0.5, 0.4, 0.3)
