@@ -149,17 +149,13 @@ func rebuild(city: CityState, hidden: Array[Vector2i] = [],
 func _add_model(drawn: Dictionary[Mesh, Array], building: PlacedBuilding, tile: float,
 		raised: float, tint: Color) -> void:
 	var data := building.data()
-	var scale := ModelFit.span_scale(data.model, data.model_span, tile)
 	var ground := _metrics.spot_surface(data.centre_at(building.anchor(), building.turns()),
 		building.height())
-	ground.y += ModelFit.ground_lift(data.model, scale) * raised
 	# L'orientation du bâtiment ET le recalage du modèle : le premier est un état de jeu, le
 	# second corrige une convention de pack. Les additionner ici est ce qui évite de faire
 	# tourner l'empreinte pour l'apparence.
-	var spin := Basis.from_euler(Vector3(0.0,
-		-TAU * float(building.turns() + data.model_turns) / BuildingData.QUARTER_TURNS, 0.0))
-	var body := spin.scaled(Vector3(scale, scale * raised, scale))
-	_queue(drawn, data.model, Transform3D(body, ground), tint)
+	_queue(drawn, data.model, ModelFit.stand(data.model, data.model_span,
+		building.turns() + data.model_turns, tile, ground, raised), tint)
 
 ## Le rendu de `C1` : une boîte par cellule occupée, à la hauteur du bâtiment.
 ##

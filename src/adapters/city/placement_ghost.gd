@@ -46,6 +46,17 @@ const MARK_HEIGHT := 0.06
 ## Distance du cartouche au-dessus du sol, en fractions de tuile.
 const TAG_LIFT := 1.4
 
+## Part de blanc mêlée à la teinte du fantôme avant de la poser sur un modèle.
+##
+## `albedo_color` **multiplie** la texture : un vert franc éteindrait tout ce que l'atlas porte
+## de rouge, et le bâtiment deviendrait une silhouette monochrome. Éclairci de moitié, il garde
+## ses formes lisibles sous un voile coloré — on doit reconnaître **quel** bâtiment on pose
+## autant que savoir si on peut le poser.
+const MODEL_WASH := 0.55
+
+## Opacité du modèle fantôme. Plus dense que les marques au sol, qui ne sont qu'un repère.
+const MODEL_ALPHA := 0.72
+
 ## Taille du texte du cartouche, en unités de monde par pixel.
 ##
 ## Réglée en capture et non au jugé : à 0,006 le chiffre était présent et illisible sous le
@@ -60,6 +71,15 @@ const LIFT_RATIO := 0.004
 var _metrics: TerrainMetrics
 var _tag: Label3D
 
+## Le modèle du bâtiment visé, debout sur la case survolée. Un `MeshInstance3D` et non une
+## passe `MultiMesh` : il n'y a jamais qu'un fantôme.
+var _model: MeshInstance3D
+
+## La mesh dont `_model` porte le matériau, pour ne le refabriquer qu'au changement de
+## bâtiment. Une copie de matériau par image serait une allocation par image sous un curseur
+## qui se promène.
+var _dressed: Mesh
+
 ## Fantôme prêt à être ajouté à l'arbre, invisible tant que rien n'est visé.
 static func create(metrics: TerrainMetrics) -> PlacementGhost:
 	assert(metrics != null, "fantôme sans métrique")
@@ -70,6 +90,12 @@ static func create(metrics: TerrainMetrics) -> PlacementGhost:
 	ghost.multimesh = _make_multimesh()
 	# Un fantôme qui projette une ombre dessinerait un bâtiment qui n'existe pas encore.
 	ghost.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ghost._model = MeshInstance3D.new()
+	ghost._model.name = "GhostModel"
+	# Un fantôme qui projette une ombre dessinerait un bâtiment qui n'existe pas encore.
+	ghost._model.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ghost._model.visible = false
+	ghost.add_child(ghost._model)
 	ghost._tag = _make_tag()
 	ghost.add_child(ghost._tag)
 	ghost.visible = false
@@ -112,7 +138,12 @@ func show_at(data: BuildingData, anchor: Vector2i, turns: int, ground: int,
 		painted[cell] = footprint
 
 	var tile := _metrics.tile_size()
-	var thickness := data.height * tile
+	# **L'empreinte n'est un volume que faute de modèle.** Quand le bâtiment a une silhouette,
+	# une boîte pleine de sa hauteur la cacherait exactement — on verrait une caisse verte à la
+	# place de ce qu'on s'apprête à poser. Elle redevient alors une marque au sol, comme les
+	# deux autres, et c'est le modèle qui occupe le volume.
+	var modelled := data.model != null
+	var thickness := (MARK_HEIGHT if modelled else data.height) * tile
 	_reserve(painted.size())
 	var index := 0
 	for cell in painted:
@@ -128,8 +159,34 @@ func show_at(data: BuildingData, anchor: Vector2i, turns: int, ground: int,
 			Transform3D(Basis.IDENTITY.scaled(Vector3(tile, height, tile)), base))
 		multimesh.set_instance_color(index, painted[cell])
 		index += 1
+	_show_model(data, anchor, turns, ground, tile, result.is_ok())
 	_show_tag(bonus, cells[0], ground, tile)
 	visible = true
+
+## Le modèle du bâtiment visé, debout sur la case survolée et voilé de la teinte du verdict.
+##
+## **La transformée vient de `ModelFit.stand()`, celle-là même que le renderer emploie.** C'est
+## la seule façon d'être sûr que le bâtiment atterrit là où le fantôme l'a montré : deux calculs
+## auraient divergé, et le désaccord ne se serait vu qu'après le clic.
+##
+## Le matériau n'est refabriqué qu'au changement de bâtiment — sa teinte, elle, se règle à
+## chaque image. Une copie par image serait une allocation par image sous un curseur qui bouge.
+func _show_model(data: BuildingData, anchor: Vector2i, turns: int, ground: int,
+		tile: float, allowed: bool) -> void:
+	_model.visible = data.model != null
+	if data.model == null:
+		return
+	if _dressed != data.model:
+		_dressed = data.model
+		_model.material_override = ModelFit.ghost_material(data.model, Color.WHITE)
+	var wash := OK_COLOR if allowed else REFUSED_COLOR
+	var tint := wash.lerp(Color.WHITE, MODEL_WASH)
+	tint.a = MODEL_ALPHA
+	(_model.material_override as StandardMaterial3D).albedo_color = tint
+	_model.mesh = data.model
+	_model.transform = ModelFit.stand(data.model, data.model_span,
+		turns + data.model_turns, tile,
+		_metrics.spot_surface(data.centre_at(anchor, turns), ground))
 
 ## Les cases qu'une règle de ce bâtiment regarde, quel que soit ce qu'elles portent.
 ##
@@ -185,6 +242,7 @@ func _show_tag(bonus: AdjacencyReport, anchor_cell: Vector2i, ground: int,
 ## Retire le fantôme. Plus rien n'est visé.
 func clear() -> void:
 	visible = false
+
 
 ## Assure que le tampon tient `count` boîtes, sans le réallouer à chaque image.
 ##
