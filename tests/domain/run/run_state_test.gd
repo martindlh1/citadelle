@@ -61,6 +61,10 @@ func _run(starting_building := &"heart") -> RunBalance:
 func _building(id: StringName, footprint: Array[Vector2i], site_turns := 0,
 		housing := 0) -> BuildingData:
 	var data := BuildingData.new()
+	# Une emprise large, pour que la règle d'emprise de `C7` ne se mette pas en travers des
+	# cas qui parlent d'autre chose : un `reach` laissé à zéro n'ouvrirait même pas la case
+	# voisine, et toute ville de plus d'un bâtiment serait refusée.
+	data.reach = 12
 	data.id = id
 	data.footprint = footprint
 	data.hit_points = 40

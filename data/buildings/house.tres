@@ -15,3 +15,4 @@ cost = Dictionary[StringName, int]({
 })
 housing = 4
 hit_points = 6
+reach = 4

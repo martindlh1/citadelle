@@ -28,10 +28,16 @@ extends PanelContainer
 ## le Cœur tant qu'il n'est pas fondé, la sélection ensuite. Le harnais lui passe la même
 ## `BuildingData` qu'au fantôme, et les deux ne peuvent donc pas se contredire.
 ##
-## **Ce qu'elle ne dit pas, et ne dira jamais : si la case convient.** Elle ne connaît pas
-## de cellule. Le fantôme colore la carte et la ligne de survol dit pourquoi ; cette fiche
-## répond à l'autre moitié — ce que le village peut payer. Les deux se rejoignent dans
-## `RunOrchestrator.open_site()`, qui pose la question du terrain avant celle des coûts.
+## **Ce qu'elle ne dit pas, et ne dira jamais : si la case convient.** Le fantôme colore la
+## carte et la ligne de survol dit pourquoi ; cette fiche répond à l'autre moitié — ce que le
+## village peut payer. Les deux se rejoignent dans `RunOrchestrator.open_site()`, qui pose la
+## question du terrain avant celle des coûts.
+##
+## *`C3` a essayé d'y mettre l'adjacence, et l'a retirée le jour même.* La ligne était juste et
+## au mauvais endroit : ce qu'une case rapporte est une information de **placement**, et l'on
+## regarde la carte quand on choisit une case, pas un panneau dans un coin. Elle est passée sur
+## le fantôme, où elle se montre au lieu de se décrire. Cette fiche redevient ce qu'elle était —
+## ce que le village peut payer, sans jamais regarder le sol.
 ##
 ## Les nœuds sont construits une fois et **mis à jour sur place**, visibilité comprise : une
 ## ligne de coût qui n'existe pas est cachée, jamais retirée. Appelable à chaque image.
@@ -159,14 +165,29 @@ func _show_workers(data: BuildingData, hands: int) -> void:
 func _gives_text(data: BuildingData) -> String:
 	var parts := PackedStringArray()
 	if data.produces():
-		parts.append("%s par tour"
-			% _palette.bundle_text(data.production.yield_per_turn))
+		# Ce qu'il produit, sans dire combien : le combien dépend de la case, et c'est le
+		# fantôme qui le montre. Nommer un chiffre ici serait en inventer un second.
+		parts.append("%s au voisinage" % _harvest_of(data))
 	if data.housing > 0:
 		parts.append("loge %d" % data.housing)
 	if data.storage_bonus > 0:
 		parts.append("réserve +%d" % data.storage_bonus)
 	parts.append("%d PV" % data.hit_points)
 	return " · ".join(parts)
+
+## Les ressources que ses règles versent, **nommées sans quantité**.
+##
+## Pas de chiffre, et c'est le point : ce qu'une case rapporte dépend de la case, donc tout
+## nombre écrit ici serait faux partout sauf à un endroit. Le fantôme le montre là où la
+## question se pose. `bundle_text()` ne convient pas pour la même raison — il écrit un lot,
+## c'est-à-dire des quantités.
+func _harvest_of(data: BuildingData) -> String:
+	var names := PackedStringArray()
+	for rule in data.adjacency:
+		var label := _palette.label_of(rule.resource)
+		if not names.has(label):
+			names.append(label)
+	return ", ".join(names)
 
 ## Ce qui manque pour l'ouvrir — les deux coûts ensemble, dans l'ordre où le domaine les
 ## demande.

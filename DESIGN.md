@@ -305,21 +305,134 @@ placement fantôme : **sans retour visuel en temps réel du delta, l'adjacence e
 donc inexistante.** Cette phrase était déjà dans l'ancien document et elle n'a jamais été
 aussi vraie.
 
-**`OUVERT`** — la forme exacte des règles, et leur chiffrage. À décider devant une carte
-générée, pas dans l'abstrait.
+*Ce retour est **sur le fantôme** et non dans un panneau de HUD*, et `C3` l'a d'abord mis au
+mauvais endroit avant de le déplacer. Une ligne de texte dans un coin de l'écran **décrit** ce
+qu'une case rapporte ; le fantôme le **montre** — la portée de la règle, les cases qui
+comptent, et le total posé sur le bâtiment. La différence tient à ce qu'on regarde au moment
+où l'on choisit une case : on regarde la carte. Une information de placement rangée ailleurs
+oblige à faire l'aller-retour, ce qui revient à ne pas l'avoir.
+
+*La forme est tranchée à `C3`, et elle l'a été devant une carte générée comme ce paragraphe
+l'exigeait.* Une règle porte **quatre** choses : un tag de terrain, un rayon, une ressource, et
+ce que chaque case rapporte.
+
+**Le voisinage est la seule source de production.** C'est le renversement du jalon, et il
+change la nature de la couche : l'adjacence n'est plus un bonus posé sur un rendement de base,
+elle **est** le rendement. Un camp de bûcheron ne produit pas du bois parce qu'il existe, il en
+produit parce qu'il y a des arbres autour de lui — et deux fois plus s'il y en a deux fois plus.
+`ProductionBlock` disparaît : plus aucun bâtiment ne déclare de rendement à plat.
+
+*Une première version portait un cinquième nombre, un **plafond**, et il est retiré le jour
+même.* Il se défendait tant que l'adjacence était un supplément — il empêchait qu'un bosquet
+devienne un gros lot. Comme source unique il fait exactement l'inverse de ce qu'on veut : au
+plafond, un emplacement à deux arbres et un emplacement à dix rendent la même chose, et le
+choix de la case cesse de compter. Un jeu dont le placement est l'essence ne peut pas aplatir
+la seule mesure qui distingue deux cases.
+
+**Et un bâtiment qui ne trouve aucun voisin ne se pose pas.** C'est un prérequis **dur**, pas
+un rendement nul : une cabane de bûcheron au milieu d'une plaine serait un bâtiment qui coûte
+des bras, occupe une case et ne rend rien — donc un piège, et un piège qu'on ne repère qu'après
+avoir payé. Le refus se lit sur le fantôme avant le clic, comme les quatre autres.
+
+*Cela revient sur une décision de `C1`*, qui avait écarté « requiert un gisement voisin » du
+placement en réservant l'adjacence au rendement. La décision était juste tant que les deux
+couches étaient distinctes ; elles n'en font plus qu'une.
+
+**Le rayon compte l'empreinte, pas seulement le pourtour.** Le mot « voisin » ci-dessus était
+plus étroit que ce qu'on veut : bâtir une carrière **sur** le gisement doit être le bon geste,
+c'est ce qu'un joueur essaie en premier et ce que tout jeu de bâtisseur lui a appris. Le terrain
+n'est d'ailleurs pas consommé par la pose — la forêt reste sous la cabane —, donc rien ne s'y
+oppose. La distance est en anneaux (Chebyshev) depuis la case la plus proche de l'empreinte, ce
+qui fait qu'un rayon 1 est bien « la couronne autour du bâtiment, empreinte comprise ».
+
+**Le terrain, et pas encore les bâtiments voisins.** La règle lit un tag de `data/terrain/`. Un
+bâtiment n'a pas de tags aujourd'hui, et lui en donner sans qu'aucune règle les lise serait le
+champ ajouté d'avance que ce projet refuse depuis `E1b`. C'est un mot de plus dans le schéma le
+jour où une règle le veut.
+
+| Bâtiment | Règle | Un bon emplacement |
+|---|---|---|
+| Camp de bûcheron | +1 bois par case `forest` à 1 | 4 à 6 bois |
+| Carrière | +1 pierre par case `stone` à 1 | 2 à 4 pierre |
+| Mine | +1 minerai par case `stone` à 1 | 2 à 4 minerai |
+| Ferme | +2 nourriture par case `water` à 1 | 4 à 8 nourriture |
+
+La troisième colonne n'est pas un réglage : c'est ce qu'une carte de `T4` **offre** en pratique,
+et c'est la seule façon honnête de chiffrer une règle dont le rendement n'existe qu'en fonction
+du sol. Les extrêmes vont de 1 — le minimum, sans quoi on ne pose pas — à 9 sur une case au
+cœur d'un bosquet, ou 16 pour une ferme de deux par deux cernée d'eau, ce qui n'arrive pas.
+
+*La colonne **Production** de la table de 4.1 devient donc caduque pour ces quatre lignes*, et
+elle est corrigée là-bas plutôt que doublée ici.
+
+La ferme est la seule dont le tag est **inconstructible**, et c'est ce qui la distingue : elle
+ne peut jamais se poser *sur* ce qu'elle veut, seulement à côté. Elle est aussi la raison pour
+laquelle `T4` a insisté sur les **vrais lacs** plutôt que sur des flaques d'une case — une
+flaque qu'on ne contourne pas est aussi une flaque qui ne nourrit personne.
+
+La carrière et la mine cherchent le **même** tag, ce qui est voulu : `DESIGN.md` 3.1 décrit un
+Gisement et un Filon, et le second n'existe pas encore en data. Le jour où `ore` arrive, c'est
+un mot à changer dans `mine.tres` — et rien d'autre nulle part.
+
+**`OUVERT`** — le chiffrage lui-même. Ces quatre lignes sont des points de départ, pas des
+cibles, au même titre que la table de 4.1. C'est `B1`.
+
+#### L'emprise — on bâtit près de chez soi, puis un peu plus loin
+
+*(Écrit à `C7`.)* On ne pose pas où l'on veut sur la carte : on pose **dans l'emprise du
+village**, et l'emprise est la réunion des disques que chaque bâtiment projette autour de lui.
+Le Cœur ouvre le premier ; chaque bâtiment achevé ajoute le sien, si bien que le territoire
+grandit par où l'on a bâti.
+
+**Ce que ça résout.** Sans elle, la carte entière est ouverte au premier tour : le bon coup
+consiste à traverser la moitié du relief pour aller poser une cabane dans le plus gros bosquet,
+et le village n'a jamais de forme. L'adjacence de `C3` dit *quelle case vaut le mieux* ; il
+manquait ce qui dit *jusqu'où l'on a le droit de chercher*. Les deux ensemble font le geste
+qu'on veut : un village qui pousse vers ce qu'il convoite, un pas à la fois.
+
+**La forme est une réunion, jamais une distance au Cœur.** Le contour cesse d'être un cercle
+dès le deuxième bâtiment — il pousse des lobes, se creuse, et raconte la forme qu'a prise le
+village. C'est ce qui distingue cette règle d'un simple rayon qui grandirait : un rayon
+central s'étend dans **toutes** les directions à la fois, une réunion s'étend là où l'on a
+investi. Un joueur qui veut la forêt du sud bâtit vers le sud, et le nord ne s'ouvre pas.
+
+**Seuls les bâtiments achevés comptent.** Un chantier occupe ses cases et paie son coût, mais
+il n'étend rien tant qu'il n'est pas fini — même règle que la réserve qu'un entrepôt en travaux
+ne relève pas encore *(cf. 3.3)*. C'est ce qui empêche de marcher jusqu'à l'autre bout de la
+carte en chaînant des chantiers qu'on n'achève jamais, et c'est ce qui fait que s'étendre
+**coûte des tours** et pas seulement des ressources.
+
+**Toute l'empreinte doit être dedans**, pas seulement l'ancre : une ferme à cheval sur le bord
+serait un bâtiment à moitié hors du village, et la règle des quatre autres passes est déjà
+« chaque cellule répond ».
+
+**Une ville vide n'a pas d'emprise, et la règle se tait alors.** C'est le cas de la fondation,
+et il n'a pas besoin d'exception ailleurs : le Cœur ne peut être posé que quand rien n'existe,
+donc la seule pose qui échappe à la règle est celle qui la crée.
+
+**Le contour se voit, et légèrement.** Une règle de placement qu'on ne découvre qu'au refus
+n'en est pas une — c'est ce que `N2` disait du coût en bras et ça vaut ici davantage, parce
+que la frontière bouge à chaque bâtiment achevé. On dessine donc le **périmètre** et non la
+surface : une nappe de couleur sur un tiers de la carte cacherait le relief, qui est
+exactement ce qu'on regarde en choisissant une case.
+
+**`OUVERT`** — les rayons eux-mêmes, et la question qui vient avec : faut-il que les bâtiments
+qui **rapportent** peu rayonnent loin, pour qu'étendre ait un prix ? La table de 4.1 donne des
+points de départ où l'habitation porte loin — elle est gratuite en bras *(cf. 3.4)*, donc c'est
+déjà l'outil d'expansion naturel. C'est `B1`.
 
 ### 3.3 Économie
 
-> **Contrat** — `CitySnapshot` + `PopulationState` → `ProductionReport`. Ne connaît ni la
-> grille ni les `Node` : tout lui est fourni.
+> **Contrat** — `CitySnapshot` + `PopulationState` + `TerrainQuery` → `ProductionReport`. Ne
+> connaît aucun `Node` : tout lui est fourni.
 
-*Ce contrat portait un `TerrainQuery` jusqu'à `I3`, et il l'a perdu là.* Le relief y était
-parce que le jeu d'avant laissait jouer une carte **à cru** sur une case, auquel cas le tag
-de cette case décidait du rendement ; ce geste n'existe plus. Un bâtiment rend son bloc, et
-rien dans le résolveur ne pourrait aujourd'hui faire quoi que ce soit d'un relief — le
-passer serait un champ ajouté d'avance, avec en prime une signature qui ment sur ce qu'elle
-lit. **Le relief revient dans l'Économie à `C3`**, avec l'adjacence, qui est son premier
-consommateur réel.
+*Ce contrat a perdu son `TerrainQuery` à `I3` et l'a retrouvé à `C3`*, ce qui est l'aller et
+le retour d'un même pari. Il l'avait perdu parce que le geste qui le justifiait — jouer une
+carte **à cru** sur une case, dont le tag décidait du rendement — était parti avec les cartes,
+et que le garder aurait été un champ ajouté d'avance avec une signature qui ment sur ce
+qu'elle lit. Il l'a retrouvé **avec ce qui le lit**, l'adjacence, qui est désormais la seule
+source de production. Deux jalons se sont écoulés entre les deux, et le résolveur n'a rien eu
+à défaire.
 
 **Conservé** : le `Ledger` en **réserve commune** — les cent unités sont partagées entre
 toutes les ressources, remplir de bois c'est renoncer à stocker de la pierre —, l'écrêtage
@@ -705,20 +818,30 @@ Chiffres de départ, pas des cibles. **Chantier** = nombre de tours pour l'achev
 **Trav.** = travailleurs immobilisés à l'ouverture du chantier, et gardés à vie.
 **Loge** = places de logement ajoutées.
 
-| Bâtiment | Coût | Chantier | Production | Trav. | Loge | PV | Portée | Dégâts | Cadence |
-|---|---|---|---|---|---|---|---|---|---|
-| Cœur | posé au départ | — | — | 0 | 4 | 40 | — | — | — |
-| Camp de bûcheron | 0 | 1 | +2 bois | 2 | 0 | 6 | — | — | — |
-| Ferme | 10 bois | 2 | +3 nourriture | 4 | 0 | 6 | — | — | — |
-| Carrière | 15 bois | 2 | +2 pierre | 3 | 0 | 8 | — | — | — |
-| Mine | 25 bois, 10 pierre | 3 | +2 minerai | 4 | 0 | 10 | — | — | — |
-| **Habitation** | 20 bois | 2 | — | **0** | 4 | 6 | — | — | — |
-| Entrepôt | 20 bois | 2 | +100 de réserve | 1 | 0 | 8 | — | — | — |
-| Palissade | 5 bois | 1 | — | 0 | 0 | 8 | — | — | — |
-| Tour de guet | 15 bois, 10 pierre | 3 | — | 1 | 0 | 12 | 4 | 3 | 20 |
-| Baliste | 30 bois, 20 pierre | 4 | — | 2 | 0 | 14 | 7 | 6 | 45 |
+| Bâtiment | Coût | Chantier | Production | Trav. | Loge | Emprise | PV | Portée | Dégâts | Cadence |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Cœur | posé au départ | — | — | 0 | 4 | 6 | 40 | — | — | — |
+| Camp de bûcheron | 0 | 1 | *voisinage* | 2 | 0 | 2 | 6 | — | — | — |
+| Ferme | 10 bois | 2 | *voisinage* | 4 | 0 | 3 | 6 | — | — | — |
+| Carrière | 15 bois | 2 | *voisinage* | 3 | 0 | 2 | 8 | — | — | — |
+| Mine | 25 bois, 10 pierre | 3 | *voisinage* | 4 | 0 | 2 | 10 | — | — | — |
+| **Habitation** | 20 bois | 2 | — | **0** | 4 | 4 | 6 | — | — | — |
+| Entrepôt | 20 bois | 2 | +100 de réserve | 1 | 0 | 3 | 8 | — | — | — |
+| Palissade | 5 bois | 1 | — | 0 | 0 | 2 | 8 | — | — | — |
+| Tour de guet | 15 bois, 10 pierre | 3 | — | 1 | 0 | 4 | 12 | 4 | 3 | 20 |
+| Baliste | 30 bois, 20 pierre | 4 | — | 2 | 0 | 3 | 14 | 7 | 6 | 45 |
 
-Quatre remarques sur cette table.
+**Emprise** = anneaux dont ce bâtiment étend le territoire constructible une fois achevé
+*(cf. 3.2)*. Ne pas la confondre avec **Portée**, qui est celle d'un tir. Le Cœur porte le plus
+loin parce qu'il fonde ; l'habitation vient juste après, et c'est voulu — elle est le seul
+bâtiment gratuit en bras, donc l'outil d'expansion que le jeu offre à qui n'a plus personne.
+
+**« Voisinage » n'est pas une omission**, c'est le renversement de `C3` : ces quatre-là ne
+déclarent plus aucun rendement à plat, et ce qu'ils rendent dépend entièrement de ce qui les
+entoure *(cf. 3.2)*. Un chiffre dans cette colonne serait un second rendement à tenir d'accord
+avec la règle, et il serait faux sur toutes les cases sauf une.
+
+Six remarques sur cette table.
 
 **Tous les bâtiments ont des points de vie et se réparent.** Il n'y a aucune exception, pas
 même le Cœur : ce qui tient debout peut être abîmé et remis à neuf. Un bâtiment abîmé
@@ -894,6 +1017,10 @@ survit, ce qui garde le journal lisible ; `R` et `N` sont neuves.
   tant que rien n'abîme.
 - **C3** — **L'adjacence**, et sa prévisualisation du delta au survol. Promu au rang de
   jalon central par le rescope.
+- **C7** — **L'emprise.** On bâtit dans le territoire du village, qui est la réunion des
+  disques de ses bâtiments achevés, et dont le périmètre se voit. Vient après `C3` parce que
+  l'adjacence dit quelle case vaut le mieux et l'emprise jusqu'où on a le droit de chercher :
+  écrite seule, la première laissait traverser la carte au premier tour.
 
 ### `V` — les vagues
 
@@ -940,7 +1067,7 @@ qui bouge. Et `C6` vient après `V4` parce que **réparer n'a aucun sens tant qu
 n'abîme** : l'écrire avant produirait un geste que rien n'appelle, donc un geste qu'aucune
 partie ne mesure.
 
-`C3` et `C5` peuvent s'intercaler à tout moment après `I3`.
+`C3`, `C5` et `C7` peuvent s'intercaler à tout moment après `I3`.
 
 ---
 

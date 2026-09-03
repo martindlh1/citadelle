@@ -28,6 +28,10 @@ func _city(costs: Array[int]) -> CitySnapshot:
 func _building(id: StringName, workers: int, housing: int = 0,
 		site_turns: int = 0) -> BuildingData:
 	var data := BuildingData.new()
+	# Une emprise large, pour que la règle d'emprise de `C7` ne se mette pas en travers des
+	# cas qui parlent d'autre chose : un `reach` laissé à zéro n'ouvrirait même pas la case
+	# voisine, et toute ville de plus d'un bâtiment serait refusée.
+	data.reach = 12
 	data.id = id
 	data.footprint = [Vector2i.ZERO] as Array[Vector2i]
 	data.hit_points = HIT_POINTS

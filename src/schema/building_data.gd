@@ -8,16 +8,20 @@ extends Resource
 ## C1 n'y mettait que ce que le placement consomme ; E1 y ajoute l'économie — coût,
 ## réserve, et la production à plat —, E1b sort cette dernière dans un bloc nullable, C4 le
 ## coût de chantier, F1 les PV, et N1 le coût en travailleurs et le plafond de logement.
-## Seuls les bonus d'adjacence de C3 et les quatre chiffres de défense de V2 restent
-## dehors, de la même façon que BalanceData gagne un bloc quand un système atterrit. Un
-## champ ajouté plus tard oblige à rouvrir les .tres ; un champ ajouté d'avance oblige à
-## deviner sa forme, ce qui coûte plus cher.
+## Seuls les quatre chiffres de défense de V2 restent dehors, de la même façon que BalanceData
+## gagne un bloc quand un système atterrit. Un champ ajouté plus tard oblige à rouvrir les
+## .tres ; un champ ajouté d'avance oblige à deviner sa forme, ce qui coûte plus cher.
+##
+## **C3 a fait le chemin inverse et retiré `production`.** Le bloc nullable d'E1b décrivait un
+## rendement dû au seul fait d'exister ; il n'y en a plus, et ce qu'un bâtiment rend se lit
+## désormais sur le sol autour de lui. C'est la deuxième fois qu'un champ de ce fichier part
+## faute de lecteur — `defense` à I3 —, et la seule où c'est le **modèle** qui a changé.
 ##
 ## **I3 lui a retiré `defense`**, dernier résidu du combat tactique. DESIGN.md 4.1 : « La
 ## palissade perd sa `defense` et garde ses points de vie […] elle ne défend plus par un
 ## chiffre abstrait, parce qu'il n'y a plus de total de défense à opposer à une puissance. »
 ## Le champ valait 3 dans un .tres et **aucun système ne le lisait** — même geste que N1 sur
-## les deux tiers de ProductionBlock. Ce qui le remplace est portée / dégâts / cadence, et
+## les deux tiers du bloc de production. Ce qui le remplace est portée / dégâts / cadence, et
 ## c'est V2 qui l'écrit, avec le système qui le lit.
 ##
 ## Ajouter un **bâtiment** doit rester une édition de data/. Ajouter une **nature** de
@@ -108,14 +112,28 @@ const QUARTER_TURNS := 4
 ##
 ## Le prix de ce choix est connu : un site_turns oublié dans un .tres vaut 0 et fait
 ## sauter le chantier en silence. Il est racheté par un cas de test qui charge tout
-## data/ et exige qu'au moins un bâtiment en déclare un — le motif de
-## production_block_test.gd, qui refuse de passer par vacuité.
+## data/ et exige qu'au moins un bâtiment en déclare un — un contrôle qui refuse de passer
+## par vacuité.
 ##
 ## Il ne s'appelle pas `turns` tout court : ce nom désigne déjà les quarts de tour d'une
 ## orientation, partout dans le système — y compris sur le PlacedBuilding qui porte le
 ## chantier. Les confondre fabrique un bâtiment fini là où l'on croyait poser un chantier,
 ## ce qu'un cas de test de N1 a payé pour de vrai.
 @export_range(0, 10, 1) var site_turns: int
+
+## Anneaux dont il étend le territoire constructible du village, une fois **achevé**.
+##
+## Colonne **Emprise** de DESIGN.md 4.1, et à ne pas confondre avec la portée d'un tir que V2
+## écrira. C'est ce qui fait qu'on bâtit près de chez soi puis un peu plus loin : le Cœur ouvre
+## le premier disque, chaque bâtiment fini ajoute le sien, et ce qu'on peut poser est la
+## **réunion** de tous. Le contour cesse d'être un cercle dès le deuxième — il pousse vers ce
+## que le village est allé chercher.
+##
+## **Réclamé, et un minimum de 1.** Zéro serait une valeur défendable — « ce bâtiment n'étend
+## rien au-delà de lui-même » — et c'est justement pour ça qu'il est refusé : indiscernable
+## d'un champ oublié, il ferait d'un `.tres` incomplet un bâtiment qui rétrécit le jeu en
+## silence. Tout ce qui tient debout revendique au moins la terre qu'il touche.
+@export_range(1, 32, 1) var reach: int
 
 ## Ce qu'il coûte à poser, par ressource.
 ##
@@ -124,19 +142,21 @@ const QUARTER_TURNS := 4
 ## les deux questions. Tranché à C1, voir DESIGN.md 3.2.
 @export var cost: Dictionary[StringName, int]
 
-## Ce qu'il produit, ou **null** s'il ne produit pas.
+## Ce qu'il produit, et **d'où** : une entrée par règle de voisinage. Vide s'il ne produit
+## rien — ce qui est le cas de cinq bâtiments sur neuf.
 ##
-## Nullable, et c'est tout l'intérêt : l'entrepôt et l'habitation n'ont pas « zéro
-## slot », ils n'ont pas de bloc. Les trois champs de production — postes, rendement,
-## famille — vivent ou meurent ensemble, ce qui rend la cohérence structurelle au lieu
-## de vérifiée. Tranché avant E1b, voir DESIGN.md 3.3 et le docstring de
-## ProductionBlock.
+## **Ce champ a remplacé `production` à `C3`**, et ce n'est pas un renommage. Un bloc de
+## production déclarait un rendement à plat, dû au seul fait d'exister ; une règle dit ce que le
+## sol autour rapporte. Un camp de bûcheron ne rend plus du bois parce qu'il est un camp de
+## bûcheron, il en rend parce qu'il y a des arbres — et deux fois plus s'il y en a deux fois plus.
 ##
-## La tour de guet n'en a pas, et ce n'est pas un oubli : ce qu'elle rend n'est pas une
-## récolte mais des tirs, donc quatre chiffres d'une autre nature que V2 écrira. Les quatre
-## autres bâtiments qui étaient dans ce cas — caserne, marché, atelier, camp
-## d'exploration — sont partis avec les systèmes qui les justifiaient, à R0.
-@export var production: ProductionBlock
+## Une **liste** et non un bloc nullable : chaque règle est déjà une `Resource` qui réclame ses
+## quatre champs, donc un bloc englobant n'ajouterait rien à la doctrine du zéro — et un
+## bâtiment peut vouloir deux règles, ce qu'un bloc unique interdirait.
+##
+## Une liste non vide est aussi une **condition de pose** : `PlacementValidator` refuse un
+## bâtiment dont aucune règle ne trouve de case. Voir DESIGN.md 3.2.
+@export var adjacency: Array[AdjacencyRule]
 
 ## Ce qu'il ajoute à la réserve commune. 0 pour tout ce qui n'est pas un entrepôt.
 ##
@@ -254,13 +274,14 @@ func neighbourhood_at(anchor: Vector2i, radius: int, turns: int = 0) -> Rect2i:
 	assert(radius >= 0, "rayon de voisinage négatif : %d" % radius)
 	return bounds_at(anchor, turns).grow(radius)
 
-## Ce bâtiment tient-il des postes de production ?
+## Ce bâtiment produit-il quelque chose ?
 ##
-## Une méthode plutôt qu'un `production != null` recopié partout : la nullité est la
-## façon dont E1b représente « ne produit pas », et le jour où le bloc devient une
-## classe de base, cette question restera posée au même endroit.
+## Une méthode plutôt qu'un `adjacency.is_empty()` recopié partout — c'était déjà l'argument
+## quand elle répondait `production != null`, et il n'a pas bougé en changeant de réponse. Ce
+## qui a changé est ce que « produire » veut dire : posséder une raison de produire, et non un
+## chiffre à verser.
 func produces() -> bool:
-	return production != null
+	return not adjacency.is_empty()
 
 ## Champs non renseignés ou incohérents. Vide = bâtiment exploitable.
 ## Vérifié au boot par GameDatabase, comme les terrains et l'équilibrage.
@@ -291,7 +312,10 @@ func missing_fields() -> PackedStringArray:
 	# Réclamé, contrairement aux champs plats ci-dessus : voir son docstring.
 	if hit_points <= 0:
 		missing.append("hit_points")
+	if reach < 1:
+		missing.append("reach")
 	missing.append_array(_economy_fields())
+	missing.append_array(_adjacency_fields())
 	if footprint.is_empty():
 		missing.append("footprint")
 		return missing
@@ -324,10 +348,26 @@ func _economy_fields() -> PackedStringArray:
 	for resource in cost:
 		if cost[resource] <= 0:
 			missing.append("cost.%s" % resource)
-	if production == null:
-		return missing
-	for field in production.missing_fields():
-		missing.append("production.%s" % field)
+	return missing
+
+## Incohérences des règles d'adjacence, préfixées par leur rang.
+##
+## Le rang plutôt que le tag, parce qu'une règle dont le **tag** est justement le champ oublié
+## se nommerait « adjacency[].tag » et ne désignerait rien. Un indice désigne toujours une
+## ligne du .tres, y compris quand c'est son identité qui manque.
+##
+## Une liste vide est parfaitement légitime : cinq bâtiments sur neuf n'ont aucune règle. Ce
+## qui ne l'est pas est une règle **présente et creuse**, et c'est ce que la doctrine du zéro
+## attrape ici entièrement — voir AdjacencyRule.
+func _adjacency_fields() -> PackedStringArray:
+	var missing := PackedStringArray()
+	for index in adjacency.size():
+		var rule := adjacency[index]
+		if rule == null:
+			missing.append("adjacency[%d]" % index)
+			continue
+		for field in rule.missing_fields():
+			missing.append("adjacency[%d].%s" % [index, field])
 	return missing
 
 ## L'empreinte nomme-t-elle deux fois la même cellule ?

@@ -12,12 +12,29 @@ extends RefCounted
 ## orchestre la journée qui enchaîne les deux questions. REASON_INSUFFICIENT_RESOURCES
 ## rejoindra PlacementResult ce jour-là, sans que rien d'ici ne bouge.
 ##
-## Aucun prérequis d'adjacence non plus : « requiert un gisement voisin » a été écarté
-## du placement, et l'adjacence reste entièrement la couche de rendement de C3.
+## **L'emprise du village est entrée à C7**, et c'est la seule des six règles qui ne regarde ni
+## le terrain ni la case elle-même : elle demande où en est le village. Toute l'empreinte doit y
+## être et pas seulement l'ancre — une ferme à cheval sur la frontière serait un bâtiment à
+## moitié dehors, et « chaque cellule répond » est déjà la forme des quatre premières.
+##
+## Le calcul est chez `Territory`, qui le partage avec le contour dessiné à l'écran. Deux
+## arithmétiques de distance auraient fini par dessiner une bordure dans laquelle le clic
+## refuse, et ce désaccord-là ne se signale par rien.
+##
+## **Un prérequis d'adjacence, en revanche, est entré à C3.** Ce docstring disait le contraire :
+## « requiert un gisement voisin » avait été écarté du placement, l'adjacence restant la couche
+## de rendement. La décision était juste tant que les deux couches étaient distinctes — depuis
+## que le voisinage est la **seule** source de production, elles n'en font plus qu'une, et un
+## bâtiment sans voisin n'est pas un bâtiment qui rend peu : c'est un bâtiment qui ne rend rien.
+##
+## Il reste conforme au premier paragraphe : la question se pose au **terrain**, pas à une
+## bourse. Elle passe par `TerrainQuery.tagged_within()`, le même balayage dont l'Économie tire
+## le rendement — un second comptage écrit ici aurait pu accepter une case dont la récolte, un
+## tour plus tard, ne verserait rien.
 
 ## Peut-on poser ce bâtiment sur cette ancre ?
 ##
-## Quatre passes sur l'empreinte plutôt qu'une seule boucle qui testerait tout d'un
+## Une passe par règle plutôt qu'une seule boucle qui testerait tout d'un
 ## coup, et c'est délibéré : en une passe, une empreinte dont une cellule est occupée
 ## et une autre sous l'eau rendrait la raison de celle qui vient en premier dans le
 ## .tres. La raison dépendrait donc de l'ordre d'écriture de la data. En quatre
@@ -55,4 +72,28 @@ static func validate(city: CityState, terrain: TerrainQuery,
 	for cell in cells:
 		if terrain.height_at(cell) != height:
 			return PlacementResult.refused(PlacementResult.REASON_UNEVEN_GROUND)
+	# Les quatre règles au-dessus disent que la case est **utilisable** ; les deux qui suivent
+	# disent qu'on y a **droit**, puis qu'elle est **utile**. L'ordre entre elles n'est pas
+	# indifférent non plus : « il n'y a pas d'arbre ici » n'intéresse personne sur une case hors
+	# du village, et « c'est trop loin » n'intéresse personne sur une case sous l'eau.
+	for cell in cells:
+		if not Territory.reaches(city, cell):
+			return PlacementResult.refused(PlacementResult.REASON_OUT_OF_REACH)
+	if not _has_a_neighbour(terrain, data, cells):
+		return PlacementResult.refused(PlacementResult.REASON_NO_NEIGHBOUR)
 	return PlacementResult.accepted(cells, height)
+
+## Au moins une règle de ce bâtiment trouve-t-elle une case ? Vrai s'il n'en porte aucune.
+##
+## « Au moins une » et non « toutes » : un bâtiment à deux règles a deux façons de mériter sa
+## place, et en exiger deux ferait d'une carte généreuse la seule carte jouable. C'est aussi
+## exactement la condition qui garantit que tout bâtiment posable **rend quelque chose**,
+## puisqu'une règle qui trouve une case verse au moins son `per_cell`, lequel vaut au minimum 1.
+static func _has_a_neighbour(terrain: TerrainQuery, data: BuildingData,
+		cells: Array[Vector2i]) -> bool:
+	if data.adjacency.is_empty():
+		return true
+	for rule in data.adjacency:
+		if not terrain.tagged_within(cells, rule.tag, rule.radius).is_empty():
+			return true
+	return false

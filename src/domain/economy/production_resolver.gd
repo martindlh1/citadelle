@@ -16,7 +16,13 @@ extends RefCounted
 ## n'existait que pour donner un emploi aux cartes. » Le résolveur d'avant partait des
 ## actions posées ; celui-ci part de la ville, et il est plus court d'un tiers pour ça.
 ##
-## **Trois conditions, et pas une de plus.** Achevé, actif, porteur d'un bloc de production.
+## **Trois conditions, et pas une de plus.** Achevé, actif, porteur de règles de voisinage.
+##
+## La troisième a changé de nature à `C3` sans changer de forme : elle demandait « un bloc de
+## production », elle demande « une raison de produire ». Un bâtiment qui en a une **rend
+## forcément quelque chose**, parce que le placement a refusé de le poser là où il n'aurait
+## rien trouvé — c'est le seul endroit du domaine où une règle de la Construction garantit un
+## invariant de l'Économie, et il vaut d'être noté plutôt que redécouvert.
 ##
 ## **Tout ou rien, jamais au prorata.** Un bâtiment à moitié servi qui produirait à moitié
 ## serait un chiffre mou et une explication à donner ; « cette ferme dort, il me manque un
@@ -25,17 +31,20 @@ extends RefCounted
 ##
 ## ---
 ##
-## **Il ne reçoit pas de TerrainQuery**, et c'est une décision d'I3 plutôt qu'un oubli.
-## DESIGN.md 3.3 écrivait ce contrat avec le relief dedans, et la raison en était la seconde
-## lecture du jeu d'avant : une carte jouée **à cru** sur une case rendait ce que le tag de
-## cette case dictait. Ce geste n'existe plus. Un bâtiment rend son bloc, et rien dans ce
-## fichier ne pourrait aujourd'hui faire quoi que ce soit d'un relief. Le passer serait le
-## champ ajouté d'avance que le projet refuse depuis E1b, avec en prime une signature qui
-## ment sur ce qu'elle lit.
+## **Le TerrainQuery est entré à C3, et pas avant.** I3 le lui avait retiré : le contrat de
+## DESIGN.md 3.3 le portait à cause de la seconde lecture du jeu d'avant — une carte jouée **à
+## cru** sur une case rendait ce que le tag de cette case dictait —, et ce geste avait disparu
+## avec les cartes. Le garder aurait été le champ ajouté d'avance que ce projet refuse depuis
+## E1b, avec en prime une signature qui ment sur ce qu'elle lit.
 ##
-## Le relief revient dans l'Économie à **C3**, avec l'adjacence, qui est le premier
-## consommateur réel — et il entrera alors avec ce qui le lit, comme les PV sont entrés avec
-## F1. La ligne de contrat de DESIGN.md 3.3 a été corrigée en conséquence.
+## Il revient donc **avec ce qui le lit**, comme les PV sont entrés avec F1, et ce qui le lit
+## est `Adjacency`. Deux jalons se sont écoulés entre le retrait et le retour, et le fichier
+## n'a rien eu à défaire : c'est ce que le pari valait.
+##
+## **La récolte est calculée ici, pas stockée sur le bâtiment.** Un rendement figé à la pose se
+## périmerait au premier terrassement de `C5` — et il aurait fallu se souvenir de le
+## recalculer, ce qui est la forme d'oubli la plus silencieuse qui soit : le chiffre reste
+## juste jusqu'au jour où il ne l'est plus, sans que rien ne bouge.
 ##
 ## Ce qu'il ne fait pas non plus : l'upkeep, qui est chez UpkeepResolver depuis N1 parce que
 ## manger ne dépend pas de la ville ; et les plafonds, que CityLimits calcule et que
@@ -51,10 +60,11 @@ extends RefCounted
 ## `plan` doit avoir été résolu sur **cette** ville et sur l'effectif du moment. Rien ici ne
 ## peut le vérifier — un plan ne se souvient pas de la ville qui l'a produit —, et c'est
 ## pourquoi l'orchestrateur les fabrique dans la même fonction, à deux lignes d'écart.
-static func resolve(city: CitySnapshot, plan: StaffingPlan, ledger: Ledger,
-		balance: EconomyBalance) -> ProductionReport:
+static func resolve(city: CitySnapshot, plan: StaffingPlan, terrain: TerrainQuery,
+		ledger: Ledger, balance: EconomyBalance) -> ProductionReport:
 	assert(city != null, "production sans ville")
 	assert(plan != null, "production sans plan d'occupation")
+	assert(terrain != null, "production sans terrain")
 	assert(ledger != null, "production sans réserve")
 	assert(balance != null, "production sans équilibrage")
 
@@ -69,8 +79,9 @@ static func resolve(city: CitySnapshot, plan: StaffingPlan, ledger: Ledger,
 			dormant.append(building.anchor())
 			continue
 		producers.append(building.anchor())
-		for resource in data.production.yield_per_turn:
-			produced[resource] = produced.get(resource, 0) + data.production.yield_per_turn[resource]
+		var harvest := Adjacency.bonus(data, building.anchor(), building.turns(), terrain)
+		for resource in harvest:
+			produced[resource] = produced.get(resource, 0) + harvest[resource]
 
 	var stored := ledger.deposit(produced)
 	return ProductionReport.create(produced, stored, producers, dormant)

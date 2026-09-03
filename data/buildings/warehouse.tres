@@ -16,3 +16,4 @@ cost = Dictionary[StringName, int]({
 storage_bonus = 100
 workers = 1
 hit_points = 8
+reach = 3

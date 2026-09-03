@@ -1,13 +1,14 @@
 [gd_resource type="Resource" script_class="BuildingData" format=3]
 
 [ext_resource type="Script" path="res://src/schema/building_data.gd" id="1_building_data"]
-[ext_resource type="Script" path="res://src/schema/production_block.gd" id="2_production_block"]
+[ext_resource type="Script" path="res://src/schema/adjacency_rule.gd" id="3_adjacency_rule"]
 
-[sub_resource type="Resource" id="Resource_mine_production"]
-script = ExtResource("2_production_block")
-yield_per_turn = Dictionary[StringName, int]({
-&"ore": 2
-})
+[sub_resource type="Resource" id="Resource_mine_adjacency_0"]
+script = ExtResource("3_adjacency_rule")
+tag = &"stone"
+radius = 1
+resource = &"ore"
+per_cell = 1
 
 [resource]
 script = ExtResource("1_building_data")
@@ -21,6 +22,7 @@ cost = Dictionary[StringName, int]({
 &"wood": 25,
 &"stone": 10
 })
-production = SubResource("Resource_mine_production")
 workers = 4
 hit_points = 10
+adjacency = Array[AdjacencyRule]([SubResource("Resource_mine_adjacency_0")])
+reach = 2

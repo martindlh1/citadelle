@@ -115,10 +115,15 @@ func test_a_placed_building_keeps_its_anchor_and_footprint() -> void:
 
 ## La hauteur est enregistrée à la pose : c'est le y auquel C2 dessinera la boîte,
 ## sans avoir à réinterroger la grille.
+##
+## Les deux poses sont voisines parce que la seconde doit tomber dans l'emprise de la
+## première *(C7)* : c'est le sujet d'un autre fichier, mais toute ville montée à la main s'y
+## plie désormais.
 func test_a_placed_building_records_the_ground_height() -> void:
-	_city.place(_terrain, _hut(), Vector2i(0, 0))
+	var low := Vector2i(RAISED_X - 2, 0)
+	_city.place(_terrain, _hut(), low)
 	_city.place(_terrain, _hut(), Vector2i(RAISED_X, 0))
-	assert_int(_city.building_at(Vector2i(0, 0)).height()).is_equal(0)
+	assert_int(_city.building_at(low).height()).is_equal(0)
 	assert_int(_city.building_at(Vector2i(RAISED_X, 0)).height()).is_equal(RAISED_HEIGHT)
 
 func test_overlapping_a_placed_building_is_refused() -> void:
@@ -300,8 +305,11 @@ func test_a_snapshot_does_not_follow_later_progress() -> void:
 ## l'Économie doit les ignorer.
 func test_a_snapshot_separates_every_building_from_the_finished_ones() -> void:
 	_city.place(_terrain, _site(&"done", 1), Vector2i(0, 0))
-	_city.place(_terrain, _site(&"site", 1), Vector2i(2, 0))
+	# Le premier s'achève **avant** que le second s'ouvre, et pas après : un chantier n'étend
+	# pas l'emprise *(C7)*, donc une ville dont le seul bâtiment est en travaux n'accepte
+	# aucune seconde pose. C'est l'ordre qu'une vraie partie suit de toute façon.
 	_city.advance(Vector2i(0, 0))
+	_city.place(_terrain, _site(&"site", 1), Vector2i(2, 0))
 	var snapshot := _city.to_snapshot()
 	assert_int(snapshot.buildings().size()).is_equal(2)
 	var finished: Array[StringName] = []
@@ -417,6 +425,12 @@ func _building(id: StringName, offsets: Array[Vector2i]) -> BuildingData:
 	building.id = id
 	building.footprint = offsets
 	building.hit_points = HIT_POINTS
+	# Une emprise large, pour que la règle de C7 ne se mette pas en travers des cas qui
+	# parlent d'autre chose. Trois et non un : à un anneau, un bâtiment de deux par deux posé
+	# contre son voisin avait déjà un coin dehors, et trois cas de ce fichier se sont mis à
+	# mesurer l'emprise au lieu de leur sujet. Un `reach` laissé à zéro, lui, n'ouvrirait même
+	# pas la case voisine — c'est ce que ces deux fichiers ont trouvé le jour du jalon.
+	building.reach = 3
 	return building
 
 func _make_terrain(id: StringName, build: TerrainData.Build) -> TerrainData:

@@ -17,3 +17,4 @@ cost = Dictionary[StringName, int]({
 defense = 8
 workers = 1
 hit_points = 12
+reach = 4

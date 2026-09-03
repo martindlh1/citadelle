@@ -31,6 +31,26 @@ const REASON_OCCUPIED := &"occupied"
 ## Les cellules de l'empreinte ne sont pas toutes à la même hauteur.
 const REASON_UNEVEN_GROUND := &"uneven_ground"
 
+## La case est **hors de l'emprise du village**.
+##
+## L'emprise est la réunion des disques que les bâtiments achevés projettent autour d'eux
+## *(DESIGN.md 3.2)*. Elle se dit **avant** le voisinage et après le terrain, et l'ordre porte
+## un sens : « il n'y a pas d'arbre ici » n'intéresse personne sur une case où l'on n'a de toute
+## façon pas le droit de bâtir.
+const REASON_OUT_OF_REACH := &"out_of_reach"
+
+## Le bâtiment porte des règles de voisinage et **aucune ne trouve de case**.
+##
+## C'est le seul refus qui ne parle ni de la carte ni de ce qui est bâti, mais de ce que le
+## bâtiment **serait** ici : une cabane de bûcheron sans un arbre à portée coûte des bras,
+## occupe une case et ne rend rien. `DESIGN.md` 3.2 en fait un prérequis dur plutôt qu'un
+## rendement nul, parce qu'un rendement nul est un piège qu'on ne repère qu'après avoir payé.
+##
+## *Il revient sur une décision de C1*, qui avait écarté l'adjacence du placement en la
+## réservant au rendement. Elle était juste tant que les deux couches étaient distinctes ;
+## depuis C3 elles n'en font plus qu'une.
+const REASON_NO_NEIGHBOUR := &"no_neighbour"
+
 var _ok: bool
 var _reason: StringName = REASON_NONE
 var _cells: Array[Vector2i] = []
